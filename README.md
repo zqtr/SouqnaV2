@@ -17,6 +17,22 @@ Souqna is a bilingual (English / Arabic, full RTL) commerce and storefront platf
 
 Detailed conventions for contributors: [AGENTS.md](AGENTS.md).
 
+## Repository handoff
+
+- Canonical GitHub repo: `https://github.com/zqtr/SouqnaV2.git`
+- Local publish checkout: `C:\Users\Bo3ab\OneDrive\Desktop\SouqnaFinal\SouqnaV2-publish`
+- Source used for the first clean import: `C:\Users\Bo3ab\OneDrive\Desktop\SouqnaFinal\Souqna Main\Souqna-main`
+- Initial clean import commit: `c985f1b`
+- Production app: deploy this repository as the Souqna web app on Vercel.
+- Merchant mobile app: keep it separate in `https://github.com/zqtr/SouqnaMerchant.git`; do not add Flutter or iOS build artifacts to this repo.
+
+Security rules for this repo:
+
+- Do not commit `.env`, `.env.local`, `.env.*`, `.vercel`, local build output, generated caches, signing files, API keys, auth secrets, database URLs, storage tokens, or webhook secrets.
+- Keep secret values only in Vercel environment variables, the database/provider dashboards, or a private secret manager.
+- Variable names and setup notes can be documented in [docs/deployment/environment.md](docs/deployment/environment.md), but values must never be committed.
+- Before pushing sensitive changes, run a filename scan for env/signing files and a high-confidence token scan.
+
 ## Where things live
 
 | Area | Path |
