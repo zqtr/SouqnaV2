@@ -421,6 +421,17 @@ export async function updateCheckoutSettings(
         field: 'skipCash',
       };
     }
+    const hasExistingCredentials = Boolean(owner.checkout.skipCash?.hasCredentials);
+    const hasNewCredentials = Boolean(
+      skipCashFields?.clientId && skipCashFields.keyId && skipCashFields.keySecret,
+    );
+    if (!hasExistingCredentials && !hasNewCredentials) {
+      return {
+        status: 'error',
+        message: 'Save your SkipCash client id, key id, and key secret first.',
+        field: 'skipCash',
+      };
+    }
   }
 
   const sadadSelected = data.paymentMethods.includes('sadad');

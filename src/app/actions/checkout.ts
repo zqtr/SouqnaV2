@@ -42,7 +42,8 @@ import { notifyMobileNewOrder } from '@/lib/mobile/push';
 import { sendWhatsAppOrderConfirmation } from '@/lib/apps/whatsapp';
 import { sendSentDeliveryNotification, sendSentPaymentStatusNotification } from '@/lib/sent';
 import { pushOrderCreatedNotification } from '@/lib/notifications';
-import { createSkipCashPayment, hasSkipCash, newSkipCashTransactionId } from '@/lib/skipcash';
+import { createSkipCashPaymentForMerchant, newSkipCashTransactionId } from '@/lib/skipcash';
+import { getStorefrontSkipCashCredentials } from '@/lib/storefrontSkipcash';
 import { getStorefrontSadadCredentials } from '@/lib/storefrontSadad';
 import { recordPlatformPayoutForPaidOrder } from '@/lib/platformPayouts';
 import {
@@ -224,13 +225,6 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       field: 'paymentMethod',
     };
   }
-  if (data.paymentMethod === 'skipcash' && !hasSkipCash()) {
-    return {
-      status: 'error',
-      message: 'Online checkout is not configured yet.',
-      field: 'paymentMethod',
-    };
-  }
   if (data.paymentMethod === 'sadad' && !settings.sadad?.enabled) {
     return {
       status: 'error',
@@ -384,6 +378,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     ownerPlan,
     checkoutTotalQar,
     data.paymentMethod,
+    { platformSkipCash: false },
   );
   const { buyerTotalQar: totalQar, ...orderFinancialFields } = financialSnapshot;
 
@@ -472,15 +467,27 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         };
       }
       const [firstName, ...lastParts] = data.customer.name.split(/\s+/);
-      const payment = await createSkipCashPayment({
-        amountQar: totalQar,
-        firstName: firstName || data.customer.name,
-        lastName: lastParts.join(' ') || 'Customer',
-        email: data.customer.email ?? `${order.id}@souqna.qa`,
-        phone: data.customer.phone,
-        transactionId: skipCashTransactionId,
-        custom1: order.id,
-      });
+      const credentials = await getStorefrontSkipCashCredentials(data.slug);
+      if (!credentials) {
+        return {
+          status: 'error',
+          message:
+            'SkipCash credentials are not configured for this store. Please choose another method or contact the store.',
+          field: 'paymentMethod',
+        };
+      }
+      const payment = await createSkipCashPaymentForMerchant(
+        {
+          amountQar: totalQar,
+          firstName: firstName || data.customer.name,
+          lastName: lastParts.join(' ') || 'Customer',
+          email: data.customer.email ?? `${order.id}@souqna.qa`,
+          phone: data.customer.phone,
+          transactionId: skipCashTransactionId,
+          custom1: order.id,
+        },
+        credentials,
+      );
       redirectUrl = payment.payUrl;
     } catch (err) {
       Sentry.captureException(err, {

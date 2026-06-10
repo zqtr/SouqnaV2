@@ -401,6 +401,7 @@ function parseCheckoutFromRow(row: StorefrontRow): CheckoutSettings {
       ? { url: row.checkout_pay_link_url, label: row.checkout_pay_link_label }
       : null;
   const skipCashRef = parseSkipCashCredentialsRef(row.checkout_skipcash_credentials);
+  const skipCashEnabled = Boolean(skipCashRef && row.cr_number && row.cr_confirmed_at);
   const sadadRef = parseSadadCredentialsRef(row.checkout_sadad_credentials);
 
   return {
@@ -412,13 +413,13 @@ function parseCheckoutFromRow(row: StorefrontRow): CheckoutSettings {
           hasCredentials: true,
           clientIdHint: skipCashRef.clientIdHint,
           crConfirmedAt: row.cr_confirmed_at,
-          enabled: Boolean(row.cr_number && row.cr_confirmed_at),
+          enabled: skipCashEnabled,
         }
       : {
           hasCredentials: false,
           clientIdHint: null,
           crConfirmedAt: row.cr_confirmed_at,
-          enabled: Boolean(row.cr_number && row.cr_confirmed_at),
+          enabled: false,
         },
     sadad: sadadRef
       ? {

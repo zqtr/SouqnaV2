@@ -333,24 +333,28 @@ export async function PATCH(req: Request): Promise<Response> {
     revalidatePath('/account/settings/checkout');
     revalidatePath(`/brief/${workingStorefront.slug}`, 'layout');
 
+    const refreshedSkipCashHasCredentials =
+      Boolean(workingStorefront.checkout.skipCash?.hasCredentials) || providedCredentials;
+    const refreshedSkipCashCrConfirmedAt =
+      (workingStorefront.crConfirmedAt ? workingStorefront.crConfirmedAt.toISOString() : null) ??
+      (skipCashFields?.confirmCr ? new Date().toISOString() : null);
     const refreshed: Storefront = {
       ...workingStorefront,
       checkout: {
         ...workingStorefront.checkout,
         ...settings,
         skipCash: {
-          hasCredentials:
-            Boolean(workingStorefront.checkout.skipCash?.hasCredentials) || providedCredentials,
+          hasCredentials: refreshedSkipCashHasCredentials,
           clientIdHint:
             savedClientIdHint ??
             workingStorefront.checkout.skipCash?.clientIdHint ??
             null,
-          enabled: shouldEnableSkipCash && Boolean(workingStorefront.crNumber),
-          crConfirmedAt:
-            (workingStorefront.crConfirmedAt
-              ? workingStorefront.crConfirmedAt.toISOString()
-              : null) ??
-            (skipCashFields?.confirmCr ? new Date().toISOString() : null),
+          enabled:
+            shouldEnableSkipCash &&
+            refreshedSkipCashHasCredentials &&
+            Boolean(workingStorefront.crNumber) &&
+            Boolean(refreshedSkipCashCrConfirmedAt),
+          crConfirmedAt: refreshedSkipCashCrConfirmedAt,
         },
         sadad: {
           hasCredentials:
