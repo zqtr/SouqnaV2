@@ -1018,6 +1018,38 @@ function SkipCashSection({
           fields again only to replace them.
         </p>
       ) : null}
+      <div
+        aria-label="SkipCash setup checklist"
+        style={{
+          display: 'grid',
+          gap: 8,
+          paddingInlineStart: 12,
+          borderInlineStart: '3px solid color-mix(in srgb, var(--ink) 18%, transparent)',
+        }}
+      >
+        <strong style={{ fontSize: 13 }}>SkipCash setup checklist</strong>
+        <ol
+          style={{
+            margin: 0,
+            paddingInlineStart: 18,
+            display: 'grid',
+            gap: 6,
+            color: 'var(--ink-muted)',
+            fontSize: 12.5,
+            lineHeight: 1.55,
+          }}
+        >
+          <li>Confirm the business CR ownership below.</li>
+          <li>Enter the Client ID, Key ID, and Key Secret from SkipCash Merchant Portal.</li>
+          <li>
+            Copy the return URL below into SkipCash Merchant Portal → Online Payments → Return URL.
+          </li>
+          <li>
+            Save this page. Successful SkipCash payments will return buyers to the thank-you page
+            and mark the order paid.
+          </li>
+        </ol>
+      </div>
       <CheckboxRow
         id="skipcash-cr-confirmed"
         checked={crConfirmed}
@@ -1032,8 +1064,8 @@ function SkipCashSection({
         badge={!crNumber ? 'CR required' : null}
       />
       <Field
-        label="SkipCash return URL"
-        hint="Paste this in SkipCash Merchant Portal → Online Payments → Return URL so buyers come back to this store's thank-you page after payment."
+        label="Required SkipCash return URL"
+        hint="This must be saved in SkipCash Merchant Portal so paid buyers come back to this store's thank-you page."
       >
         <input
           readOnly
