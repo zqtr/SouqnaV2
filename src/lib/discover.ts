@@ -42,6 +42,7 @@ type DiscoverStorefrontRow = {
   tagline: string | null;
   logo_url: string | null;
   cr_number: string | null;
+  cr_confirmed_at: string | null;
   custom_domain: string | null;
   custom_domain_verified_at: string | null;
   souqy_revision: string | null;
@@ -106,7 +107,7 @@ function toDiscoverStorefront(
     logoUrl: row.logo_url,
     liveUrl,
     domainLabel: customDomainIsLive ? customDomain! : `${row.slug}.${env.BRIEF_ROOT_DOMAIN}`,
-    isVerified: Boolean(row.cr_number),
+    isVerified: Boolean(row.cr_number?.trim() && row.cr_confirmed_at),
     isFeatured: Boolean(row.discover_featured_at) || featured.has(row.slug),
     isSouqyBuilt: Boolean(row.souqy_revision),
     isPublished: row.is_published,
@@ -180,6 +181,7 @@ export async function getDiscoverPageData(): Promise<DiscoverPageData> {
       tagline,
       logo_url,
       cr_number,
+      cr_confirmed_at,
       custom_domain,
       custom_domain_verified_at,
       souqy_revision,
@@ -197,6 +199,9 @@ export async function getDiscoverPageData(): Promise<DiscoverPageData> {
       created_at
     from briefs
     where is_published = true
+      and cr_number is not null
+      and btrim(cr_number) <> ''
+      and cr_confirmed_at is not null
       and discover_hidden_at is null
       and discover_spam_shutdown_at is null
       and deleted_at is null
@@ -248,6 +253,7 @@ export async function listDiscoverAdminStorefronts(): Promise<DiscoverAdminStore
       tagline,
       logo_url,
       cr_number,
+      cr_confirmed_at,
       custom_domain,
       custom_domain_verified_at,
       souqy_revision,
