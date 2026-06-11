@@ -132,9 +132,7 @@ export function skipCashAmount(amountQar: number): string {
   return amountQar.toFixed(2);
 }
 
-export async function createSkipCashPayment(
-  input: CreatePaymentInput,
-): Promise<SkipCashPayment> {
+export async function createSkipCashPayment(input: CreatePaymentInput): Promise<SkipCashPayment> {
   if (!hasSkipCash() || !env.SKIPCASH_KEY_ID || !env.SKIPCASH_KEY_SECRET) {
     throw new Error('SkipCash not configured');
   }
@@ -171,9 +169,7 @@ export async function createSkipCashPayment(
   const json = text ? (JSON.parse(text) as SkipCashResponse<SkipCashPayment>) : {};
 
   if (!res.ok || json.hasError || json.hasValidationError || !json.resultObj) {
-    throw new Error(
-      `SkipCash create payment failed (${res.status}): ${text.slice(0, 300)}`,
-    );
+    throw new Error(`SkipCash create payment failed (${res.status}): ${text.slice(0, 300)}`);
   }
   if (!json.resultObj.payUrl) {
     throw new Error('SkipCash create payment response did not include a payUrl');
@@ -233,11 +229,26 @@ export async function createSkipCashPaymentForMerchant(
 
 export async function getSkipCashPayment(id: string): Promise<SkipCashPayment> {
   if (!env.SKIPCASH_CLIENT_ID) throw new Error('SkipCash not configured');
+  return getSkipCashPaymentWithClientId(id, env.SKIPCASH_CLIENT_ID);
+}
+
+export async function getSkipCashPaymentForMerchant(
+  id: string,
+  credentials: Pick<SkipCashMerchantCredentials, 'clientId'>,
+): Promise<SkipCashPayment> {
+  if (!credentials.clientId) throw new Error('SkipCash merchant credentials are missing');
+  return getSkipCashPaymentWithClientId(id, credentials.clientId);
+}
+
+async function getSkipCashPaymentWithClientId(
+  id: string,
+  clientId: string,
+): Promise<SkipCashPayment> {
   const res = await fetch(`${skipCashBaseUrl()}/payments/${encodeURIComponent(id)}`, {
     method: 'GET',
     headers: {
-      Authorization: env.SKIPCASH_CLIENT_ID,
-      'x-client-id': env.SKIPCASH_CLIENT_ID,
+      Authorization: clientId,
+      'x-client-id': clientId,
       Accept: 'application/json',
     },
     cache: 'no-store',

@@ -75,6 +75,53 @@ export default async function ThankYouPage({ params, searchParams }: Props) {
     (order.paymentMethod === 'skipcash' || order.paymentMethod === 'sadad') &&
     order.paymentStatus === 'unpaid' &&
     !onlinePaymentFailed;
+  const customThankYouEnabled = !onlinePaymentFailed && !onlinePaymentPending;
+  const defaultHeroTitle = onlinePaymentFailed
+    ? isAr
+      ? 'لم يكتمل الدفع.'
+      : 'Payment was not completed.'
+    : onlinePaymentPending
+      ? isAr
+        ? 'الدفع لم يكتمل بعد.'
+        : 'Payment is not complete yet.'
+      : `${isAr ? 'شكراً، ' : 'Thank you, '}${order.customerName.split(' ')[0]}.`;
+  const defaultHeroMessage = onlinePaymentFailed
+    ? isAr
+      ? `لم يتم تأكيد طلبك لدى ${storefront.businessName} لأن الدفع لم ينجح. يمكنك المحاولة مرة أخرى أو التواصل مع المتجر.`
+      : `Your order with ${storefront.businessName} was not confirmed because the payment did not succeed. You can try again or contact the store.`
+    : onlinePaymentPending
+      ? isAr
+        ? `طلبك لدى ${storefront.businessName} بانتظار تأكيد الدفع من مزود الخدمة.`
+        : `Your order with ${storefront.businessName} is waiting for payment confirmation from the provider.`
+      : isAr
+        ? `تم تسجيل طلبك لدى ${storefront.businessName}. ستجد التفاصيل أدناه.`
+        : `Your order has been placed with ${storefront.businessName}. The details are below.`;
+  const heroTitle =
+    customThankYouEnabled && checkout.thankYou.title ? checkout.thankYou.title : defaultHeroTitle;
+  const heroMessage =
+    customThankYouEnabled && checkout.thankYou.message
+      ? checkout.thankYou.message
+      : defaultHeroMessage;
+  const customCta =
+    customThankYouEnabled && checkout.thankYou.ctaLabel && checkout.thankYou.ctaUrl
+      ? { href: checkout.thankYou.ctaUrl, label: checkout.thankYou.ctaLabel }
+      : null;
+  const defaultCtaHref = onlinePaymentFailed || onlinePaymentPending ? '/checkout' : '/';
+  const defaultCtaLabel =
+    onlinePaymentFailed || onlinePaymentPending
+      ? onlinePaymentFailed
+        ? isAr
+          ? 'إعادة محاولة الدفع'
+          : 'Retry payment'
+        : isAr
+          ? 'العودة للدفع'
+          : 'Back to checkout'
+      : isAr
+        ? 'العودة للمتجر'
+        : 'Back to the storefront';
+  const cta = customCta ?? { href: defaultCtaHref, label: defaultCtaLabel };
+  const showOrderDetails =
+    onlinePaymentFailed || onlinePaymentPending || checkout.thankYou.showOrderSummary;
 
   return (
     <div style={wrapperStyle} dir={dir}>
@@ -121,15 +168,7 @@ export default async function ThankYouPage({ params, searchParams }: Props) {
               letterSpacing: '-0.01em',
             }}
           >
-            {onlinePaymentFailed
-              ? isAr
-                ? 'لم يكتمل الدفع.'
-                : 'Payment was not completed.'
-              : onlinePaymentPending
-                ? isAr
-                  ? 'الدفع لم يكتمل بعد.'
-                  : 'Payment is not complete yet.'
-                : `${isAr ? 'شكراً، ' : 'Thank you, '}${order.customerName.split(' ')[0]}.`}
+            {heroTitle}
           </h1>
           <p
             style={{
@@ -139,17 +178,7 @@ export default async function ThankYouPage({ params, searchParams }: Props) {
               color: 'color-mix(in srgb, currentColor 65%, transparent)',
             }}
           >
-            {onlinePaymentFailed
-              ? isAr
-                ? `لم يتم تأكيد طلبك لدى ${storefront.businessName} لأن الدفع لم ينجح. يمكنك المحاولة مرة أخرى أو التواصل مع المتجر.`
-                : `Your order with ${storefront.businessName} was not confirmed because the payment did not succeed. You can try again or contact the store.`
-              : onlinePaymentPending
-                ? isAr
-                  ? `طلبك لدى ${storefront.businessName} بانتظار تأكيد الدفع من مزود الخدمة.`
-                  : `Your order with ${storefront.businessName} is waiting for payment confirmation from the provider.`
-                : isAr
-                  ? `تم تسجيل طلبك لدى ${storefront.businessName}. ستجد التفاصيل أدناه.`
-                  : `Your order has been placed with ${storefront.businessName}. The details are below.`}
+            {heroMessage}
           </p>
         </header>
 
@@ -176,130 +205,136 @@ export default async function ThankYouPage({ params, searchParams }: Props) {
           isAr={isAr}
         />
 
-        <Surface heading={isAr ? 'العناصر' : 'Items'}>
-          <ul
-            style={{
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 10,
-            }}
-          >
-            {order.items.map((it) => (
-              <li
-                key={it.id}
+        {showOrderDetails ? (
+          <>
+            <Surface heading={isAr ? 'العناصر' : 'Items'}>
+              <ul
                 style={{
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: 0,
                   display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 12,
-                  fontSize: 14,
+                  flexDirection: 'column',
+                  gap: 10,
                 }}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 500 }}>{it.titleSnapshot}</div>
-                  {it.variantLabel ? (
-                    <div
-                      style={{
-                        marginTop: 2,
-                        fontSize: 12,
-                        color: 'color-mix(in srgb, currentColor 58%, transparent)',
-                      }}
-                    >
-                      {isAr ? 'المقاس' : 'Size'}: {it.variantLabel}
-                    </div>
-                  ) : null}
-                  {it.customInputs.height ? (
-                    <div
-                      style={{
-                        marginTop: 2,
-                        fontSize: 12,
-                        color: 'color-mix(in srgb, currentColor 58%, transparent)',
-                      }}
-                    >
-                      {it.customInputs.heightLabel || (isAr ? 'الطول' : 'Height')}:{' '}
-                      {it.customInputs.height}
-                    </div>
-                  ) : null}
-                  <div
+                {order.items.map((it) => (
+                  <li
+                    key={it.id}
                     style={{
-                      marginTop: 2,
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 11,
-                      color: 'color-mix(in srgb, currentColor 60%, transparent)',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      fontSize: 14,
                     }}
                   >
-                    {isAr ? 'الكمية' : 'Qty'}: {it.quantity} · {order.currency}{' '}
-                    {it.priceQarSnapshot}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 13,
-                    fontWeight: 500,
-                  }}
-                >
-                  {order.currency} {it.priceQarSnapshot * it.quantity}
-                </div>
-              </li>
-            ))}
-          </ul>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 500 }}>{it.titleSnapshot}</div>
+                      {it.variantLabel ? (
+                        <div
+                          style={{
+                            marginTop: 2,
+                            fontSize: 12,
+                            color: 'color-mix(in srgb, currentColor 58%, transparent)',
+                          }}
+                        >
+                          {isAr ? 'المقاس' : 'Size'}: {it.variantLabel}
+                        </div>
+                      ) : null}
+                      {it.customInputs.height ? (
+                        <div
+                          style={{
+                            marginTop: 2,
+                            fontSize: 12,
+                            color: 'color-mix(in srgb, currentColor 58%, transparent)',
+                          }}
+                        >
+                          {it.customInputs.heightLabel || (isAr ? 'الطول' : 'Height')}:{' '}
+                          {it.customInputs.height}
+                        </div>
+                      ) : null}
+                      <div
+                        style={{
+                          marginTop: 2,
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 11,
+                          color: 'color-mix(in srgb, currentColor 60%, transparent)',
+                        }}
+                      >
+                        {isAr ? 'الكمية' : 'Qty'}: {it.quantity} · {order.currency}{' '}
+                        {it.priceQarSnapshot}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 13,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {order.currency} {it.priceQarSnapshot * it.quantity}
+                    </div>
+                  </li>
+                ))}
+              </ul>
 
-          <div
-            style={{
-              marginTop: 14,
-              paddingTop: 12,
-              borderTop: '1px dashed color-mix(in srgb, currentColor 18%, transparent)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-              fontSize: 13,
-            }}
-          >
-            <TotalRow
-              label={isAr ? 'المجموع الفرعي' : 'Subtotal'}
-              value={`${order.currency} ${order.subtotalQar}`}
-            />
-            <TotalRow
-              label={isAr ? 'الشحن' : 'Shipping'}
-              value={
-                order.shippingQar === 0
-                  ? isAr
-                    ? 'مجاني'
-                    : 'Free'
-                  : `${order.currency} ${order.shippingQar}`
-              }
-            />
-            <TotalRow
-              strong
-              label={isAr ? 'الإجمالي' : 'Total'}
-              value={`${order.currency} ${order.totalQar}`}
-            />
-          </div>
-        </Surface>
-
-        <Surface heading={isAr ? 'تفاصيل التسليم' : 'Delivery details'}>
-          <div style={{ fontSize: 14 }}>{order.customerName}</div>
-          <div style={subtleStyle()}>{order.customerPhone}</div>
-          {order.customerEmail ? <div style={subtleStyle()}>{order.customerEmail}</div> : null}
-          {order.address ? (
-            <div style={{ marginTop: 12, fontSize: 14 }}>
-              <div>{order.address.line1}</div>
-              {order.address.line2 ? <div style={subtleStyle()}>{order.address.line2}</div> : null}
-              <div style={subtleStyle()}>
-                {[order.address.area, order.address.city, order.address.zip]
-                  .filter(Boolean)
-                  .join(', ')}
+              <div
+                style={{
+                  marginTop: 14,
+                  paddingTop: 12,
+                  borderTop: '1px dashed color-mix(in srgb, currentColor 18%, transparent)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                  fontSize: 13,
+                }}
+              >
+                <TotalRow
+                  label={isAr ? 'المجموع الفرعي' : 'Subtotal'}
+                  value={`${order.currency} ${order.subtotalQar}`}
+                />
+                <TotalRow
+                  label={isAr ? 'الشحن' : 'Shipping'}
+                  value={
+                    order.shippingQar === 0
+                      ? isAr
+                        ? 'مجاني'
+                        : 'Free'
+                      : `${order.currency} ${order.shippingQar}`
+                  }
+                />
+                <TotalRow
+                  strong
+                  label={isAr ? 'الإجمالي' : 'Total'}
+                  value={`${order.currency} ${order.totalQar}`}
+                />
               </div>
-              <div style={subtleStyle()}>{order.address.country}</div>
-            </div>
-          ) : null}
-        </Surface>
+            </Surface>
+
+            <Surface heading={isAr ? 'تفاصيل التسليم' : 'Delivery details'}>
+              <div style={{ fontSize: 14 }}>{order.customerName}</div>
+              <div style={subtleStyle()}>{order.customerPhone}</div>
+              {order.customerEmail ? <div style={subtleStyle()}>{order.customerEmail}</div> : null}
+              {order.address ? (
+                <div style={{ marginTop: 12, fontSize: 14 }}>
+                  <div>{order.address.line1}</div>
+                  {order.address.line2 ? (
+                    <div style={subtleStyle()}>{order.address.line2}</div>
+                  ) : null}
+                  <div style={subtleStyle()}>
+                    {[order.address.area, order.address.city, order.address.zip]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </div>
+                  <div style={subtleStyle()}>{order.address.country}</div>
+                </div>
+              ) : null}
+            </Surface>
+          </>
+        ) : null}
 
         <a
-          href={onlinePaymentFailed || onlinePaymentPending ? '/checkout' : '/'}
+          href={cta.href}
           style={{
             display: 'inline-flex',
             marginTop: 24,
@@ -313,17 +348,7 @@ export default async function ThankYouPage({ params, searchParams }: Props) {
             textDecoration: 'none',
           }}
         >
-          {onlinePaymentFailed || onlinePaymentPending
-            ? onlinePaymentFailed
-              ? isAr
-                ? 'إعادة محاولة الدفع'
-                : 'Retry payment'
-              : isAr
-                ? 'العودة للدفع'
-                : 'Back to checkout'
-            : isAr
-              ? 'العودة للمتجر'
-              : 'Back to the storefront'}
+          {cta.label}
         </a>
       </main>
     </div>

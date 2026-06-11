@@ -5,10 +5,7 @@ import { useLocale } from 'next-intl';
 import { Surface } from '@/components/admin/primitives';
 import { Field, inputStyle, textareaStyle } from '@/components/admin/SettingsForm';
 import { adminPhrase } from '@/components/admin/adminLocale';
-import {
-  updateCheckoutSettings,
-  type CheckoutActionState,
-} from '@/app/actions/storefrontSettings';
+import { updateCheckoutSettings, type CheckoutActionState } from '@/app/actions/storefrontSettings';
 import {
   CONFIGURABLE_PAYMENT_METHODS,
   POLICY_KEYS,
@@ -36,8 +33,10 @@ const ONLINE_PROVIDERS: Array<{
     status: 'live',
     summary: 'Live integration. Uses merchant API keys to create hosted checkout sessions.',
     credentials: ['Client ID', 'Key ID', 'Key secret', 'Webhook key (optional)'],
-    docsEn: 'Add the merchant keys from your SkipCash dashboard. Confirm the CR before enabling checkout.',
-    docsAr: 'أضف مفاتيح التاجر من لوحة SkipCash. أكّد السجل التجاري قبل تفعيل الدفع عند إتمام الطلب.',
+    docsEn:
+      'Add the merchant keys from your SkipCash dashboard. Confirm the CR before enabling checkout.',
+    docsAr:
+      'أضف مفاتيح التاجر من لوحة SkipCash. أكّد السجل التجاري قبل تفعيل الدفع عند إتمام الطلب.',
   },
   {
     id: 'sadad',
@@ -46,7 +45,8 @@ const ONLINE_PROVIDERS: Array<{
     status: 'live',
     summary: 'Live integration. Souqna verifies credentials with SADAD before activation.',
     credentials: ['SADAD ID / merchant ID', 'Registered website/domain', 'Secret key'],
-    docsEn: 'Use the SADAD merchant ID, the exact website/domain registered with SADAD, and the secret key.',
+    docsEn:
+      'Use the SADAD merchant ID, the exact website/domain registered with SADAD, and the secret key.',
     docsAr: 'استخدم رقم تاجر SADAD، والدومين المسجل لديهم بنفس الصيغة، والمفتاح السري.',
   },
   {
@@ -54,10 +54,18 @@ const ONLINE_PROVIDERS: Array<{
     name: 'Tap Payments',
     logo: '/apps/tap-payments/logo.svg',
     status: 'setup',
-    summary: 'Popular GCC gateway. Credential storage can be added before the charge flow is wired.',
-    credentials: ['Merchant ID', 'Secret API key', 'Public API key', 'Encryption key (if using card entry)'],
-    docsEn: 'In Tap Dashboard, open Accounts, then the merchant/operator account to copy Merchant ID, Secret Key, Public Key, and encryption key if needed.',
-    docsAr: 'من لوحة Tap افتح Accounts ثم حساب التاجر لنسخ Merchant ID و Secret Key و Public Key ومفتاح التشفير عند الحاجة.',
+    summary:
+      'Popular GCC gateway. Credential storage can be added before the charge flow is wired.',
+    credentials: [
+      'Merchant ID',
+      'Secret API key',
+      'Public API key',
+      'Encryption key (if using card entry)',
+    ],
+    docsEn:
+      'In Tap Dashboard, open Accounts, then the merchant/operator account to copy Merchant ID, Secret Key, Public Key, and encryption key if needed.',
+    docsAr:
+      'من لوحة Tap افتح Accounts ثم حساب التاجر لنسخ Merchant ID و Secret Key و Public Key ومفتاح التشفير عند الحاجة.',
   },
   {
     id: 'myfatoorah',
@@ -66,8 +74,10 @@ const ONLINE_PROVIDERS: Array<{
     status: 'setup',
     summary: 'GCC gateway with invoice and direct-payment APIs.',
     credentials: ['API token', 'Country / API environment', 'Webhook secret key'],
-    docsEn: 'Use your MyFatoorah API token for server calls, choose the correct country/environment, then generate a webhook secret key in Integration Settings.',
-    docsAr: 'استخدم API Token من MyFatoorah للطلبات من الخادم، واختر الدولة/البيئة الصحيحة، ثم أنشئ Webhook Secret Key من إعدادات التكامل.',
+    docsEn:
+      'Use your MyFatoorah API token for server calls, choose the correct country/environment, then generate a webhook secret key in Integration Settings.',
+    docsAr:
+      'استخدم API Token من MyFatoorah للطلبات من الخادم، واختر الدولة/البيئة الصحيحة، ثم أنشئ Webhook Secret Key من إعدادات التكامل.',
   },
   {
     id: 'paytabs',
@@ -76,8 +86,10 @@ const ONLINE_PROVIDERS: Array<{
     status: 'setup',
     summary: 'MENA/GCC payment gateway for hosted payment pages.',
     credentials: ['Profile ID', 'Server key', 'Region code', 'Client key (if using client SDK)'],
-    docsEn: 'For PayTabs hosted/backend integration, copy Profile ID, Server Key, and Region from the merchant dashboard API key area.',
-    docsAr: 'لتكامل PayTabs المستضاف/الخلفي، انسخ Profile ID و Server Key و Region من منطقة مفاتيح API في لوحة التاجر.',
+    docsEn:
+      'For PayTabs hosted/backend integration, copy Profile ID, Server Key, and Region from the merchant dashboard API key area.',
+    docsAr:
+      'لتكامل PayTabs المستضاف/الخلفي، انسخ Profile ID و Server Key و Region من منطقة مفاتيح API في لوحة التاجر.',
   },
   {
     id: 'hyperpay',
@@ -86,14 +98,17 @@ const ONLINE_PROVIDERS: Array<{
     status: 'setup',
     summary: 'Regional gateway used by larger GCC merchants.',
     credentials: ['Entity ID', 'Access token', 'Webhook secret', 'Mode / endpoint'],
-    docsEn: 'Add the HyperPay Entity ID and Access Token for the correct test or production endpoint, plus webhook secret when configured.',
-    docsAr: 'أضف Entity ID و Access Token من HyperPay للبيئة الصحيحة، وأضف Webhook Secret عند تفعيله.',
+    docsEn:
+      'Add the HyperPay Entity ID and Access Token for the correct test or production endpoint, plus webhook secret when configured.',
+    docsAr:
+      'أضف Entity ID و Access Token من HyperPay للبيئة الصحيحة، وأضف Webhook Secret عند تفعيله.',
   },
 ];
 
 type Props = {
   slug: string;
   initial: CheckoutSettingsValue;
+  storefrontBaseUrl: string;
   /**
    * Whether each policy currently has text on the briefs row. The
    * server action also re-checks this, but we surface it inline so the
@@ -148,6 +163,7 @@ const IBAN_HINT = 'Two-letter country code + up to 32 alphanumerics. Spaces are 
 export function CheckoutSettings({
   slug,
   initial,
+  storefrontBaseUrl,
   policiesPresent,
   skipCashEligible,
   skipCashBlockedReason,
@@ -167,7 +183,9 @@ export function CheckoutSettings({
   const [skipCashKeyId, setSkipCashKeyId] = useState('');
   const [skipCashKeySecret, setSkipCashKeySecret] = useState('');
   const [skipCashWebhookKey, setSkipCashWebhookKey] = useState('');
-  const [skipCashCrConfirmed, setSkipCashCrConfirmed] = useState(Boolean(initial.skipCash?.crConfirmedAt));
+  const [skipCashCrConfirmed, setSkipCashCrConfirmed] = useState(
+    Boolean(initial.skipCash?.crConfirmedAt),
+  );
   const [sadadMerchantId, setSadadMerchantId] = useState('');
   const [sadadWebsite, setSadadWebsite] = useState('');
   const [sadadSecretKey, setSadadSecretKey] = useState('');
@@ -186,6 +204,13 @@ export function CheckoutSettings({
   const [shippingFlatQar, setShippingFlatQar] = useState<string>(
     initial.shippingFlatQar == null ? '' : String(initial.shippingFlatQar),
   );
+  const [thankYouTitle, setThankYouTitle] = useState(initial.thankYou.title ?? '');
+  const [thankYouMessage, setThankYouMessage] = useState(initial.thankYou.message ?? '');
+  const [thankYouCtaLabel, setThankYouCtaLabel] = useState(initial.thankYou.ctaLabel ?? '');
+  const [thankYouCtaUrl, setThankYouCtaUrl] = useState(initial.thankYou.ctaUrl ?? '');
+  const [thankYouShowOrderSummary, setThankYouShowOrderSummary] = useState(
+    initial.thankYou.showOrderSummary,
+  );
 
   const [pending, startTransition] = useTransition();
   const [state, setState] = useState<CheckoutActionState>({ status: 'idle' });
@@ -197,6 +222,8 @@ export function CheckoutSettings({
     sadadMerchantId.trim() || sadadWebsite.trim() || sadadSecretKey.trim(),
   );
   const noneSelected = paymentMethods.length === 0;
+  const normalizedStorefrontBaseUrl = storefrontBaseUrl.replace(/\/+$/, '');
+  const skipCashReturnUrl = `${normalizedStorefrontBaseUrl}/api/checkout/skipcash-return`;
 
   const togglePayment = (method: PaymentMethod) => {
     if (method === 'skipcash' && !skipCashEligible) return;
@@ -250,17 +277,25 @@ export function CheckoutSettings({
               confirmCr: skipCashCrConfirmed,
             }
           : null,
-        sadad: sadadSelected || sadadFieldsTouched
-          ? {
-              merchantId: sadadMerchantId,
-              website: sadadWebsite,
-              secretKey: sadadSecretKey,
-            }
-          : null,
+        sadad:
+          sadadSelected || sadadFieldsTouched
+            ? {
+                merchantId: sadadMerchantId,
+                website: sadadWebsite,
+                secretKey: sadadSecretKey,
+              }
+            : null,
         requiredPolicies,
         currency,
         minOrderQar: parseIntOrNull(minOrderQar),
         shippingFlatQar: parseIntOrNull(shippingFlatQar),
+        thankYou: {
+          title: thankYouTitle,
+          message: thankYouMessage,
+          ctaLabel: thankYouCtaLabel,
+          ctaUrl: thankYouCtaUrl,
+          showOrderSummary: thankYouShowOrderSummary,
+        },
       });
       setState(result);
     });
@@ -344,6 +379,7 @@ export function CheckoutSettings({
           crNumber={crNumber}
           hasStoredCredentials={Boolean(initial.skipCash?.hasCredentials)}
           clientIdHint={initial.skipCash?.clientIdHint ?? null}
+          returnUrl={skipCashReturnUrl}
           sectionError={fieldErrorMessage('skipCash')}
         />
       ) : null}
@@ -367,9 +403,7 @@ export function CheckoutSettings({
         />
       ) : null}
 
-      {selectedProvider &&
-      selectedProvider !== 'skipcash' &&
-      selectedProvider !== 'sadad' ? (
+      {selectedProvider && selectedProvider !== 'skipcash' && selectedProvider !== 'sadad' ? (
         <ProviderPendingSection providerId={selectedProvider} />
       ) : null}
 
@@ -387,6 +421,20 @@ export function CheckoutSettings({
         setMinOrderQar={setMinOrderQar}
         shippingFlatQar={shippingFlatQar}
         setShippingFlatQar={setShippingFlatQar}
+      />
+
+      <ThankYouSection
+        title={thankYouTitle}
+        setTitle={setThankYouTitle}
+        message={thankYouMessage}
+        setMessage={setThankYouMessage}
+        ctaLabel={thankYouCtaLabel}
+        setCtaLabel={setThankYouCtaLabel}
+        ctaUrl={thankYouCtaUrl}
+        setCtaUrl={setThankYouCtaUrl}
+        showOrderSummary={thankYouShowOrderSummary}
+        setShowOrderSummary={setThankYouShowOrderSummary}
+        sectionError={fieldErrorMessage('thankYou')}
       />
 
       <SaveBar
@@ -628,7 +676,11 @@ function OnlineProvidersSection({
                       : 'var(--ink-muted)',
                 }}
               >
-                {enabled ? t('enabled') : provider.status === 'live' ? t('available') : t('credentials guide')}
+                {enabled
+                  ? t('enabled')
+                  : provider.status === 'live'
+                    ? t('available')
+                    : t('credentials guide')}
               </span>
             </button>
           );
@@ -737,17 +789,36 @@ function ProviderSummary({
   );
 }
 
-function ProviderPendingSection({ providerId }: { providerId: Exclude<OnlineProviderId, 'skipcash' | 'sadad'> }) {
+function ProviderPendingSection({
+  providerId,
+}: {
+  providerId: Exclude<OnlineProviderId, 'skipcash' | 'sadad'>;
+}) {
   const provider = ONLINE_PROVIDERS.find((p) => p.id === providerId)!;
   return (
     <SectionCard
       title={`${provider.name} credentials`}
       description="These are the official merchant credentials this provider uses. Checkout activation stays off until Souqna’s charge/refund/webhook flow for this provider is implemented."
     >
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 14,
+        }}
+      >
         {provider.credentials.map((credential) => (
-          <Field key={credential} label={credential} hint="Not saved yet. Provider integration pending.">
-            <input value="" disabled style={{ ...inputStyle, opacity: 0.62 }} aria-label={credential} />
+          <Field
+            key={credential}
+            label={credential}
+            hint="Not saved yet. Provider integration pending."
+          >
+            <input
+              value=""
+              disabled
+              style={{ ...inputStyle, opacity: 0.62 }}
+              aria-label={credential}
+            />
           </Field>
         ))}
       </div>
@@ -898,6 +969,7 @@ function SkipCashSection({
   crNumber,
   hasStoredCredentials,
   clientIdHint,
+  returnUrl,
   sectionError,
 }: {
   clientId: string;
@@ -913,6 +985,7 @@ function SkipCashSection({
   crNumber: string | null;
   hasStoredCredentials: boolean;
   clientIdHint: string | null;
+  returnUrl: string;
   sectionError: string | null;
 }) {
   return (
@@ -958,6 +1031,18 @@ function SkipCashSection({
         disabled={!crNumber}
         badge={!crNumber ? 'CR required' : null}
       />
+      <Field
+        label="SkipCash return URL"
+        hint="Paste this in SkipCash Merchant Portal → Online Payments → Return URL so buyers come back to this store's thank-you page after payment."
+      >
+        <input
+          readOnly
+          value={returnUrl}
+          style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
+          aria-label="SkipCash return URL"
+          onFocus={(e) => e.currentTarget.select()}
+        />
+      </Field>
       <div
         style={{
           display: 'grid',
@@ -1070,15 +1155,15 @@ function SadadSection({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <strong style={{ fontSize: 13 }}>What to enter</strong>
           <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-muted)' }}>
-            From the SADAD merchant dashboard, copy the SADAD ID, the registered website/domain,
-            and the API secret key for live or test mode.
+            From the SADAD merchant dashboard, copy the SADAD ID, the registered website/domain, and
+            the API secret key for live or test mode.
           </p>
         </div>
         <div dir="rtl" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <strong style={{ fontSize: 13 }}>ما البيانات المطلوبة؟</strong>
           <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.7, color: 'var(--ink-muted)' }}>
-            من لوحة تاجر سداد، انسخ رقم سداد، الموقع أو النطاق المسجل، ومفتاح API السري
-            لبيئة الاختبار أو البيئة الحية.
+            من لوحة تاجر سداد، انسخ رقم سداد، الموقع أو النطاق المسجل، ومفتاح API السري لبيئة
+            الاختبار أو البيئة الحية.
           </p>
         </div>
       </div>
@@ -1130,7 +1215,10 @@ function SadadSection({
             autoComplete="off"
           />
         </Field>
-        <Field label="Website / Domain" hint="The domain registered with SADAD. النطاق المسجل في سداد.">
+        <Field
+          label="Website / Domain"
+          hint="The domain registered with SADAD. النطاق المسجل في سداد."
+        >
           <input
             maxLength={240}
             value={website}
@@ -1270,9 +1358,7 @@ function OrderRulesSection({
                 {c.label}
               </option>
             ))}
-            {!knownCurrency ? (
-              <option value={currency}>{currency} (legacy)</option>
-            ) : null}
+            {!knownCurrency ? <option value={currency}>{currency} (legacy)</option> : null}
           </select>
         </Field>
         <Field label="Minimum order (QAR)" hint="Optional. Block orders below this amount.">
@@ -1302,6 +1388,109 @@ function OrderRulesSection({
           />
         </Field>
       </div>
+    </SectionCard>
+  );
+}
+
+function ThankYouSection({
+  title,
+  setTitle,
+  message,
+  setMessage,
+  ctaLabel,
+  setCtaLabel,
+  ctaUrl,
+  setCtaUrl,
+  showOrderSummary,
+  setShowOrderSummary,
+  sectionError,
+}: {
+  title: string;
+  setTitle: (v: string) => void;
+  message: string;
+  setMessage: (v: string) => void;
+  ctaLabel: string;
+  setCtaLabel: (v: string) => void;
+  ctaUrl: string;
+  setCtaUrl: (v: string) => void;
+  showOrderSummary: boolean;
+  setShowOrderSummary: (v: boolean) => void;
+  sectionError: string | null;
+}) {
+  return (
+    <SectionCard
+      title="Thank-you page"
+      description="Customize the page buyers see after an order or after returning from an online payment."
+    >
+      {sectionError ? (
+        <span
+          role="alert"
+          style={{
+            fontSize: 12.5,
+            color: 'var(--color-maroon, #8b3a3a)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          {sectionError}
+        </span>
+      ) : null}
+      <Field
+        label="Headline"
+        hint="Shown on successful and received orders. Payment failures keep the safety message."
+      >
+        <input
+          maxLength={120}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          style={inputStyle}
+          placeholder="Thank you for shopping with us."
+          aria-label="Thank-you page headline"
+        />
+      </Field>
+      <Field label="Message">
+        <textarea
+          maxLength={600}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          style={{ ...textareaStyle, minHeight: 110 }}
+          placeholder="Your order is confirmed. We will contact you with delivery updates soon."
+          aria-label="Thank-you page message"
+        />
+      </Field>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 14,
+        }}
+      >
+        <Field label="CTA label" hint="Optional. Example: Continue shopping.">
+          <input
+            maxLength={80}
+            value={ctaLabel}
+            onChange={(e) => setCtaLabel(e.target.value)}
+            style={inputStyle}
+            aria-label="Thank-you page CTA label"
+          />
+        </Field>
+        <Field label="CTA link" hint="Use a store path like / or a full https:// link.">
+          <input
+            maxLength={500}
+            value={ctaUrl}
+            onChange={(e) => setCtaUrl(e.target.value)}
+            style={inputStyle}
+            placeholder="/"
+            aria-label="Thank-you page CTA link"
+          />
+        </Field>
+      </div>
+      <CheckboxRow
+        id="thank-you-show-summary"
+        checked={showOrderSummary}
+        onChange={() => setShowOrderSummary(!showOrderSummary)}
+        title="Show order summary"
+        description="Keep item, total, and delivery details visible on the thank-you page."
+      />
     </SectionCard>
   );
 }
@@ -1390,8 +1579,7 @@ function CheckboxRow({
                 color: 'var(--ink-muted)',
                 padding: '1px 6px',
                 borderRadius: 999,
-                border:
-                  '1px solid color-mix(in srgb, var(--ink-strong) 14%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--ink-strong) 14%, transparent)',
               }}
             >
               {t(badge)}
@@ -1460,7 +1648,8 @@ function SaveBar({
             fontFamily: 'var(--font-mono)',
           }}
         >
-          {t('Saved')} {new Date(state.updatedAt).toLocaleTimeString(locale === 'ar' ? 'ar-QA' : 'en-GB')}
+          {t('Saved')}{' '}
+          {new Date(state.updatedAt).toLocaleTimeString(locale === 'ar' ? 'ar-QA' : 'en-GB')}
         </span>
       ) : null}
       <button

@@ -7,6 +7,7 @@ import {
   POLICY_KEYS,
   type PolicyKey,
 } from '@/lib/storefrontSettings';
+import { storefrontBaseUrl } from '@/lib/storefrontUrl';
 
 export default async function CheckoutPage({
   searchParams,
@@ -40,6 +41,11 @@ export default async function CheckoutPage({
       <CheckoutSettings
         slug={storefront.slug}
         initial={checkout}
+        storefrontBaseUrl={
+          storefront.customDomain
+            ? `https://${storefront.customDomain}`
+            : storefrontBaseUrl(storefront.slug)
+        }
         policiesPresent={policiesPresent}
         skipCashEligible={Boolean(storefront.crNumber)}
         skipCashBlockedReason={storefront.crNumber ? 'Confirm CR ownership' : 'Add CR number'}

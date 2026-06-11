@@ -7,11 +7,7 @@ import {
   requireMobileStoreAccess,
   searchParam,
 } from '@/lib/mobile/auth';
-import {
-  updateStorefront,
-  type Storefront,
-  type UpdateStorefrontInput,
-} from '@/lib/brief';
+import { updateStorefront, type Storefront, type UpdateStorefrontInput } from '@/lib/brief';
 import { recordAudit } from '@/lib/audit';
 import { encryptToken } from '@/lib/apps/crypto';
 import {
@@ -51,6 +47,39 @@ const SadadSchema = z
   })
   .strict();
 
+const nullableTrimmedText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .transform((value) => (value && value.length > 0 ? value : null));
+
+function isValidThankYouCtaUrl(value: string | null | undefined): boolean {
+  if (!value) return true;
+  if (value.startsWith('/') && !value.startsWith('//')) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+const ThankYouSchema = z
+  .object({
+    title: nullableTrimmedText(120).optional(),
+    message: nullableTrimmedText(600).optional(),
+    ctaLabel: nullableTrimmedText(80).optional(),
+    ctaUrl: nullableTrimmedText(500)
+      .refine(isValidThankYouCtaUrl, {
+        message: 'CTA link must be a relative path or an http(s) URL.',
+      })
+      .optional(),
+    showOrderSummary: z.boolean().optional(),
+  })
+  .strict();
+
 const PatchSchema = z.object({
   store: z.string().trim().min(1).max(64).optional(),
   enableSkipCash: z.boolean().optional(),
@@ -58,11 +87,12 @@ const PatchSchema = z.object({
   paymentMethods: z
     .array(z.enum(PAYMENT_METHODS as unknown as [PaymentMethod, ...PaymentMethod[]]))
     .optional()
-    .transform((arr) => (arr ? Array.from(new Set(arr)) as PaymentMethod[] : undefined)),
+    .transform((arr) => (arr ? (Array.from(new Set(arr)) as PaymentMethod[]) : undefined)),
   skipCash: SkipCashSchema.nullable().optional(),
   sadad: SadadSchema.nullable().optional(),
   shippingFlatQar: z.number().int().min(0).max(1_000_000).nullable().optional(),
   minOrderQar: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  thankYou: ThankYouSchema.optional(),
 });
 
 export async function GET(req: Request): Promise<Response> {
@@ -85,9 +115,7 @@ export async function PATCH(req: Request): Promise<Response> {
 
   const current = gate.access.storefront;
   const nextCrNumber =
-    'crNumber' in parsed.data
-      ? normalizeNullable(parsed.data.crNumber)
-      : current.crNumber;
+    'crNumber' in parsed.data ? normalizeNullable(parsed.data.crNumber) : current.crNumber;
   let workingStorefront = current;
 
   if (nextCrNumber !== current.crNumber) {
@@ -137,11 +165,7 @@ export async function PATCH(req: Request): Promise<Response> {
 
   if (shouldEnableSkipCash) {
     if (!workingStorefront.crNumber?.trim()) {
-      return mobileError(
-        400,
-        'missing_cr',
-        'Add your CR number before enabling SkipCash.',
-      );
+      return mobileError(400, 'missing_cr', 'Add your CR number before enabling SkipCash.');
     }
     if (!workingStorefront.crConfirmedAt && !skipCashFields?.confirmCr) {
       return mobileError(
@@ -183,25 +207,21 @@ export async function PATCH(req: Request): Promise<Response> {
     }
   }
 
-  let sadadCredentialsToSave:
-    | {
-        v: 1;
-        ct: string;
-        merchantIdHint: string | null;
-        websiteHint: string | null;
-        verifiedMode: 'live' | 'sandbox';
-        verifiedAt: string;
-        updatedAt: string;
-      }
-    | null = null;
-  let savedSadad:
-    | {
-        merchantIdHint: string | null;
-        websiteHint: string | null;
-        verifiedMode: 'live' | 'sandbox';
-        verifiedAt: string;
-      }
-    | null = null;
+  let sadadCredentialsToSave: {
+    v: 1;
+    ct: string;
+    merchantIdHint: string | null;
+    websiteHint: string | null;
+    verifiedMode: 'live' | 'sandbox';
+    verifiedAt: string;
+    updatedAt: string;
+  } | null = null;
+  let savedSadad: {
+    merchantIdHint: string | null;
+    websiteHint: string | null;
+    verifiedMode: 'live' | 'sandbox';
+    verifiedAt: string;
+  } | null = null;
 
   if (providedSadadCredentials) {
     if (!sadadFields?.merchantId || !sadadFields.website || !sadadFields.secretKey) {
@@ -230,9 +250,7 @@ export async function PATCH(req: Request): Promise<Response> {
         }),
       ),
       merchantIdHint:
-        sadadFields.merchantId.length > 4
-          ? `••••${sadadFields.merchantId.slice(-4)}`
-          : '••••',
+        sadadFields.merchantId.length > 4 ? `••••${sadadFields.merchantId.slice(-4)}` : '••••',
       websiteHint: sadadFields.website,
       verifiedMode: verification.mode,
       verifiedAt,
@@ -252,8 +270,8 @@ export async function PATCH(req: Request): Promise<Response> {
     bankDetails: nextPaymentMethods.includes('bank_transfer')
       ? workingStorefront.checkout.bankDetails
       : null,
-    requiredPolicies: workingStorefront.checkout.requiredPolicies.filter((policy): policy is PolicyKey =>
-      (POLICY_KEYS as readonly string[]).includes(policy),
+    requiredPolicies: workingStorefront.checkout.requiredPolicies.filter(
+      (policy): policy is PolicyKey => (POLICY_KEYS as readonly string[]).includes(policy),
     ),
     minOrderQar:
       parsed.data.minOrderQar === undefined
@@ -263,6 +281,9 @@ export async function PATCH(req: Request): Promise<Response> {
       parsed.data.shippingFlatQar === undefined
         ? workingStorefront.checkout.shippingFlatQar
         : parsed.data.shippingFlatQar,
+    thankYou: parsed.data.thankYou
+      ? { ...workingStorefront.checkout.thankYou, ...parsed.data.thankYou }
+      : workingStorefront.checkout.thankYou,
   };
 
   let savedClientIdHint: string | null = null;
@@ -346,9 +367,7 @@ export async function PATCH(req: Request): Promise<Response> {
         skipCash: {
           hasCredentials: refreshedSkipCashHasCredentials,
           clientIdHint:
-            savedClientIdHint ??
-            workingStorefront.checkout.skipCash?.clientIdHint ??
-            null,
+            savedClientIdHint ?? workingStorefront.checkout.skipCash?.clientIdHint ?? null,
           enabled:
             shouldEnableSkipCash &&
             refreshedSkipCashHasCredentials &&
@@ -358,33 +377,22 @@ export async function PATCH(req: Request): Promise<Response> {
         },
         sadad: {
           hasCredentials:
-            Boolean(workingStorefront.checkout.sadad?.hasCredentials) ||
-            Boolean(savedSadad),
+            Boolean(workingStorefront.checkout.sadad?.hasCredentials) || Boolean(savedSadad),
           merchantIdHint:
-            savedSadad?.merchantIdHint ??
-            workingStorefront.checkout.sadad?.merchantIdHint ??
-            null,
+            savedSadad?.merchantIdHint ?? workingStorefront.checkout.sadad?.merchantIdHint ?? null,
           websiteHint:
-            savedSadad?.websiteHint ??
-            workingStorefront.checkout.sadad?.websiteHint ??
-            null,
+            savedSadad?.websiteHint ?? workingStorefront.checkout.sadad?.websiteHint ?? null,
           verifiedMode:
-            savedSadad?.verifiedMode ??
-            workingStorefront.checkout.sadad?.verifiedMode ??
-            null,
+            savedSadad?.verifiedMode ?? workingStorefront.checkout.sadad?.verifiedMode ?? null,
           verifiedAt:
-            savedSadad?.verifiedAt ??
-            workingStorefront.checkout.sadad?.verifiedAt ??
-            null,
+            savedSadad?.verifiedAt ?? workingStorefront.checkout.sadad?.verifiedAt ?? null,
           enabled:
             nextPaymentMethods.includes('sadad') &&
-            (Boolean(workingStorefront.checkout.sadad?.hasCredentials) ||
-              Boolean(savedSadad)),
+            (Boolean(workingStorefront.checkout.sadad?.hasCredentials) || Boolean(savedSadad)),
         },
       },
       crConfirmedAt:
-        workingStorefront.crConfirmedAt ??
-        (skipCashFields?.confirmCr ? new Date() : null),
+        workingStorefront.crConfirmedAt ?? (skipCashFields?.confirmCr ? new Date() : null),
     };
     return mobileJson(toPayload(refreshed));
   } catch (err) {
@@ -401,7 +409,9 @@ function normalizeNullable(value: string | null | undefined): string | null {
 
 function uniqueMethods(methods: PaymentMethod[]): PaymentMethod[] {
   const allowed = new Set(PAYMENT_METHODS as readonly PaymentMethod[]);
-  return methods.filter((method, index, array) => allowed.has(method) && array.indexOf(method) === index);
+  return methods.filter(
+    (method, index, array) => allowed.has(method) && array.indexOf(method) === index,
+  );
 }
 
 function toPayload(storefront: Storefront) {
@@ -427,9 +437,7 @@ function toPayload(storefront: Storefront) {
       (skipCash.crConfirmedAt || storefront.crConfirmedAt),
   );
   const sadadReady = Boolean(
-    checkout.paymentMethods.includes('sadad') &&
-      sadad.hasCredentials &&
-      sadad.verifiedAt,
+    checkout.paymentMethods.includes('sadad') && sadad.hasCredentials && sadad.verifiedAt,
   );
 
   return {
@@ -438,6 +446,7 @@ function toPayload(storefront: Storefront) {
       currency: checkout.currency,
       minOrderQar: checkout.minOrderQar,
       shippingFlatQar: checkout.shippingFlatQar,
+      thankYou: checkout.thankYou,
       skipCash: {
         hasCredentials: skipCash.hasCredentials,
         clientIdHint: skipCash.clientIdHint,

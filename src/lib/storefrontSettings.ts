@@ -24,7 +24,12 @@ export type StorefrontPolicies = {
 };
 
 export type PolicyKey = keyof StorefrontPolicies;
-export const POLICY_KEYS = ['terms', 'privacy', 'refund', 'shipping'] as const satisfies readonly PolicyKey[];
+export const POLICY_KEYS = [
+  'terms',
+  'privacy',
+  'refund',
+  'shipping',
+] as const satisfies readonly PolicyKey[];
 
 export type PaymentMethod = 'cod' | 'bank_transfer' | 'skipcash' | 'sadad' | 'pay_link';
 export const PAYMENT_METHODS = [
@@ -54,6 +59,14 @@ export type PayLink = {
   label: string;
 };
 
+export type ThankYouSettings = {
+  title: string | null;
+  message: string | null;
+  ctaLabel: string | null;
+  ctaUrl: string | null;
+  showOrderSummary: boolean;
+};
+
 export type SkipCashSettings = {
   hasCredentials: boolean;
   clientIdHint: string | null;
@@ -80,6 +93,7 @@ export type CheckoutSettings = {
   currency: string;
   minOrderQar: number | null;
   shippingFlatQar: number | null;
+  thankYou: ThankYouSettings;
 };
 
 export const EMPTY_POLICIES: StorefrontPolicies = {
@@ -99,6 +113,13 @@ export const DEFAULT_CHECKOUT_SETTINGS: CheckoutSettings = {
   currency: 'QAR',
   minOrderQar: null,
   shippingFlatQar: null,
+  thankYou: {
+    title: null,
+    message: null,
+    ctaLabel: null,
+    ctaUrl: null,
+    showOrderSummary: true,
+  },
 };
 
 /**
@@ -147,6 +168,7 @@ export async function writeStorefrontCheckoutSettings(
   patch: CheckoutSettings,
 ): Promise<void> {
   const bankJson = patch.bankDetails ? JSON.stringify(patch.bankDetails) : null;
+  const thankYouJson = JSON.stringify(patch.thankYou);
   await db()`
     update briefs set
       checkout_payment_methods   = ${patch.paymentMethods as unknown as string},
@@ -156,7 +178,8 @@ export async function writeStorefrontCheckoutSettings(
       checkout_required_policies = ${patch.requiredPolicies as unknown as string},
       checkout_currency          = ${patch.currency},
       checkout_min_order_qar     = ${patch.minOrderQar},
-      checkout_shipping_flat_qar = ${patch.shippingFlatQar}
+      checkout_shipping_flat_qar = ${patch.shippingFlatQar},
+      checkout_thank_you         = ${thankYouJson}::jsonb
     where slug = ${slug} and expires_at > now()
   `;
 }
@@ -186,7 +209,11 @@ export async function writeStorefrontSkipCashSetup(
   },
 ): Promise<void> {
   const credentialsJson =
-    input.credentials === undefined ? undefined : input.credentials ? JSON.stringify(input.credentials) : null;
+    input.credentials === undefined
+      ? undefined
+      : input.credentials
+        ? JSON.stringify(input.credentials)
+        : null;
   if (credentialsJson !== undefined && input.confirmCr) {
     await db()`
       update briefs set
