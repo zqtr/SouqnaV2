@@ -293,6 +293,18 @@ export default async function ThankYouPage({ params, searchParams }: Props) {
                   label={isAr ? 'المجموع الفرعي' : 'Subtotal'}
                   value={`${order.currency} ${order.subtotalQar}`}
                 />
+                {order.discountQar > 0 ? (
+                  <TotalRow
+                    label={
+                      order.discountCode
+                        ? `${isAr ? 'الخصم' : 'Discount'} (${order.discountCode})`
+                        : isAr
+                          ? 'الخصم'
+                          : 'Discount'
+                    }
+                    value={`- ${order.currency} ${order.discountQar}`}
+                  />
+                ) : null}
                 <TotalRow
                   label={isAr ? 'الشحن' : 'Shipping'}
                   value={

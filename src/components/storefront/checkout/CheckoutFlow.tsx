@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, useTransition } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCart } from '../cart/CartContext';
-import { createOrder } from '@/app/actions/checkout';
+import { applyDiscountCode, createOrder } from '@/app/actions/checkout';
 import type {
   CheckoutSettings,
   PaymentMethod,
@@ -45,6 +45,11 @@ type Address = {
 type BuyerConsentState = {
   cookies: boolean;
   marketing: boolean;
+};
+type AppliedDiscount = {
+  code: string;
+  title: string | null;
+  discountQar: number;
 };
 
 const ALWAYS_REQUIRED_POLICY_KEYS = [
@@ -118,6 +123,13 @@ function getStrings(locale: 'en' | 'ar') {
       goShop: 'العودة للمتجر',
       orderSummary: 'ملخص الطلب',
       subtotal: 'المجموع الفرعي',
+      discount: 'الخصم',
+      promoQuestion: 'هل لديك كود خصم؟',
+      promoPlaceholder: 'أدخل الكود',
+      applyCode: 'تطبيق',
+      removeCode: 'إزالة',
+      promoEnterCode: 'أدخل كود الخصم.',
+      promoApplied: (code: string) => `تم تطبيق ${code}.`,
       shipping: 'الشحن',
       total: 'الإجمالي',
       noShipping: 'مجاني',
@@ -178,6 +190,13 @@ function getStrings(locale: 'en' | 'ar') {
     goShop: 'Back to the storefront',
     orderSummary: 'Order summary',
     subtotal: 'Subtotal',
+    discount: 'Discount',
+    promoQuestion: 'Have a promo/discount Code?',
+    promoPlaceholder: 'Enter code',
+    applyCode: 'Apply',
+    removeCode: 'Remove',
+    promoEnterCode: 'Enter a promo code.',
+    promoApplied: (code: string) => `${code} applied.`,
     shipping: 'Shipping',
     total: 'Total',
     noShipping: 'Free',
@@ -243,8 +262,13 @@ export function CheckoutFlow({
     cookies: false,
     marketing: false,
   });
+  const [promoCode, setPromoCode] = useState('');
+  const [appliedDiscount, setAppliedDiscount] = useState<AppliedDiscount | null>(null);
+  const [promoMessage, setPromoMessage] = useState<string | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
   const [error, setError] = useState<{ message: string; field?: string } | null>(null);
   const [pending, start] = useTransition();
+  const [promoPending, startPromo] = useTransition();
   const liveRegionRef = useRef<HTMLDivElement | null>(null);
 
   // Empty cart: bounce back to the storefront. We do this in an effect
@@ -263,7 +287,17 @@ export function CheckoutFlow({
 
   const subtotal = cart.subtotalQar;
   const shipping = cart.items.length > 0 ? (checkout.shippingFlatQar ?? 0) : 0;
-  const total = subtotal + shipping;
+  const discount = appliedDiscount?.discountQar ?? 0;
+  const total = Math.max(subtotal + shipping - discount, 0);
+
+  const cartSignature = cart.items
+    .map((it) => `${it.productId}:${it.quantity}:${it.variantLabel ?? ''}:${it.priceQar}`)
+    .join('|');
+  useEffect(() => {
+    setAppliedDiscount(null);
+    setPromoMessage(null);
+    setPromoError(null);
+  }, [cartSignature, address.city, address.country]);
 
   function go(next: number) {
     setError(null);
@@ -286,6 +320,74 @@ export function CheckoutFlow({
 
   function tryBack() {
     go(Math.max(stepIdx - 1, 0));
+  }
+
+  function updatePromoCode(value: string) {
+    const normalized = value.toUpperCase().replace(/\s+/g, '');
+    setPromoCode(normalized);
+    setPromoError(null);
+    setPromoMessage(null);
+    setAppliedDiscount((current) => (current?.code === normalized ? current : null));
+  }
+
+  function applyPromo() {
+    const code = promoCode.trim();
+    if (!code) {
+      setAppliedDiscount(null);
+      setPromoMessage(null);
+      setPromoError(t.promoEnterCode);
+      return;
+    }
+    if (cart.items.length === 0) {
+      setPromoError(t.cartEmpty);
+      return;
+    }
+
+    setPromoError(null);
+    setPromoMessage(null);
+    startPromo(async () => {
+      const result = await applyDiscountCode({
+        slug: storefrontSlug,
+        code,
+        items: cart.items.map((it) => ({
+          productId: it.productId,
+          quantity: it.quantity,
+          variantLabel: it.variantLabel ?? null,
+          customInputs: it.customInputs ?? {},
+        })),
+        customer: {
+          phone: contact.phone.trim() || null,
+          email: contact.email.trim() || null,
+        },
+        address: {
+          city: address.city.trim() || null,
+          country: address.country.trim() || null,
+        },
+      });
+
+      if (result.status === 'success') {
+        setPromoCode(result.code);
+        setAppliedDiscount({
+          code: result.code,
+          title: result.title,
+          discountQar: result.discountQar,
+        });
+        setPromoMessage(t.promoApplied(result.code));
+        setPromoError(null);
+        return;
+      }
+
+      setAppliedDiscount(null);
+      setPromoMessage(null);
+      setPromoError(result.message);
+    });
+  }
+
+  function removePromo() {
+    setAppliedDiscount(null);
+    setPromoCode('');
+    setPromoMessage(null);
+    setPromoError(null);
   }
 
   const requiredPolicyKeys = requiredCheckoutPolicies(checkout.requiredPolicies);
@@ -330,6 +432,7 @@ export function CheckoutFlow({
           notes: address.notes.trim() || null,
         },
         paymentMethod,
+        discountCode: promoCode.trim() || undefined,
         acceptedPolicies: acceptedKeys,
         consents: {
           terms: accepted.terms,
@@ -351,6 +454,11 @@ export function CheckoutFlow({
         return;
       }
       setError({ message: result.message, field: result.field });
+      if (result.field === 'discountCode') {
+        setPromoError(result.message);
+        setPromoMessage(null);
+        setAppliedDiscount(null);
+      }
       const fieldStep = stepForField(result.field);
       if (fieldStep != null) setStepIdx(fieldStep);
     });
@@ -470,8 +578,17 @@ export function CheckoutFlow({
           items={cart.items}
           currency={checkout.currency}
           subtotal={subtotal}
+          discount={discount}
           shipping={shipping}
           total={total}
+          promoCode={promoCode}
+          onPromoCodeChange={updatePromoCode}
+          onApplyPromo={applyPromo}
+          onRemovePromo={removePromo}
+          appliedDiscount={appliedDiscount}
+          promoPending={promoPending}
+          promoMessage={promoMessage}
+          promoError={promoError}
         />
       </div>
     </div>
@@ -1450,16 +1567,36 @@ function OrderSummary({
   items,
   currency,
   subtotal,
+  discount,
   shipping,
   total,
+  promoCode,
+  onPromoCodeChange,
+  onApplyPromo,
+  onRemovePromo,
+  appliedDiscount,
+  promoPending,
+  promoMessage,
+  promoError,
 }: {
   t: Strings;
   items: ReturnType<typeof useCart>['items'];
   currency: string;
   subtotal: number;
+  discount: number;
   shipping: number;
   total: number;
+  promoCode: string;
+  onPromoCodeChange: (value: string) => void;
+  onApplyPromo: () => void;
+  onRemovePromo: () => void;
+  appliedDiscount: AppliedDiscount | null;
+  promoPending: boolean;
+  promoMessage: string | null;
+  promoError: string | null;
 }) {
+  const promoInputId = useId();
+  const promoStatusId = `${promoInputId}-status`;
   return (
     <aside
       aria-label={t.orderSummary}
@@ -1569,6 +1706,63 @@ function OrderSummary({
           marginTop: 16,
           paddingTop: 12,
           borderTop: '1px dashed color-mix(in srgb, currentColor 18%, transparent)',
+          display: 'grid',
+          gap: 8,
+        }}
+      >
+        <label htmlFor={promoInputId} style={labelStyle()}>
+          {t.promoQuestion}
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 8 }}>
+          <input
+            id={promoInputId}
+            value={promoCode}
+            onChange={(e) => onPromoCodeChange(e.target.value)}
+            placeholder={t.promoPlaceholder}
+            aria-invalid={Boolean(promoError) || undefined}
+            aria-describedby={promoMessage || promoError ? promoStatusId : undefined}
+            disabled={promoPending || items.length === 0}
+            style={{
+              ...inputStyle(Boolean(promoError)),
+              fontFamily: 'var(--font-mono)',
+              textTransform: 'uppercase',
+            }}
+          />
+          <button
+            type="button"
+            onClick={appliedDiscount ? onRemovePromo : onApplyPromo}
+            disabled={promoPending || items.length === 0}
+            style={{
+              ...secondaryBtnStyle(promoPending || items.length === 0),
+              borderRadius: 8,
+              padding: '10px 12px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {appliedDiscount ? t.removeCode : t.applyCode}
+          </button>
+        </div>
+        {promoMessage || promoError ? (
+          <div
+            id={promoStatusId}
+            role={promoError ? 'alert' : 'status'}
+            style={{
+              fontSize: 12,
+              color: promoError
+                ? 'var(--color-maroon, #8b3a3a)'
+                : 'color-mix(in srgb, var(--sf-accent, var(--color-gold-deep)) 85%, currentColor)',
+            }}
+          >
+            {promoError ?? promoMessage}
+          </div>
+        ) : null}
+      </div>
+
+      <div
+        style={{
+          marginTop: 16,
+          paddingTop: 12,
+          borderTop: '1px dashed color-mix(in srgb, currentColor 18%, transparent)',
           display: 'flex',
           flexDirection: 'column',
           gap: 6,
@@ -1576,6 +1770,12 @@ function OrderSummary({
         }}
       >
         <Row label={t.subtotal} value={`${currency} ${subtotal}`} />
+        {discount > 0 ? (
+          <Row
+            label={appliedDiscount ? `${t.discount} (${appliedDiscount.code})` : t.discount}
+            value={`- ${currency} ${discount}`}
+          />
+        ) : null}
         <Row label={t.shipping} value={shipping === 0 ? t.noShipping : `${currency} ${shipping}`} />
         <Row strong label={t.total} value={`${currency} ${total}`} />
       </div>
@@ -1826,6 +2026,6 @@ function stepForField(field?: string): number | null {
   if (field.startsWith('customer.')) return 0;
   if (field.startsWith('address.')) return 1;
   if (field === 'paymentMethod') return 2;
-  if (field === 'acceptedPolicies' || field === 'items') return 3;
+  if (field === 'acceptedPolicies' || field === 'items' || field === 'discountCode') return 3;
   return null;
 }

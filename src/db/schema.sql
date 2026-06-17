@@ -132,3 +132,12 @@ alter table if exists checkout_order_items
 
 alter table if exists checkout_order_items
   add column if not exists custom_inputs jsonb not null default '{}'::jsonb;
+
+alter table if exists checkout_orders
+  add column if not exists discount_qar integer not null default 0;
+
+alter table if exists checkout_orders
+  add column if not exists discount_code text;
+
+alter table if exists checkout_orders
+  add column if not exists discount_id bigint;

@@ -109,6 +109,16 @@ function itemsTable(order: Order): { html: string; text: string } {
         <td dir="auto" style="padding:4px 0;color:#555;">Subtotal</td>
         <td style="padding:4px 0;text-align:end;">${formatMoney(order.subtotalQar, order.currency)}</td>
       </tr>
+      ${
+        order.discountQar > 0
+          ? `<tr>
+        <td dir="auto" style="padding:4px 0;color:#555;">${escapeHtml(
+          order.discountCode ? `Discount (${order.discountCode})` : 'Discount',
+        )}</td>
+        <td style="padding:4px 0;text-align:end;">- ${formatMoney(order.discountQar, order.currency)}</td>
+      </tr>`
+          : ''
+      }
       <tr>
         <td dir="auto" style="padding:4px 0;color:#555;">Shipping</td>
         <td style="padding:4px 0;text-align:end;">${formatMoney(order.shippingQar, order.currency)}</td>
@@ -131,6 +141,14 @@ function itemsTable(order: Order): { html: string; text: string } {
       )}`;
     }),
     `Subtotal: ${formatMoney(order.subtotalQar, order.currency)}`,
+    ...(order.discountQar > 0
+      ? [
+          `${order.discountCode ? `Discount (${order.discountCode})` : 'Discount'}: - ${formatMoney(
+            order.discountQar,
+            order.currency,
+          )}`,
+        ]
+      : []),
     `Shipping: ${formatMoney(order.shippingQar, order.currency)}`,
     `Total: ${formatMoney(order.totalQar, order.currency)}`,
   ].join('\n');

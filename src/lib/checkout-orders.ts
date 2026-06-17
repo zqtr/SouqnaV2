@@ -80,6 +80,9 @@ export type Order = {
   orderStatus: OrderStatus;
   currency: string;
   subtotalQar: number;
+  discountQar: number;
+  discountCode: string | null;
+  discountId: number | null;
   shippingQar: number;
   taxQar: number;
   totalQar: number;
@@ -108,6 +111,9 @@ type OrderRow = {
   order_status: OrderStatus;
   currency: string;
   subtotal_qar: number | string;
+  discount_qar?: number | string | null;
+  discount_code?: string | null;
+  discount_id?: number | string | null;
   shipping_qar: number | string;
   tax_qar: number | string;
   total_qar: number | string;
@@ -184,6 +190,10 @@ function fromRow(row: OrderRow, items: OrderItem[]): Order {
     orderStatus: row.order_status,
     currency: row.currency,
     subtotalQar: Number(row.subtotal_qar),
+    discountQar: Number(row.discount_qar ?? 0),
+    discountCode: row.discount_code ?? null,
+    discountId:
+      row.discount_id !== null && row.discount_id !== undefined ? Number(row.discount_id) : null,
     shippingQar: Number(row.shipping_qar),
     taxQar: Number(row.tax_qar ?? 0),
     totalQar: Number(row.total_qar),
@@ -237,6 +247,9 @@ export type CreateOrderRowInput = {
   orderStatus?: OrderStatus;
   currency: string;
   subtotalQar: number;
+  discountQar?: number;
+  discountCode?: string | null;
+  discountId?: number | null;
   shippingQar: number;
   taxQar?: number;
   totalQar: number;
@@ -283,7 +296,8 @@ export async function createOrderRow(input: CreateOrderRowInput): Promise<Order>
       customer_name, customer_phone, customer_email,
       address,
       payment_method, payment_status, order_status,
-      currency, subtotal_qar, shipping_qar, tax_qar, total_qar,
+      currency, subtotal_qar, discount_qar, discount_code, discount_id,
+      shipping_qar, tax_qar, total_qar,
       plan_snapshot, seller_net_qar,
       collection_mode, platform_provider, payout_status,
       accepted_policies, notes, metadata
@@ -292,7 +306,8 @@ export async function createOrderRow(input: CreateOrderRowInput): Promise<Order>
       ${input.customer.name}, ${input.customer.phone}, ${input.customer.email},
       ${addressJson}::jsonb,
       ${input.paymentMethod}, ${paymentStatus}, ${orderStatus},
-      ${input.currency}, ${input.subtotalQar}, ${input.shippingQar}, ${input.taxQar ?? 0}, ${input.totalQar},
+      ${input.currency}, ${input.subtotalQar}, ${input.discountQar ?? 0}, ${input.discountCode ?? null}, ${input.discountId ?? null},
+      ${input.shippingQar}, ${input.taxQar ?? 0}, ${input.totalQar},
       ${input.planSnapshot}, ${input.sellerNetQar},
       ${input.collectionMode}, ${input.platformProvider}, ${payoutStatus},
       ${input.acceptedPolicies as unknown as string}, ${input.notes}, ${metadataJson}::jsonb

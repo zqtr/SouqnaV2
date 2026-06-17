@@ -47,6 +47,13 @@ import { getStorefrontSkipCashCredentials } from '@/lib/storefrontSkipcash';
 import { getStorefrontSadadCredentials } from '@/lib/storefrontSadad';
 import { recordPlatformPayoutForPaidOrder } from '@/lib/platformPayouts';
 import {
+  incrementDiscountUsage,
+  normalizeDiscountCode,
+  validateCheckoutDiscount,
+  type CheckoutDiscountApplication,
+  type CheckoutDiscountLine,
+} from '@/lib/discounts';
+import {
   DEFAULT_PRODUCT_HEIGHT_OPTIONS,
   isAllowedHeightOption,
   isAllowedProductSizeOption,
@@ -112,6 +119,7 @@ const CreateOrderSchema = z.object({
   customer: CustomerSchema,
   address: AddressSchema,
   paymentMethod: z.enum(PAYMENT_METHODS as unknown as [PaymentMethod, ...PaymentMethod[]]),
+  discountCode: z.string().trim().max(64).optional().nullable(),
   acceptedPolicies: z
     .array(z.enum(POLICY_KEYS as unknown as [PolicyKey, ...PolicyKey[]]))
     .max(POLICY_KEYS.length),
@@ -119,10 +127,114 @@ const CreateOrderSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
 });
 
+const DiscountPreviewSchema = z.object({
+  slug: z.string().trim().min(1).max(64),
+  code: z.string().trim().min(1).max(64),
+  items: z.array(ItemSchema).min(1).max(40),
+  customer: z
+    .object({
+      phone: z.string().trim().max(40).optional().nullable(),
+      email: z.string().trim().max(180).optional().nullable(),
+    })
+    .optional(),
+  address: z
+    .object({
+      city: z.string().trim().max(120).optional().nullable(),
+      country: z.string().trim().max(120).optional().nullable(),
+    })
+    .optional(),
+});
+
 export type CreateOrderInput = z.input<typeof CreateOrderSchema>;
 export type CreateOrderResult =
   | { status: 'success'; orderId: string; redirectUrl?: string }
   | { status: 'error'; message: string; field?: string };
+
+export type ApplyDiscountCodeInput = z.input<typeof DiscountPreviewSchema>;
+export type ApplyDiscountCodeResult =
+  | {
+      status: 'success';
+      code: string;
+      title: string | null;
+      discountQar: number;
+      subtotalQar: number;
+      shippingQar: number;
+      totalQar: number;
+    }
+  | { status: 'error'; message: string; field?: string };
+
+export async function applyDiscountCode(
+  input: ApplyDiscountCodeInput,
+): Promise<ApplyDiscountCodeResult> {
+  const parsed = DiscountPreviewSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return {
+      status: 'error',
+      message: issue?.message ?? 'Invalid promo code',
+      field: issue?.path.join('.'),
+    };
+  }
+  const data = parsed.data;
+
+  const hdrs = await headers();
+  const ip =
+    hdrs.get('x-forwarded-for')?.split(',')[0]?.trim() ?? hdrs.get('x-real-ip') ?? 'unknown';
+  if (!rateLimit(`checkout:discount:${ip}`, 30, 60_000).ok) {
+    return { status: 'error', message: 'Too many attempts. Try again in a minute.' };
+  }
+
+  const [storefront, settings] = await Promise.all([
+    getStorefront(data.slug),
+    getStorefrontCheckoutSettings(data.slug),
+  ]);
+  if (!storefront) {
+    return { status: 'error', message: 'Storefront not available.' };
+  }
+
+  const preview = await buildDiscountPreviewLines(data.slug, data.items);
+  if ('error' in preview) return preview.error;
+
+  const shippingQar = await calculateShippingQar({
+    slug: data.slug,
+    subtotalQar: preview.subtotalQar,
+    fallbackShippingQar: settings.shippingFlatQar ?? 0,
+    address: data.address,
+  });
+  const result = await validateCheckoutDiscount({
+    storefrontSlug: data.slug,
+    code: data.code,
+    subtotalQar: preview.subtotalQar,
+    shippingQar,
+    lines: preview.lines,
+    customerEmail: data.customer?.email ?? null,
+    customerPhone: data.customer?.phone ?? null,
+  });
+  if (!result.ok) {
+    return { status: 'error', message: result.message, field: 'discountCode' };
+  }
+
+  const discountedSubtotalQar = Math.max(
+    0,
+    preview.subtotalQar - result.application.productDiscountQar,
+  );
+  const discountedShippingQar = Math.max(0, shippingQar - result.application.shippingDiscountQar);
+  const { totalQar } = await calculateTaxAndTotal({
+    slug: data.slug,
+    subtotalQar: discountedSubtotalQar,
+    shippingQar: discountedShippingQar,
+  });
+
+  return {
+    status: 'success',
+    code: result.application.code,
+    title: result.application.title,
+    discountQar: result.application.discountQar,
+    subtotalQar: preview.subtotalQar,
+    shippingQar,
+    totalQar,
+  };
+}
 
 /**
  * Public checkout — runs unauthenticated (the buyer is anonymous).
@@ -240,6 +352,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     price_qar: string | null;
     pricing_mode: 'one_time' | 'monthly_payment';
     monthly_price_qar: string | null;
+    category: string | null;
     size_options?: unknown;
     allow_custom_size?: boolean | null;
     requires_height_input?: boolean | null;
@@ -250,7 +363,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   const productRows = (await db()`
     select
       id, title, price_qar, pricing_mode, monthly_price_qar, size_options,
-      allow_custom_size, requires_height_input, height_input_label, height_options, status
+      category, allow_custom_size, requires_height_input, height_input_label, height_options, status
     from products
     where storefront_slug = ${data.slug}
       and id = any(${productIds as unknown as string}::uuid[])
@@ -315,6 +428,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
   let subtotalQar = 0;
   let hasMonthlyPaymentItem = false;
+  const discountLines: CheckoutDiscountLine[] = [];
   const itemRows = data.items.map((it) => {
     const product = byId.get(it.productId);
     if (!product) {
@@ -327,6 +441,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const unit = Math.round(Number(rawUnit));
     const lineTotal = unit * it.quantity;
     subtotalQar += lineTotal;
+    discountLines.push({
+      productId: product.id,
+      category: product.category ?? null,
+      lineTotalQar: lineTotal,
+    });
     const customInputs: Record<string, string> =
       product.requires_height_input === true
         ? {
@@ -347,11 +466,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     };
   });
 
-  const {
-    shippingQar,
-    taxQar,
-    totalQar: checkoutTotalQar,
-  } = await calculateCheckoutTotals({
+  const shippingQar = await calculateShippingQar({
     slug: data.slug,
     subtotalQar,
     fallbackShippingQar: settings.shippingFlatQar ?? 0,
@@ -374,6 +489,42 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     };
   }
 
+  const requestedDiscountCode = normalizeDiscountCode(data.discountCode);
+  let discountApplication: CheckoutDiscountApplication | null = null;
+  if (requestedDiscountCode) {
+    const discountResult = await validateCheckoutDiscount({
+      storefrontSlug: data.slug,
+      code: requestedDiscountCode,
+      subtotalQar,
+      shippingQar,
+      lines: discountLines,
+      customerEmail: data.customer.email ?? null,
+      customerPhone: data.customer.phone,
+    });
+    if (!discountResult.ok) {
+      return {
+        status: 'error',
+        message: discountResult.message,
+        field: 'discountCode',
+      };
+    }
+    discountApplication = discountResult.application;
+  }
+
+  const discountedSubtotalQar = Math.max(
+    0,
+    subtotalQar - (discountApplication?.productDiscountQar ?? 0),
+  );
+  const discountedShippingQar = Math.max(
+    0,
+    shippingQar - (discountApplication?.shippingDiscountQar ?? 0),
+  );
+  const { taxQar, totalQar: checkoutTotalQar } = await calculateTaxAndTotal({
+    slug: data.slug,
+    subtotalQar: discountedSubtotalQar,
+    shippingQar: discountedShippingQar,
+  });
+
   const financialSnapshot = checkoutOrderFinancialSnapshot(
     ownerPlan,
     checkoutTotalQar,
@@ -384,6 +535,14 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
   const skipCashTransactionId =
     data.paymentMethod === 'skipcash' ? newSkipCashTransactionId() : null;
+  const appliedDiscountMetadata = discountApplication
+    ? {
+        id: discountApplication.id,
+        code: discountApplication.code,
+        productDiscountQar: discountApplication.productDiscountQar,
+        shippingDiscountQar: discountApplication.shippingDiscountQar,
+      }
+    : null;
   const consentMetadata = {
     buyerConsents: {
       terms: data.consents.terms,
@@ -408,6 +567,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       paymentMethod: data.paymentMethod,
       currency: settings.currency,
       subtotalQar,
+      discountQar: discountApplication?.discountQar ?? 0,
+      discountCode: discountApplication?.code ?? null,
+      discountId: discountApplication?.id ?? null,
       shippingQar,
       taxQar,
       totalQar,
@@ -419,20 +581,24 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
             paymentProvider: 'skipcash',
             skipcashTransactionId: skipCashTransactionId,
             monthlyPaymentOrder: hasMonthlyPaymentItem,
+            appliedDiscount: appliedDiscountMetadata,
             ...consentMetadata,
           }
         : data.paymentMethod === 'sadad'
           ? {
               paymentProvider: 'sadad',
               sadadOrderId: null,
+              appliedDiscount: appliedDiscountMetadata,
               ...consentMetadata,
             }
           : hasMonthlyPaymentItem
             ? {
                 monthlyPaymentOrder: true,
+                appliedDiscount: appliedDiscountMetadata,
                 ...consentMetadata,
               }
             : {
+                appliedDiscount: appliedDiscountMetadata,
                 ...consentMetadata,
               },
       items: itemRows,
@@ -442,6 +608,24 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       tags: { area: 'checkout', slug: data.slug },
     });
     return { status: 'error', message: 'Could not place order. Please try again.' };
+  }
+
+  if (discountApplication) {
+    try {
+      const counted = await incrementDiscountUsage(data.slug, discountApplication.id);
+      if (!counted) {
+        Sentry.captureMessage('checkout discount usage limit reached after order insert', {
+          level: 'warning',
+          tags: { area: 'checkout-discount', slug: data.slug },
+          extra: { orderId: order.id, discountId: discountApplication.id },
+        });
+      }
+    } catch (err) {
+      Sentry.captureException(err, {
+        tags: { area: 'checkout-discount', slug: data.slug },
+        extra: { orderId: order.id, discountId: discountApplication.id },
+      });
+    }
   }
 
   await syncCheckoutCustomer({
@@ -594,6 +778,8 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       orderId: order.id,
       paymentMethod: data.paymentMethod,
       totalQar,
+      discountCode: discountApplication?.code ?? null,
+      discountQar: discountApplication?.discountQar ?? 0,
       itemCount: itemRows.length,
     },
   });
@@ -859,7 +1045,68 @@ function labelMethod(method: PaymentMethod): string {
   }
 }
 
-async function calculateCheckoutTotals({
+async function buildDiscountPreviewLines(
+  slug: string,
+  items: z.infer<typeof ItemSchema>[],
+): Promise<
+  | { subtotalQar: number; lines: CheckoutDiscountLine[] }
+  | { error: Extract<ApplyDiscountCodeResult, { status: 'error' }> }
+> {
+  const productIds = items.map((it) => it.productId);
+  type DiscountProductRow = {
+    id: string;
+    title: string;
+    price_qar: string | null;
+    pricing_mode: 'one_time' | 'monthly_payment';
+    monthly_price_qar: string | null;
+    category: string | null;
+    status: 'active' | 'draft' | 'sold_out';
+  };
+  const productRows = (await db()`
+    select id, title, price_qar, pricing_mode, monthly_price_qar, category, status
+    from products
+    where storefront_slug = ${slug}
+      and id = any(${productIds as unknown as string}::uuid[])
+  `) as unknown as DiscountProductRow[];
+  const byId = new Map(productRows.map((p) => [p.id, p]));
+  let subtotalQar = 0;
+  const lines: CheckoutDiscountLine[] = [];
+
+  for (const item of items) {
+    const product = byId.get(item.productId);
+    if (!product || product.status !== 'active') {
+      return {
+        error: {
+          status: 'error',
+          message: 'One of the items in your cart is no longer available.',
+          field: 'items',
+        },
+      };
+    }
+    const rawUnit =
+      product.pricing_mode === 'monthly_payment' ? product.monthly_price_qar : product.price_qar;
+    if (rawUnit === null) {
+      return {
+        error: {
+          status: 'error',
+          message: `"${product.title}" has no price set.`,
+          field: 'items',
+        },
+      };
+    }
+    const lineTotalQar = Math.round(Number(rawUnit)) * item.quantity;
+    subtotalQar += lineTotalQar;
+    lines.push({
+      productId: product.id,
+      category: product.category ?? null,
+      lineTotalQar,
+    });
+  }
+
+  return { subtotalQar, lines };
+}
+
+async function calculateShippingQar({
   slug,
   subtotalQar,
   fallbackShippingQar,
@@ -868,15 +1115,15 @@ async function calculateCheckoutTotals({
   slug: string;
   subtotalQar: number;
   fallbackShippingQar: number;
-  address: z.infer<typeof AddressSchema>;
-}): Promise<{ shippingQar: number; taxQar: number; totalQar: number }> {
+  address?: { city?: string | null; country?: string | null } | null;
+}): Promise<number> {
   let shippingQar = fallbackShippingQar;
 
   try {
     const shipping = await getShippingSettings(slug);
     if (shipping.profile?.enabled) {
-      const country = normalizeCountryCode(address.country);
-      const city = address.city.trim().toLowerCase();
+      const country = normalizeCountryCode(address?.country || 'Qatar');
+      const city = (address?.city ?? '').trim().toLowerCase();
       const matchingRate =
         shipping.rates.find(
           (rate) =>
@@ -909,6 +1156,18 @@ async function calculateCheckoutTotals({
     Sentry.captureException(err, { tags: { area: 'checkout-shipping', slug } });
   }
 
+  return shippingQar;
+}
+
+async function calculateTaxAndTotal({
+  slug,
+  subtotalQar,
+  shippingQar,
+}: {
+  slug: string;
+  subtotalQar: number;
+  shippingQar: number;
+}): Promise<{ taxQar: number; totalQar: number }> {
   let taxQar = 0;
   let totalQar = subtotalQar + shippingQar;
   try {
@@ -924,7 +1183,7 @@ async function calculateCheckoutTotals({
     Sentry.captureException(err, { tags: { area: 'checkout-tax', slug } });
   }
 
-  return { shippingQar, taxQar, totalQar };
+  return { taxQar, totalQar };
 }
 
 function normalizeCountryCode(country: string): string {

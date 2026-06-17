@@ -229,6 +229,12 @@ export function OrderDrawer({ open, order, onClose }: Props) {
 
                 <div className="mt-4 flex flex-col gap-1.5 border-t border-dashed pt-3 text-sm">
                   <Row label="Subtotal" value={`${order.currency} ${order.subtotalQar}`} />
+                  {order.discountQar > 0 ? (
+                    <Row
+                      label={order.discountCode ? `Discount (${order.discountCode})` : 'Discount'}
+                      value={`- ${order.currency} ${order.discountQar}`}
+                    />
+                  ) : null}
                   <Row
                     label="Shipping"
                     value={
