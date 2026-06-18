@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { NextIntlClientProvider } from 'next-intl';
@@ -17,6 +18,7 @@ import { StorefrontProvider } from '@/components/admin/StorefrontContext';
 import { fromSummaries } from '@/components/admin/storefrontSummary';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { getStorefrontsForUser } from '@/lib/brief';
+import { NavigationLoader } from '@/components/system/NavigationLoader';
 import { listInstalledApps } from '@/lib/apps/installed';
 import { getAppDescriptor } from '@/lib/apps/registry';
 import type { InstalledAppNavItem } from '@/components/admin/AdminSidebar';
@@ -223,6 +225,9 @@ export default async function ChromeLayout({
                   </SidebarInset>
                 </SidebarProvider>
               )}
+              <Suspense fallback={null}>
+                <NavigationLoader />
+              </Suspense>
             </StorefrontProvider>
           </NextIntlClientProvider>
         </ThemeProvider>
