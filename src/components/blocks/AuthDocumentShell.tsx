@@ -5,7 +5,6 @@ import { getServerTheme, ThemeInitScript } from '@/components/theme/ServerThemeS
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { LocaleToggle } from '@/components/souqna/LocaleToggle';
-import { AuthHydrationBoundary } from '@/components/blocks/AuthHydrationBoundary';
 import { defaultLocale, direction, isLocale } from '@/i18n/locales';
 
 export async function AuthDocumentShell({ children }: { children: ReactNode }) {
@@ -33,13 +32,11 @@ export async function AuthDocumentShell({ children }: { children: ReactNode }) {
       >
         <ThemeInitScript />
         <ThemeProvider initialTheme={theme}>
-          <AuthHydrationBoundary>
-            <div className="fixed end-5 top-5 z-30 flex items-center gap-2">
-              <LocaleToggle locale={locale} mode="account" />
-              <ThemeToggle compact />
-            </div>
-            {children}
-          </AuthHydrationBoundary>
+          <div className="fixed end-5 top-5 z-30 flex items-center gap-2">
+            <LocaleToggle locale={locale} mode="account" />
+            <ThemeToggle compact />
+          </div>
+          {children}
         </ThemeProvider>
       </body>
     </html>
