@@ -6,12 +6,12 @@
     "projectName": "souqna"
   },
   "allowedGitRemotes": [
-    "https://github.com/zqtr/Souqy.git",
-    "git@github.com:zqtr/Souqy.git"
+    "https://github.com/zqtr/SouqnaV2.git",
+    "git@github.com:zqtr/SouqnaV2.git"
   ],
   "expectedGit": {
     "owner": "zqtr",
-    "repoSlug": "Souqy"
+    "repoSlug": "SouqnaV2"
   },
   "allowedCommitBranches": [
     "main",
