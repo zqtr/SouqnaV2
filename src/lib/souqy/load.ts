@@ -133,8 +133,8 @@ function evaluateSouqyBundle(
       }
       return allowed;
     };
-    const fn = new Function('module', 'exports', 'require', source);
-    fn(moduleObj, moduleObj.exports, captiveRequire);
+    const fn = new Function('module', 'exports', 'require', 'React', source);
+    fn(moduleObj, moduleObj.exports, captiveRequire, React);
     exportedDefault =
       moduleObj.exports.default ??
       moduleObj.exports.Storefront ??
