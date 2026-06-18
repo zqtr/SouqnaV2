@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
-import { SignUp } from '@clerk/nextjs';
+import { ClientClerkAuth } from '@/components/auth/ClientClerkAuth';
 import { Auth3 } from '@/components/auth-3';
-import { souqnaClerkAppearance } from '@/components/blocks/auth-clerk-appearance';
 import { defaultLocale, isLocale } from '@/i18n/locales';
 
 export const metadata: Metadata = {
@@ -17,16 +16,7 @@ export default async function SignUpPage() {
 
   return (
     <Auth3 mode="sign-up" locale={locale}>
-      <SignUp
-        signInUrl="/sign-in"
-        fallbackRedirectUrl="/account"
-        appearance={souqnaClerkAppearance}
-        unsafeMetadata={{
-          notificationConsent: true,
-          notificationChannels: ['bell', 'mobile', 'phone'],
-          phoneRequiredReason: 'whatsapp_notifications',
-        }}
-      />
+      <ClientClerkAuth mode="sign-up" />
     </Auth3>
   );
 }

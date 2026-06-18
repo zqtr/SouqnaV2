@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
-import { SignIn } from '@clerk/nextjs';
+import { ClientClerkAuth } from '@/components/auth/ClientClerkAuth';
 import { Auth3 } from '@/components/auth-3';
-import { souqnaClerkAppearance } from '@/components/blocks/auth-clerk-appearance';
 import { defaultLocale, isLocale } from '@/i18n/locales';
 
 export const metadata: Metadata = {
@@ -17,7 +16,7 @@ export default async function SignInPage() {
 
   return (
     <Auth3 mode="sign-in" locale={locale}>
-      <SignIn signUpUrl="/sign-up" fallbackRedirectUrl="/account" appearance={souqnaClerkAppearance} />
+      <ClientClerkAuth mode="sign-in" />
     </Auth3>
   );
 }
