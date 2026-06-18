@@ -16,7 +16,7 @@ export default async function SignUpPage() {
 
   return (
     <Auth3 mode="sign-up" locale={locale}>
-      <ClientClerkAuth mode="sign-up" />
+      <ClientClerkAuth mode="sign-up" locale={locale} />
     </Auth3>
   );
 }

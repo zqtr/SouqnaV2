@@ -74,8 +74,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const cookieLocale = cookieStore.get('NEXT_LOCALE')?.value;
   const locale = cookieLocale && isLocale(cookieLocale) ? cookieLocale : defaultLocale;
 
-  const host = (await headers()).get('host') ?? '';
+  const hdrs = await headers();
+  const host = hdrs.get('host') ?? '';
+  const pathname = hdrs.get('x-souqna-pathname') ?? '';
   const isStorefront = isStorefrontSubdomainHost(host);
+  const isAuthRoute =
+    pathname === '/sign-in' ||
+    pathname.startsWith('/sign-in/') ||
+    pathname === '/sign-up' ||
+    pathname.startsWith('/sign-up/');
 
   const inner = (
     <PostHogProvider>
@@ -84,7 +91,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     </PostHogProvider>
   );
 
-  if (isStorefront) return inner;
+  if (isStorefront || isAuthRoute) return inner;
 
   return (
     <ClerkProvider

@@ -16,7 +16,7 @@ export default async function SignInPage() {
 
   return (
     <Auth3 mode="sign-in" locale={locale}>
-      <ClientClerkAuth mode="sign-in" />
+      <ClientClerkAuth mode="sign-in" locale={locale} />
     </Auth3>
   );
 }

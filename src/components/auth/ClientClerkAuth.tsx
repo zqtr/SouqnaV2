@@ -1,14 +1,17 @@
 'use client';
 
-import { SignIn, SignUp } from '@clerk/nextjs';
+import { ClerkProvider, SignIn, SignUp } from '@clerk/nextjs';
 import { useEffect, useState } from 'react';
 import { souqnaClerkAppearance } from '@/components/blocks/auth-clerk-appearance';
+import type { Locale } from '@/i18n/locales';
+import { clerkLocalization } from '@/lib/clerkLocalization';
 
 type ClientClerkAuthProps = {
   mode: 'sign-in' | 'sign-up';
+  locale: Locale;
 };
 
-export function ClientClerkAuth({ mode }: ClientClerkAuthProps) {
+export function ClientClerkAuth({ mode, locale }: ClientClerkAuthProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -21,24 +24,28 @@ export function ClientClerkAuth({ mode }: ClientClerkAuthProps) {
 
   if (mode === 'sign-in') {
     return (
-      <SignIn
-        signUpUrl="/sign-up"
-        fallbackRedirectUrl="/account"
-        appearance={souqnaClerkAppearance}
-      />
+      <ClerkProvider appearance={souqnaClerkAppearance} localization={clerkLocalization(locale)}>
+        <SignIn
+          signUpUrl="/sign-up"
+          fallbackRedirectUrl="/account"
+          appearance={souqnaClerkAppearance}
+        />
+      </ClerkProvider>
     );
   }
 
   return (
-    <SignUp
-      signInUrl="/sign-in"
-      fallbackRedirectUrl="/account"
-      appearance={souqnaClerkAppearance}
-      unsafeMetadata={{
-        notificationConsent: true,
-        notificationChannels: ['bell', 'mobile', 'phone'],
-        phoneRequiredReason: 'whatsapp_notifications',
-      }}
-    />
+    <ClerkProvider appearance={souqnaClerkAppearance} localization={clerkLocalization(locale)}>
+      <SignUp
+        signInUrl="/sign-in"
+        fallbackRedirectUrl="/account"
+        appearance={souqnaClerkAppearance}
+        unsafeMetadata={{
+          notificationConsent: true,
+          notificationChannels: ['bell', 'mobile', 'phone'],
+          phoneRequiredReason: 'whatsapp_notifications',
+        }}
+      />
+    </ClerkProvider>
   );
 }
