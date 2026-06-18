@@ -84,6 +84,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     pathname === '/sign-up' ||
     pathname.startsWith('/sign-up/');
 
+  if (isAuthRoute) return <>{children}</>;
+
   const inner = (
     <PostHogProvider>
       {children}

@@ -9,9 +9,10 @@ import { clerkLocalization } from '@/lib/clerkLocalization';
 type ClientClerkAuthProps = {
   mode: 'sign-in' | 'sign-up';
   locale: Locale;
+  publishableKey?: string;
 };
 
-export function ClientClerkAuth({ mode, locale }: ClientClerkAuthProps) {
+export function ClientClerkAuth({ mode, locale, publishableKey }: ClientClerkAuthProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -24,7 +25,11 @@ export function ClientClerkAuth({ mode, locale }: ClientClerkAuthProps) {
 
   if (mode === 'sign-in') {
     return (
-      <ClerkProvider appearance={souqnaClerkAppearance} localization={clerkLocalization(locale)}>
+      <ClerkProvider
+        appearance={souqnaClerkAppearance}
+        localization={clerkLocalization(locale)}
+        publishableKey={publishableKey}
+      >
         <SignIn
           signUpUrl="/sign-up"
           fallbackRedirectUrl="/account"
@@ -35,7 +40,11 @@ export function ClientClerkAuth({ mode, locale }: ClientClerkAuthProps) {
   }
 
   return (
-    <ClerkProvider appearance={souqnaClerkAppearance} localization={clerkLocalization(locale)}>
+    <ClerkProvider
+      appearance={souqnaClerkAppearance}
+      localization={clerkLocalization(locale)}
+      publishableKey={publishableKey}
+    >
       <SignUp
         signInUrl="/sign-in"
         fallbackRedirectUrl="/account"

@@ -12,6 +12,7 @@ export default async function SignInPage() {
   const cookieStore = await cookies();
   const cookieLocale = cookieStore.get('NEXT_LOCALE')?.value;
   const locale = cookieLocale && isLocale(cookieLocale) ? cookieLocale : defaultLocale;
+  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
-  return <AuthPageClient mode="sign-in" locale={locale} />;
+  return <AuthPageClient mode="sign-in" locale={locale} publishableKey={publishableKey} />;
 }

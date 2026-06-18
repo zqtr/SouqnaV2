@@ -8,9 +8,10 @@ import type { Locale } from '@/i18n/locales';
 type AuthPageClientProps = {
   mode: 'sign-in' | 'sign-up';
   locale: Locale;
+  publishableKey?: string;
 };
 
-export function AuthPageClient({ mode, locale }: AuthPageClientProps) {
+export function AuthPageClient({ mode, locale, publishableKey }: AuthPageClientProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -23,7 +24,7 @@ export function AuthPageClient({ mode, locale }: AuthPageClientProps) {
 
   return (
     <Auth3 mode={mode} locale={locale}>
-      <ClientClerkAuth mode={mode} locale={locale} />
+      <ClientClerkAuth mode={mode} locale={locale} publishableKey={publishableKey} />
     </Auth3>
   );
 }
