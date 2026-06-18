@@ -23,6 +23,7 @@ import {
   notifyMobilePaymentPaid,
   notifyMobilePaymentRefunded,
 } from '@/lib/mobile/push';
+import { sendSentDeliveryNotification } from '@/lib/sent';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,13 +35,13 @@ export function OPTIONS(): Response {
 const PatchSchema = z.object({
   store: z.string().trim().min(1).max(64).optional(),
   orderStatus: z.enum(ORDER_STATUSES as unknown as [OrderStatus, ...OrderStatus[]]).optional(),
-  paymentStatus: z.enum(PAYMENT_STATUSES as unknown as [PaymentStatus, ...PaymentStatus[]]).optional(),
+  paymentStatus: z
+    .enum(PAYMENT_STATUSES as unknown as [PaymentStatus, ...PaymentStatus[]])
+    .optional(),
+  sendCustomerNotification: z.boolean().optional(),
 });
 
-export async function GET(
-  req: Request,
-  { params }: { params: { id: string } },
-): Promise<Response> {
+export async function GET(req: Request, { params }: { params: { id: string } }): Promise<Response> {
   const slug = searchParam(req, 'store');
   const gate = await requireMobileStoreAccess(slug, 'orders.manage');
   if (!gate.ok) return gate.response;
@@ -92,6 +93,17 @@ export async function PATCH(
         order,
       }).catch((err) => console.error('[mobile/orders PATCH] shipped push failed', err));
     }
+    if (
+      parsed.data.sendCustomerNotification === true &&
+      isBuyerFacingStatus(parsed.data.orderStatus)
+    ) {
+      await notifyBuyerOrderStatus({
+        storefrontSlug: gate.access.storefront.slug,
+        businessName: gate.access.storefront.businessName,
+        status: parsed.data.orderStatus,
+        order,
+      });
+    }
   }
 
   if (parsed.data.paymentStatus && parsed.data.paymentStatus !== order.paymentStatus) {
@@ -131,4 +143,59 @@ export async function PATCH(
 
   revalidatePath('/account/orders');
   return mobileJson({ order });
+}
+
+function isBuyerFacingStatus(status: OrderStatus): boolean {
+  return (
+    status === 'confirmed' ||
+    status === 'preparing' ||
+    status === 'shipped' ||
+    status === 'delivered' ||
+    status === 'cancelled'
+  );
+}
+
+async function notifyBuyerOrderStatus(input: {
+  storefrontSlug: string;
+  businessName: string;
+  status: OrderStatus;
+  order: NonNullable<Awaited<ReturnType<typeof getOrderById>>>;
+}): Promise<void> {
+  try {
+    const result = await sendSentDeliveryNotification({
+      phone: input.order.customerPhone,
+      storeName: input.businessName,
+      order: input.order,
+      message: statusMessage(input.status),
+      idempotencyKey: `mobile-order-status-${input.status}-${input.order.id}`,
+    });
+    if (result.status !== 'sent') {
+      console.warn('[mobile/orders PATCH] buyer order notification not sent', {
+        slug: input.storefrontSlug,
+        status: input.status,
+        sentStatus: result.status,
+        reason: result.reason,
+      });
+    }
+  } catch (err) {
+    console.error('[mobile/orders PATCH] buyer order notification failed', err);
+  }
+}
+
+function statusMessage(status: OrderStatus): string {
+  switch (status) {
+    case 'confirmed':
+      return 'Your order is confirmed.';
+    case 'preparing':
+      return 'Your order is being prepared.';
+    case 'shipped':
+      return 'Your order is on the way.';
+    case 'delivered':
+      return 'Your order has been delivered.';
+    case 'cancelled':
+      return 'Your order was cancelled. Contact the store if you have questions.';
+    case 'pending':
+    default:
+      return 'Your order was received.';
+  }
 }

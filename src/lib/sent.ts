@@ -3,7 +3,9 @@ import 'server-only';
 import { env } from './env';
 import type { Order } from './checkout-orders';
 import {
+  SENT_ORDER_TEMPLATE_IDS,
   SENT_TEMPLATE_IDS,
+  type SentOrderTemplateStatus,
   type SentTemplateKind,
 } from './sentTemplateCatalog';
 
@@ -27,7 +29,11 @@ export const SENT_TEMPLATE_ENV_KEYS = {
   account_notification: 'SENT_TEMPLATE_ACCOUNT_NOTIFICATION_ID',
 } as const satisfies Record<SentTemplateKind, keyof SentEnvSource>;
 
-export { SENT_TEMPLATE_IDS } from './sentTemplateCatalog';
+export {
+  APPROVED_SENT_ORDER_TEMPLATE_IDS,
+  SENT_ORDER_TEMPLATE_IDS,
+  SENT_TEMPLATE_IDS,
+} from './sentTemplateCatalog';
 
 export type SentSendResult =
   | {
@@ -67,10 +73,7 @@ export type SentMessagePayload = {
   sandbox?: boolean;
 };
 
-export function sentTemplateId(
-  kind: SentTemplateKind,
-  source: SentEnvSource = env,
-): string {
+export function sentTemplateId(kind: SentTemplateKind, source: SentEnvSource = env): string {
   const key = SENT_TEMPLATE_ENV_KEYS[kind];
   return source[key]?.trim() || SENT_TEMPLATE_IDS[kind];
 }
@@ -124,15 +127,36 @@ export async function sendSentTemplate(input: {
   sandbox?: boolean;
   idempotencyKey?: string;
 }): Promise<SentSendResult> {
+  const templateId = sentTemplateId(input.kind);
+  if (!templateId) return { status: 'skipped', reason: 'missing_sent_template_id' };
+
+  return sendSentTemplateById({
+    to: input.to,
+    templateId,
+    parameters: sentTemplateParameters(input.kind, input.parameters ?? {}),
+    channel: input.channel,
+    sandbox: input.sandbox,
+    idempotencyKey: input.idempotencyKey,
+  });
+}
+
+export async function sendSentTemplateById(input: {
+  templateId: string;
+  to: Array<string | null | undefined>;
+  parameters?: SentTemplateParameters;
+  channel?: SentChannel[];
+  sandbox?: boolean;
+  idempotencyKey?: string;
+}): Promise<SentSendResult> {
   if (!env.SENT_API_KEY) return { status: 'skipped', reason: 'missing_sent_api_key' };
 
-  const templateId = sentTemplateId(input.kind);
+  const templateId = input.templateId.trim();
   if (!templateId) return { status: 'skipped', reason: 'missing_sent_template_id' };
 
   const payload = buildSentMessagePayload({
     to: input.to,
     templateId,
-    parameters: sentTemplateParameters(input.kind, input.parameters ?? {}),
+    parameters: input.parameters ?? {},
     channel: input.channel,
     sandbox: input.sandbox,
   });
@@ -271,6 +295,20 @@ export async function sendSentDeliveryNotification(input: {
   message?: string;
   idempotencyKey?: string;
 }) {
+  const orderTemplateId = sentOrderTemplateIdForStatus(input.order.orderStatus);
+  if (orderTemplateId) {
+    return sendSentTemplateById({
+      templateId: orderTemplateId,
+      to: [input.phone],
+      channel: ['whatsapp'],
+      idempotencyKey: input.idempotencyKey,
+      parameters: orderLifecycleParameters({
+        order: input.order,
+        storeName: input.storeName,
+      }),
+    });
+  }
+
   return sendSentTemplate({
     kind: 'delivery_notification',
     to: [input.phone],
@@ -281,6 +319,34 @@ export async function sendSentDeliveryNotification(input: {
       message: input.message,
     }),
   });
+}
+
+export function sentOrderTemplateIdForStatus(status: Order['orderStatus']): string | null {
+  return isSentOrderTemplateStatus(status) ? SENT_ORDER_TEMPLATE_IDS[status] : null;
+}
+
+function isSentOrderTemplateStatus(
+  status: Order['orderStatus'],
+): status is SentOrderTemplateStatus {
+  return (
+    status === 'pending' ||
+    status === 'confirmed' ||
+    status === 'preparing' ||
+    status === 'shipped' ||
+    status === 'delivered'
+  );
+}
+
+export function orderLifecycleParameters(input: {
+  order: Order;
+  storeName: string;
+}): SentTemplateParameters {
+  return {
+    customerName: input.order.customerName,
+    orderNumber: shortOrderId(input.order.id).replace(/^#/u, ''),
+    storeName: input.storeName,
+    orderTotal: formatOrderTotal(input.order),
+  };
 }
 
 export async function sendSentPaymentStatusNotification(input: {
@@ -431,11 +497,7 @@ export function sentTemplateParameters(
   return out;
 }
 
-function firstParam(
-  parameters: SentTemplateParameters,
-  keys: string[],
-  fallback: string,
-): string {
+function firstParam(parameters: SentTemplateParameters, keys: string[], fallback: string): string {
   for (const key of keys) {
     const value = text(parameters[key]);
     if (value) return value;
@@ -475,10 +537,19 @@ function collectErrorMessages(value: unknown, seen = new Set<unknown>()): string
     return unique(value.flatMap((item) => collectErrorMessages(item, seen)));
   }
   const record = value as Record<string, unknown>;
-  const direct = ['field', 'path', 'code', 'message', 'error', 'detail', 'details', 'description']
-    .flatMap((key) => collectErrorMessages(record[key], seen));
-  const nested = ['data', 'meta', 'errors', 'issues', 'validation', 'cause']
-    .flatMap((key) => collectErrorMessages(record[key], seen));
+  const direct = [
+    'field',
+    'path',
+    'code',
+    'message',
+    'error',
+    'detail',
+    'details',
+    'description',
+  ].flatMap((key) => collectErrorMessages(record[key], seen));
+  const nested = ['data', 'meta', 'errors', 'issues', 'validation', 'cause'].flatMap((key) =>
+    collectErrorMessages(record[key], seen),
+  );
   return unique([...direct, ...nested]);
 }
 

@@ -26,6 +26,12 @@ describe('Sent.dm helpers', () => {
       delivery_notification: '0507e170-a5f5-4cdd-8762-5da349c2851b',
       account_notification: '46ce102a-e54d-4ce0-a177-683133b0c551',
     });
+    expect(sent.SENT_ORDER_TEMPLATE_IDS).toMatchObject({
+      confirmed: '2277019266458305',
+      preparing: '980516908223295',
+      shipped: '4498195207132467',
+      delivered: '904381476010781',
+    });
   });
 
   it('normalizes Qatari and international phone numbers to E.164', async () => {
@@ -60,6 +66,72 @@ describe('Sent.dm helpers', () => {
         parameters: {
           customerName: 'Maha',
           orderNumber: '#ABC',
+        },
+      },
+    });
+  });
+
+  it('sends lifecycle order notifications with the approved sent.dm order template id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({ data: { messages: [{ id: 'msg_order' }] } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { sendSentDeliveryNotification } = await loadSent({ SENT_API_KEY: 'test_key' });
+
+    await expect(
+      sendSentDeliveryNotification({
+        phone: '55554444',
+        storeName: 'Thisisatest',
+        idempotencyKey: 'order-status-confirmed-A28C77C7',
+        order: {
+          id: 'A28C77C7',
+          storefrontSlug: 'thisisatest',
+          customerName: 'Abdulla',
+          customerPhone: '55554444',
+          customerEmail: null,
+          address: null,
+          paymentMethod: 'cod',
+          paymentStatus: 'unpaid',
+          orderStatus: 'confirmed',
+          currency: 'QAR',
+          subtotalQar: 6000,
+          shippingQar: 0,
+          taxQar: 0,
+          totalQar: 6000,
+          planSnapshot: '{}',
+          platformFeeBps: 0,
+          platformFeeQar: 0,
+          sellerNetQar: 6000,
+          collectionMode: 'offline',
+          platformProvider: null,
+          platformFeeStatus: 'not_due',
+          payoutStatus: 'not_applicable',
+          acceptedPolicies: [],
+          notes: null,
+          metadata: null,
+          createdAt: '2026-06-16T00:00:00.000Z',
+          updatedAt: '2026-06-16T00:00:00.000Z',
+          items: [],
+        },
+      }),
+    ).resolves.toMatchObject({ status: 'sent', messageId: 'msg_order' });
+
+    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
+      'Idempotency-Key': 'order-status-confirmed-A28C77C7',
+    });
+    expect(request).toEqual({
+      to: ['+97455554444'],
+      channel: ['whatsapp'],
+      template: {
+        id: '2277019266458305',
+        parameters: {
+          customerName: 'Abdulla',
+          orderNumber: 'A28C77C7',
+          storeName: 'Thisisatest',
+          orderTotal: 'QAR 6,000',
         },
       },
     });

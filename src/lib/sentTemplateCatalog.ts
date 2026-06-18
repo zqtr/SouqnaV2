@@ -5,6 +5,13 @@ export type SentTemplateKind =
   | 'delivery_notification'
   | 'account_notification';
 
+export type SentOrderTemplateStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'preparing'
+  | 'shipped'
+  | 'delivered';
+
 export type SentTemplateVariableField = {
   key: 'customerName' | 'storeName' | 'subject' | 'message' | 'actionUrl';
   label: string;
@@ -44,6 +51,24 @@ export const SENT_TEMPLATE_IDS: Record<SentTemplateKind, string> = {
   account_notification: '46ce102a-e54d-4ce0-a177-683133b0c551',
 };
 
+export const SENT_ORDER_TEMPLATE_IDS: Record<SentOrderTemplateStatus, string> = {
+  pending: '1539350971245152',
+  confirmed: '2277019266458305',
+  preparing: '980516908223295',
+  shipped: '4498195207132467',
+  delivered: '904381476010781',
+};
+
+export const APPROVED_SENT_ORDER_TEMPLATE_IDS = [
+  SENT_ORDER_TEMPLATE_IDS.pending,
+  SENT_ORDER_TEMPLATE_IDS.confirmed,
+  SENT_ORDER_TEMPLATE_IDS.preparing,
+  SENT_ORDER_TEMPLATE_IDS.shipped,
+  SENT_ORDER_TEMPLATE_IDS.delivered,
+  '2003485870531680',
+  '1724040452126054',
+] as const;
+
 export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTemplate> = {
   marketing: {
     id: 'marketing',
@@ -73,7 +98,14 @@ export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTe
         'textarea',
         true,
       ),
-      variableField('actionUrl', 'Action link', 'رابط الإجراء', 'https://souqna.qa/account', 'https://souqna.qa/account', 'url'),
+      variableField(
+        'actionUrl',
+        'Action link',
+        'رابط الإجراء',
+        'https://souqna.qa/account',
+        'https://souqna.qa/account',
+        'url',
+      ),
     ],
   },
   customer_care: {
@@ -95,7 +127,14 @@ export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTe
       actionUrl: 'https://souqna.qa/account',
     },
     fields: [
-      variableField('subject', 'Support topic', 'موضوع الدعم', 'Order question', 'استفسار عن الطلب', 'text'),
+      variableField(
+        'subject',
+        'Support topic',
+        'موضوع الدعم',
+        'Order question',
+        'استفسار عن الطلب',
+        'text',
+      ),
       variableField(
         'message',
         'Care note',
@@ -105,7 +144,14 @@ export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTe
         'textarea',
         true,
       ),
-      variableField('actionUrl', 'Action link', 'رابط الإجراء', 'https://souqna.qa/account', 'https://souqna.qa/account', 'url'),
+      variableField(
+        'actionUrl',
+        'Action link',
+        'رابط الإجراء',
+        'https://souqna.qa/account',
+        'https://souqna.qa/account',
+        'url',
+      ),
     ],
   },
   fraud_alert: {
@@ -127,7 +173,14 @@ export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTe
       actionUrl: 'https://souqna.qa/account',
     },
     fields: [
-      variableField('subject', 'Alert title', 'عنوان التنبيه', 'Payment alert', 'تنبيه دفع', 'text'),
+      variableField(
+        'subject',
+        'Alert title',
+        'عنوان التنبيه',
+        'Payment alert',
+        'تنبيه دفع',
+        'text',
+      ),
       variableField(
         'message',
         'Security message',
@@ -137,7 +190,14 @@ export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTe
         'textarea',
         true,
       ),
-      variableField('actionUrl', 'Action link', 'رابط الإجراء', 'https://souqna.qa/account', 'https://souqna.qa/account', 'url'),
+      variableField(
+        'actionUrl',
+        'Action link',
+        'رابط الإجراء',
+        'https://souqna.qa/account',
+        'https://souqna.qa/account',
+        'url',
+      ),
     ],
   },
   delivery_notification: {
@@ -151,7 +211,8 @@ export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTe
     language: 'en_US',
     status: 'PENDING',
     variables: ['var_1', 'var_2', 'var_3', 'var_4', 'var_5', 'var_6'],
-    preview: '{{customerName}}, order {{subject}} from {{storeName}} has a delivery update. {{message}}',
+    preview:
+      '{{customerName}}, order {{subject}} from {{storeName}} has a delivery update. {{message}}',
     arPreview: '{{customerName}}، لديك تحديث من {{storeName}}. {{message}}',
     defaults: {
       subject: 'Delivery update',
@@ -159,7 +220,14 @@ export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTe
       actionUrl: 'https://souqna.qa/account',
     },
     fields: [
-      variableField('subject', 'Update title', 'عنوان التحديث', 'Delivery update', 'تحديث التوصيل', 'text'),
+      variableField(
+        'subject',
+        'Update title',
+        'عنوان التحديث',
+        'Delivery update',
+        'تحديث التوصيل',
+        'text',
+      ),
       variableField(
         'message',
         'Delivery note',
@@ -169,7 +237,14 @@ export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTe
         'textarea',
         true,
       ),
-      variableField('actionUrl', 'Action link', 'رابط الإجراء', 'https://souqna.qa/account', 'https://souqna.qa/account', 'url'),
+      variableField(
+        'actionUrl',
+        'Action link',
+        'رابط الإجراء',
+        'https://souqna.qa/account',
+        'https://souqna.qa/account',
+        'url',
+      ),
     ],
   },
   account_notification: {
@@ -191,7 +266,14 @@ export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTe
       actionUrl: 'https://souqna.qa/account',
     },
     fields: [
-      variableField('subject', 'Notice title', 'عنوان الإشعار', 'Account update', 'تحديث الحساب', 'text'),
+      variableField(
+        'subject',
+        'Notice title',
+        'عنوان الإشعار',
+        'Account update',
+        'تحديث الحساب',
+        'text',
+      ),
       variableField(
         'message',
         'Notice message',
@@ -201,7 +283,14 @@ export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTe
         'textarea',
         true,
       ),
-      variableField('actionUrl', 'Action link', 'رابط الإجراء', 'https://souqna.qa/account', 'https://souqna.qa/account', 'url'),
+      variableField(
+        'actionUrl',
+        'Action link',
+        'رابط الإجراء',
+        'https://souqna.qa/account',
+        'https://souqna.qa/account',
+        'url',
+      ),
     ],
   },
 };
