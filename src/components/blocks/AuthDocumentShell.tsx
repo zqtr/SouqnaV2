@@ -27,13 +27,11 @@ export async function AuthDocumentShell({ children }: { children: ReactNode }) {
       style={{ colorScheme: theme }}
       suppressHydrationWarning
     >
-      <head>
-        <ThemeInitScript />
-      </head>
       <body
         className="min-h-dvh bg-[var(--surface-bg)] text-[var(--ink-strong)] antialiased [font-family:var(--font-sans)]"
         suppressHydrationWarning
       >
+        <ThemeInitScript />
         <ThemeProvider initialTheme={theme}>
           <AuthHydrationBoundary>
             <div className="fixed end-5 top-5 z-30 flex items-center gap-2">
