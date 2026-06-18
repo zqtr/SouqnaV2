@@ -67,23 +67,29 @@ export async function PATCH(
   let order = await getOrderById(params.id, gate.access.storefront.slug);
   if (!order) return mobileError(404, 'not_found', 'Order not found.');
 
-  if (parsed.data.orderStatus && parsed.data.orderStatus !== order.orderStatus) {
+  const requestedOrderStatus = parsed.data.orderStatus;
+  const shouldSendBuyerStatus =
+    parsed.data.sendCustomerNotification === true &&
+    requestedOrderStatus !== undefined &&
+    isBuyerFacingStatus(requestedOrderStatus);
+
+  if (requestedOrderStatus && requestedOrderStatus !== order.orderStatus) {
     const updated = await setOrderStatus(
       params.id,
       gate.access.storefront.slug,
-      parsed.data.orderStatus,
+      requestedOrderStatus,
     );
     if (!updated) return mobileError(404, 'not_found', 'Order not found.');
     order = updated;
     await recordAudit({
       storefrontSlug: gate.access.storefront.slug,
       clerkUserId: gate.user.userId,
-      action: `storefront.order.status.${parsed.data.orderStatus}`,
+      action: `storefront.order.status.${requestedOrderStatus}`,
       targetId: params.id,
-      summary: `Order status -> ${parsed.data.orderStatus}`,
+      summary: `Order status -> ${requestedOrderStatus}`,
       meta: { orderId: params.id, source: 'mobile' },
     });
-    if (parsed.data.orderStatus === 'shipped') {
+    if (requestedOrderStatus === 'shipped') {
       // Fan out a push so team members + other devices learn the
       // shipment moved without polling. Best-effort — a failed Expo
       // push must not roll back the DB mutation.
@@ -93,17 +99,15 @@ export async function PATCH(
         order,
       }).catch((err) => console.error('[mobile/orders PATCH] shipped push failed', err));
     }
-    if (
-      parsed.data.sendCustomerNotification === true &&
-      isBuyerFacingStatus(parsed.data.orderStatus)
-    ) {
-      await notifyBuyerOrderStatus({
-        storefrontSlug: gate.access.storefront.slug,
-        businessName: gate.access.storefront.businessName,
-        status: parsed.data.orderStatus,
-        order,
-      });
-    }
+  }
+
+  if (shouldSendBuyerStatus) {
+    await notifyBuyerOrderStatus({
+      storefrontSlug: gate.access.storefront.slug,
+      businessName: gate.access.storefront.businessName,
+      status: requestedOrderStatus,
+      order,
+    });
   }
 
   if (parsed.data.paymentStatus && parsed.data.paymentStatus !== order.paymentStatus) {
@@ -167,7 +171,7 @@ async function notifyBuyerOrderStatus(input: {
       storeName: input.businessName,
       order: input.order,
       message: statusMessage(input.status),
-      idempotencyKey: `mobile-order-status-${input.status}-${input.order.id}`,
+      idempotencyKey: `mobile-order-status-v2-${input.status}-${input.order.id}`,
     });
     if (result.status !== 'sent') {
       console.warn('[mobile/orders PATCH] buyer order notification not sent', {
@@ -175,6 +179,14 @@ async function notifyBuyerOrderStatus(input: {
         status: input.status,
         sentStatus: result.status,
         reason: result.reason,
+      });
+    } else {
+      console.info('[mobile/orders PATCH] buyer order notification sent', {
+        slug: input.storefrontSlug,
+        status: input.status,
+        sentStatus: result.status,
+        messageId: result.messageId,
+        recipientCount: result.recipientCount,
       });
     }
   } catch (err) {
