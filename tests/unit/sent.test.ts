@@ -27,10 +27,10 @@ describe('Sent.dm helpers', () => {
       account_notification: '46ce102a-e54d-4ce0-a177-683133b0c551',
     });
     expect(sent.SENT_ORDER_TEMPLATE_IDS).toMatchObject({
-      confirmed: '2277019266458305',
-      preparing: '980516908223295',
-      shipped: '4498195207132467',
-      delivered: '904381476010781',
+      confirmed: '541ef481-732f-4043-9633-f2b32a697bb1',
+      preparing: '2d98ebc9-df8a-430d-8840-52efd917f47e',
+      shipped: '7ff89a1e-4856-4dcb-b043-484ea6a8d4e1',
+      delivered: '14df81df-3897-4128-b9bb-8cafe0839f4d',
     });
   });
 
@@ -126,7 +126,7 @@ describe('Sent.dm helpers', () => {
       to: ['+97455554444'],
       channel: ['whatsapp'],
       template: {
-        id: '2277019266458305',
+        id: '541ef481-732f-4043-9633-f2b32a697bb1',
         parameters: {
           customerName: 'Abdulla',
           orderNumber: 'A28C77C7',

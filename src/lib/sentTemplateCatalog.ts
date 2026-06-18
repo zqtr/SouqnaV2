@@ -52,12 +52,24 @@ export const SENT_TEMPLATE_IDS: Record<SentTemplateKind, string> = {
 };
 
 export const SENT_ORDER_TEMPLATE_IDS: Record<SentOrderTemplateStatus, string> = {
-  pending: '1539350971245152',
-  confirmed: '2277019266458305',
-  preparing: '980516908223295',
-  shipped: '4498195207132467',
-  delivered: '904381476010781',
+  pending: '31ac9179-70f6-4301-b432-43d411332d7b',
+  confirmed: '541ef481-732f-4043-9633-f2b32a697bb1',
+  preparing: '2d98ebc9-df8a-430d-8840-52efd917f47e',
+  shipped: '7ff89a1e-4856-4dcb-b043-484ea6a8d4e1',
+  delivered: '14df81df-3897-4128-b9bb-8cafe0839f4d',
 };
+
+// Meta/WABA template ids from the approved WhatsApp templates. sent.dm's v3
+// send endpoint requires the sent.dm template UUIDs above, not these ids.
+export const META_ORDER_TEMPLATE_IDS = [
+  '1539350971245152',
+  '2277019266458305',
+  '980516908223295',
+  '4498195207132467',
+  '904381476010781',
+  '2003485870531680',
+  '1724040452126054',
+] as const;
 
 export const APPROVED_SENT_ORDER_TEMPLATE_IDS = [
   SENT_ORDER_TEMPLATE_IDS.pending,
@@ -65,8 +77,6 @@ export const APPROVED_SENT_ORDER_TEMPLATE_IDS = [
   SENT_ORDER_TEMPLATE_IDS.preparing,
   SENT_ORDER_TEMPLATE_IDS.shipped,
   SENT_ORDER_TEMPLATE_IDS.delivered,
-  '2003485870531680',
-  '1724040452126054',
 ] as const;
 
 export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTemplate> = {
