@@ -58,5 +58,15 @@ export async function SouqyMount({
     isRtl: data.locale === 'ar',
     categoriesBySlug: categoriesBySlug ?? new Map<string, Set<string>>(),
   };
-  return <>{renderSouqyComponent(result.Component, ctx)}</>;
+  const rendered = renderSouqyComponent(result.bundle, ctx);
+  if (!rendered.ok) {
+    console.error('[souqy/mount] render failed', {
+      slug: data.slug,
+      revision: data.souqyRevision,
+      reason: rendered.reason,
+      message: rendered.message,
+    });
+    return fallback;
+  }
+  return <>{rendered.node}</>;
 }

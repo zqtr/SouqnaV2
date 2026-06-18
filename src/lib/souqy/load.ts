@@ -18,10 +18,10 @@ import { withSouqyContext } from '@/sdk/runtime';
  *      resolves only `react` and `@souqna/sdk` against our app's module
  *      instances — no other module name resolves, so a generated artifact
  *      cannot reach Node builtins, fs, network, or env.
- *   3. Cache the resulting React component by content key.
- *   4. Render it inside `withSouqyContext(ctx, …)` so SDK hooks
- *      (`useStorefront`, `useProducts`, …) read the right per-request
- *      context.
+ *   3. Cache the bundle source by content key.
+ *   4. Render it with a request-scoped SDK facade so SDK hooks and
+ *      components (`useStorefront`, `ProductGrid`, etc.) read the right
+ *      per-request context.
  *
  * The cache is in-memory per server instance; that's fine for read
  * traffic since revisions are immutable. On revision rollover we
@@ -29,16 +29,22 @@ import { withSouqyContext } from '@/sdk/runtime';
  * next request rehydrates this LRU.
  */
 
-type LoadedComponent = React.ComponentType;
+type LoadedBundle = {
+  source: string;
+};
 
 type LoadResult =
-  | { ok: true; Component: LoadedComponent }
+  | { ok: true; bundle: LoadedBundle }
   | { ok: false; reason: 'fetch_failed' | 'eval_failed' | 'no_default'; message: string };
+
+type RenderResult =
+  | { ok: true; node: React.ReactNode }
+  | { ok: false; reason: 'eval_failed' | 'no_default'; message: string };
 
 const CACHE_MAX = 128;
 const CACHE_TTL_MS = 1000 * 60 * 60; // 1h — revisions are immutable; 1h is conservative
 
-const cache = new LRUCache<string, LoadedComponent>({
+const cache = new LRUCache<string, string>({
   max: CACHE_MAX,
   ttl: CACHE_TTL_MS,
 });
@@ -48,7 +54,6 @@ const ALLOWED_MODULES: Record<string, unknown> = {
   // Some bundlers (esbuild via tsup) emit JSX as `react/jsx-runtime`
   // imports; resolve them through the same React instance we control.
   'react/jsx-runtime': ReactJsxRuntime,
-  '@souqna/sdk': SouqnaSdk,
 };
 
 export async function loadSouqyComponent(args: {
@@ -58,7 +63,7 @@ export async function loadSouqyComponent(args: {
 }): Promise<LoadResult> {
   const key = `${args.slug}:${args.revision}`;
   const cached = cache.get(key);
-  if (cached) return { ok: true, Component: cached };
+  if (cached) return { ok: true, bundle: { source: cached } };
 
   let source: string;
   try {
@@ -85,6 +90,35 @@ export async function loadSouqyComponent(args: {
     };
   }
 
+  const validation = evaluateSouqyBundle(source, SouqnaSdk);
+  if (!validation.ok) return validation;
+
+  cache.set(key, source);
+  return { ok: true, bundle: { source } };
+}
+
+/**
+ * Convenience render helper. Most callers want "give me the rendered
+ * tree, set up the context for me." The generated bundle is evaluated
+ * against a scoped SDK facade so nested SDK components keep the same
+ * per-request context even when React renders them after element creation.
+ */
+export function renderSouqyComponent(
+  bundle: LoadedBundle,
+  ctx: SouqyContext,
+): RenderResult {
+  const scopedSdk = createScopedSouqySdk(ctx);
+  const evaluated = evaluateSouqyBundle(bundle.source, scopedSdk);
+  if (!evaluated.ok) return evaluated;
+  return { ok: true, node: React.createElement(evaluated.Component, {}) };
+}
+
+function evaluateSouqyBundle(
+  source: string,
+  sdkModule: unknown,
+):
+  | { ok: true; Component: React.ComponentType<Record<string, never>> }
+  | { ok: false; reason: 'eval_failed' | 'no_default'; message: string } {
   let exportedDefault: unknown;
   try {
     // Build a CJS-shaped scope and execute the bundle inside it. The
@@ -92,6 +126,7 @@ export async function loadSouqyComponent(args: {
     // generated code cannot reach `fs`, `child_process`, `process`, etc.
     const moduleObj: { exports: Record<string, unknown> } = { exports: {} };
     const captiveRequire = (name: string): unknown => {
+      if (name === '@souqna/sdk') return sdkModule;
       const allowed = ALLOWED_MODULES[name];
       if (!allowed) {
         throw new Error(`Souqy bundle attempted to require disallowed module: '${name}'`);
@@ -121,21 +156,27 @@ export async function loadSouqyComponent(args: {
       message: 'Souqy bundle does not default-export a React component.',
     };
   }
-  const Component = exportedDefault as LoadedComponent;
-  cache.set(key, Component);
-  return { ok: true, Component };
+  return { ok: true, Component: exportedDefault as React.ComponentType<Record<string, never>> };
 }
 
-/**
- * Convenience render helper. Most callers want "give me the rendered
- * tree, set up the context for me." Bundles the AsyncLocalStorage entry
- * + JSX creation so the page handler stays a one-liner.
- */
-export function renderSouqyComponent(
-  Component: LoadedComponent,
-  ctx: SouqyContext,
-): React.ReactNode {
-  return withSouqyContext(ctx, () => React.createElement(Component));
+function createScopedSouqySdk(ctx: SouqyContext): Record<string, unknown> {
+  const scoped: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(SouqnaSdk)) {
+    scoped[key] =
+      typeof value === 'function'
+        ? (...args: unknown[]) =>
+            withSouqyContext(ctx, () =>
+              (value as (...innerArgs: unknown[]) => unknown)(...args),
+            )
+        : value;
+  }
+  scoped.useSouqyContext = () => ctx;
+  scoped.useStorefront = () => ctx.storefront;
+  scoped.useProducts = () => ctx.products;
+  scoped.useTheme = () => ctx.theme;
+  scoped.useLocale = () => ctx.storefront.locale;
+  scoped.useIsRtl = () => ctx.isRtl;
+  return scoped;
 }
 
 /**

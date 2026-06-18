@@ -43,7 +43,7 @@ export default async function OG({ params }: Props) {
             top: 0,
             display: 'flex',
             opacity: 0.55,
-            transform: isRtl ? 'scaleX(-1)' : 'none',
+            ...(isRtl ? { transform: 'scaleX(-1)' } : {}),
           }}
         >
           <svg width="540" height="630" viewBox="0 0 400 600">
