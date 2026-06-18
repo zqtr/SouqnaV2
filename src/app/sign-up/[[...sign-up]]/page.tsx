@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
-import { ClientClerkAuth } from '@/components/auth/ClientClerkAuth';
-import { Auth3 } from '@/components/auth-3';
+import { AuthPageClient } from '@/components/auth/AuthPageClient';
 import { defaultLocale, isLocale } from '@/i18n/locales';
 
 export const metadata: Metadata = {
@@ -14,9 +13,5 @@ export default async function SignUpPage() {
   const cookieLocale = cookieStore.get('NEXT_LOCALE')?.value;
   const locale = cookieLocale && isLocale(cookieLocale) ? cookieLocale : defaultLocale;
 
-  return (
-    <Auth3 mode="sign-up" locale={locale}>
-      <ClientClerkAuth mode="sign-up" locale={locale} />
-    </Auth3>
-  );
+  return <AuthPageClient mode="sign-up" locale={locale} />;
 }
