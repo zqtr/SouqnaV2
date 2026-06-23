@@ -43,33 +43,18 @@ export type SouqnaSentTemplate = {
   fields: SentTemplateVariableField[];
 };
 
-export const SENT_TEMPLATE_IDS: Record<SentTemplateKind, string> = {
-  marketing: '298977b3-2b1e-417f-b21a-01cb736f7e74',
-  customer_care: '8681a1e0-70af-4960-8874-3668917bfdb6',
-  fraud_alert: '8f800498-7173-4385-b6ba-dc3947e6ba7d',
-  delivery_notification: '0507e170-a5f5-4cdd-8762-5da349c2851b',
-  account_notification: '46ce102a-e54d-4ce0-a177-683133b0c551',
-};
+const SENT_MARKETING_TEMPLATE_ID = '298977b3-2b1e-417f-b21a-01cb736f7e74';
+const SENT_CUSTOMER_CARE_TEMPLATE_ID = '9d4a9ff0-f30f-459b-bb36-8ac5a439d9a4';
+const SENT_FRAUD_ALERT_TEMPLATE_ID = 'ac10bc6b-cfe9-414d-aecc-ebd39c7cd46b';
+const SENT_DELIVERY_NOTIFICATION_TEMPLATE_ID = '03d03346-b6c3-4d51-8bb1-ada44226ad78';
 
 export const SENT_ORDER_TEMPLATE_IDS: Record<SentOrderTemplateStatus, string> = {
-  pending: '31ac9179-70f6-4301-b432-43d411332d7b',
-  confirmed: '541ef481-732f-4043-9633-f2b32a697bb1',
-  preparing: '2d98ebc9-df8a-430d-8840-52efd917f47e',
-  shipped: '7ff89a1e-4856-4dcb-b043-484ea6a8d4e1',
-  delivered: '14df81df-3897-4128-b9bb-8cafe0839f4d',
+  pending: '1539350971245152',
+  confirmed: '2277019266458305',
+  preparing: '980516908223295',
+  shipped: '4498195207132467',
+  delivered: '904381476010781',
 };
-
-// Meta/WABA template ids from the approved WhatsApp templates. sent.dm's v3
-// send endpoint requires the sent.dm template UUIDs above, not these ids.
-export const META_ORDER_TEMPLATE_IDS = [
-  '1539350971245152',
-  '2277019266458305',
-  '980516908223295',
-  '4498195207132467',
-  '904381476010781',
-  '2003485870531680',
-  '1724040452126054',
-] as const;
 
 export const APPROVED_SENT_ORDER_TEMPLATE_IDS = [
   SENT_ORDER_TEMPLATE_IDS.pending,
@@ -77,7 +62,17 @@ export const APPROVED_SENT_ORDER_TEMPLATE_IDS = [
   SENT_ORDER_TEMPLATE_IDS.preparing,
   SENT_ORDER_TEMPLATE_IDS.shipped,
   SENT_ORDER_TEMPLATE_IDS.delivered,
+  '2003485870531680',
+  '1724040452126054',
 ] as const;
+
+export const SENT_TEMPLATE_IDS: Record<SentTemplateKind, string> = {
+  marketing: SENT_MARKETING_TEMPLATE_ID,
+  customer_care: SENT_CUSTOMER_CARE_TEMPLATE_ID,
+  fraud_alert: SENT_FRAUD_ALERT_TEMPLATE_ID,
+  delivery_notification: SENT_DELIVERY_NOTIFICATION_TEMPLATE_ID,
+  account_notification: SENT_CUSTOMER_CARE_TEMPLATE_ID,
+};
 
 export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTemplate> = {
   marketing: {
@@ -262,13 +257,13 @@ export const SOUQNA_SENT_TEMPLATE_CATALOG: Record<SentTemplateKind, SouqnaSentTe
     templateId: SENT_TEMPLATE_IDS.account_notification,
     label: 'Account',
     arLabel: 'الحساب',
-    hint: 'Account and store notices.',
+    hint: 'Account and store notices through the verified support template.',
     arHint: 'تنبيهات الحساب والمتجر.',
-    sentName: 'Souqna Account Notice',
+    sentName: 'Souqna Support Update',
     language: 'en_US',
     status: 'PENDING',
     variables: ['var_1', 'var_2', 'var_3', 'var_4', 'var_5'],
-    preview: 'Hi {{customerName}}, {{storeName}} notice: {{subject}}. {{message}}',
+    preview: 'Hi {{customerName}}, {{storeName}} sent you an update: {{subject}}. {{message}}',
     arPreview: 'مرحباً {{customerName}}، إشعار من {{storeName}}: {{subject}}. {{message}}',
     defaults: {
       subject: 'Account update',

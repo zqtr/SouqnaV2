@@ -393,3 +393,67 @@ export function souqnaSdkPackageJson(): string {
 export function souqnaSdkStubJs(): string {
   return 'module.exports = new Proxy({}, { get: () => () => null });\n';
 }
+
+export function reactPackageJson(): string {
+  return JSON.stringify(
+    {
+      name: 'react',
+      version: '18.3.1-souqy-stub',
+      types: './index.d.ts',
+      main: './index.js',
+    },
+    null,
+    2,
+  );
+}
+
+export function reactStubJs(): string {
+  return 'module.exports = new Proxy({}, { get: () => () => null });\n';
+}
+
+export function reactTypesDts(): string {
+  return `
+export = React;
+export as namespace React;
+
+declare namespace React {
+  type Key = string | number;
+  type ReactText = string | number;
+  type ReactChild = ReactElement | ReactText;
+  type ReactNode = ReactChild | ReactNode[] | boolean | null | undefined;
+  type CSSProperties = Record<string, string | number | undefined>;
+  interface Attributes {
+    key?: Key | null;
+  }
+  interface ReactElement<
+    P = unknown,
+    T extends string | JSXElementConstructor<unknown> = string | JSXElementConstructor<unknown>,
+  > {
+    type: T;
+    props: P;
+    key: Key | null;
+  }
+  type JSXElementConstructor<P> = (props: P) => ReactElement | null;
+  function createElement<P>(
+    type: string | JSXElementConstructor<P>,
+    props: (P & Attributes) | null,
+    ...children: ReactNode[]
+  ): ReactElement<P>;
+}
+
+declare global {
+  namespace JSX {
+    interface Element extends React.ReactElement {}
+    interface ElementClass {
+      render: unknown;
+    }
+    interface ElementAttributesProperty {
+      props: unknown;
+    }
+    interface IntrinsicElements {
+      [elemName: string]: Record<string, unknown>;
+    }
+  }
+}
+`.trim();
+}

@@ -18,7 +18,6 @@ import {
 import { priceFor, type BillingCycle } from '@/lib/plans';
 import { logEvent } from '@/lib/events';
 import { env } from '@/lib/env';
-import { hasStripe, priceIdFor, stripeClient } from '@/lib/stripe';
 import {
   createSkipCashPayment,
   getSkipCashPayment,
@@ -31,13 +30,12 @@ import {
  * Billing actions — MVP slice.
  *
  * Phase 0 ships with a manual grant path so founders can be promoted to
- * any tier without wiring Stripe / Vercel Marketplace first. The grant
- * is gated by a server-only `SOUQY_ADMIN_TOKEN` env var so an end-user
+ * any tier without a hosted checkout. The grant is gated by a server-only
+ * `SOUQY_ADMIN_TOKEN` env var so an end-user
  * can't promote themselves; the Souqna operator passes the token
  * through their own admin tooling.
  *
- * When Stripe / Marketplace lands the webhook handler will reuse
- * `setPlan` directly — this action stays around for support overrides.
+ * Hosted checkout uses SkipCash; this action stays around for support overrides.
  */
 
 const GrantSchema = z.object({
@@ -122,13 +120,12 @@ export async function getMyPlan(): Promise<Plan> {
 
 /**
  * Logged paywall-hit ping. Surfaces in Souqna Pulse as a leading
- * indicator of paid-tier demand before Stripe goes live.
+ * indicator of paid-tier demand before checkout starts.
  */
 /**
- * Self-serve checkout — creates (or reuses) a Stripe Customer keyed
- * by Clerk user id, opens a recurring subscription Checkout Session
- * for the requested (plan, cycle), and returns the hosted Stripe URL
- * the client should redirect to.
+ * Self-serve checkout — creates a SkipCash hosted payment for the
+ * requested (plan, cycle), and returns the hosted payment URL the
+ * client should redirect to.
  *
  * Discriminated-union return so callers branch on a typed status
  * instead of try/catch. Never throws on the user-facing failure paths
@@ -162,88 +159,7 @@ export async function startCheckout(
     return { status: 'sign_in', url: `/sign-in?redirect_url=${back}` };
   }
 
-  // Provider dispatch — Stripe code stays in the repo for historical
-  // compatibility, but SkipCash is the active hosted checkout path.
-  if (env.BILLING_PROVIDER === 'skipcash') {
-    return startSkipCashCheckout(userId, plan, cycle);
-  }
-  return startStripeCheckout(userId, plan, cycle);
-}
-
-async function startStripeCheckout(
-  userId: string,
-  plan: Exclude<Plan, 'free'>,
-  cycle: 'monthly' | 'annual',
-): Promise<StartCheckoutResult> {
-  if (!hasStripe()) {
-    return { status: 'error', message: 'Checkout is not configured' };
-  }
-  const priceId = priceIdFor(plan, cycle);
-  if (!priceId) {
-    return { status: 'error', message: 'Pricing for this tier is not configured' };
-  }
-  const stripe = stripeClient();
-  if (!stripe) return { status: 'error', message: 'Checkout is not configured' };
-
-  // Reuse an existing Customer when we've seen this Clerk user before;
-  // otherwise create one and stash the id in user_plans.meta so the
-  // next click doesn't double-create. Customer email is informational
-  // — Stripe-side it's the source of truth on the receipt, not auth.
-  const meta = await getPlanMeta(userId);
-  let customerId =
-    typeof meta.stripeCustomerId === 'string' ? meta.stripeCustomerId : '';
-  if (!customerId) {
-    try {
-      const u = await currentUser();
-      const email = u?.emailAddresses?.[0]?.emailAddress ?? undefined;
-      const name =
-        [u?.firstName, u?.lastName].filter(Boolean).join(' ').trim() || undefined;
-      const created = await stripe.customers.create({
-        email,
-        name,
-        metadata: { clerkUserId: userId },
-      });
-      customerId = created.id;
-      if (hasDb()) {
-        await patchPlanMeta(userId, { stripeCustomerId: customerId });
-      }
-    } catch (err) {
-      console.error('[startCheckout] customer create failed', err);
-      return { status: 'error', message: 'Could not start checkout' };
-    }
-  }
-
-  const baseUrl = env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, '');
-  try {
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      customer: customerId,
-      line_items: [{ price: priceId, quantity: 1 }],
-      allow_promotion_codes: true,
-      billing_address_collection: 'auto',
-      automatic_tax: { enabled: false },
-      success_url: `${baseUrl}/account/settings/plan?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/account/settings/plan?checkout=cancelled`,
-      client_reference_id: userId,
-      subscription_data: {
-        metadata: { clerkUserId: userId, plan, cycle },
-      },
-      metadata: { clerkUserId: userId, plan, cycle },
-    });
-    if (!session.url) {
-      return { status: 'error', message: 'Could not start checkout' };
-    }
-    await logEvent({
-      kind: 'billing.checkout.start',
-      funnel: 'storefront',
-      userId,
-      props: { plan, cycle, sessionId: session.id, customerId },
-    });
-    return { status: 'redirect', url: session.url };
-  } catch (err) {
-    console.error('[startCheckout] session create failed', err);
-    return { status: 'error', message: 'Could not start checkout' };
-  }
+  return startSkipCashCheckout(userId, plan, cycle);
 }
 
 async function startSkipCashCheckout(
@@ -402,7 +318,7 @@ export type SubscriptionStatus =
       status: 'active' | 'pending' | 'cancelled' | 'suspended' | 'expired' | 'failed';
       plan: Plan;
       cycle: BillingCycle | null;
-      provider: 'skipcash' | 'stripe' | null;
+      provider: 'skipcash' | null;
       subscriptionId: string | null;
       cardBrand: string | null;
       cardLast4: string | null;

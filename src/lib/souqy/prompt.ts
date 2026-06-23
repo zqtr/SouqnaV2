@@ -42,9 +42,9 @@ Components (every prop is optional unless marked required):
   <ProductGrid layout="cards|minimal|lookbook" columns={2|3|4} category limit showInquire />
   <ProductList groupByCategory showImages showPrices category limit />
   <FeaturedProduct productId layout="split|stacked" />
-  <ServiceList items=[{ id*, title*, description, priceQar, status }] heading category limit showInquire />
-  <Menu items=[{ id*, title*, titleAlt, description, category, priceQar, status }] heading groupByCategory category limit />
-  <Calendar slots=[{ id*, date* (YYYY-MM-DD), time, label*, capacity, status }] heading category limit />
+  <ServiceList items=[{ id*, title*, description, priceQar, status="active|sold_out" }] heading category limit showInquire />
+  <Menu items=[{ id*, title*, titleAlt, description, category, priceQar, status="active|sold_out" }] heading groupByCategory category limit />
+  <Calendar slots=[{ id*, date* (YYYY-MM-DD), time, label*, capacity, status="open|limited|full" }] heading category limit />
   <ContactCard heading body label showPhone showArea showHours showInstagram phone area hours instagram />
   <InquireCta label variant="primary|ghost" eyebrow title body align />
   <Spacer size="sm|md|lg|xl" />
@@ -65,6 +65,22 @@ Hooks (server-component-safe):
   useTheme()      : ThemeOverrides
   useLocale()     : 'en' | 'ar'
   useIsRtl()      : boolean
+`.trim();
+
+const THEME_CONTRACT = `
+Allowed \`theme.ts\` keys only:
+  palette: 'sand_gold'|'pearl_ink'|'olive_brass'|'maroon_bone'|'midnight_emerald'|'terracotta_kiln'|'bone_obsidian'|'coral_play'|'pearl_lagoon'|'sage_inlet'|'dune_blush'
+  pageBg: CSS color/background string (use this for requests like "make the background red")
+  backgroundEffect: one supported SDK background effect
+  cursorEffect: one supported SDK cursor effect
+  headingWeight: 400|500|600
+  sectionSpacing: 'tight'|'comfortable'|'spacious'
+  policyDisplayMode: 'full'|'columns'
+  themeBehaviour: 'auto'|'light'|'dark'
+  seo: { title, description, ogImage }
+
+Never invent theme keys. Do not use toneOverrides, colors, tokens, styles,
+surfaces, light, dark, cssVars, or custom palette objects.
 `.trim();
 
 const RULES = `
@@ -88,6 +104,11 @@ Hard constraints — your output WILL be rejected if you break any of them:
      components only. Use the SDK component CTAs for interactivity.
   9. Every \`Calendar\` slot \`date\` must be ISO YYYY-MM-DD. Every \`Menu\`
      and \`ServiceList\` item must have a stable \`id\` (a short slug works).
+     Inline \`ServiceList\` and \`Menu\` item arrays must use status
+     \`active\` or \`sold_out\` only; never \`available\`. If you assign the
+     array to a const first, import and annotate it:
+     \`import type { ServiceItem } from '@souqna/sdk';\`
+     \`const services: ServiceItem[] = [...]\`.
  10. The \`businessName\` and \`slug\` come from \`useStorefront()\` — do not
      hard-code them. Same for \`useProducts()\`.
  11. Locale-aware copy: when \`useLocale() === 'ar'\` the storefront must
@@ -95,7 +116,9 @@ Hard constraints — your output WILL be rejected if you break any of them:
      bilingual strings as ternaries, not as separate components.
  12. Output ONLY a single JSON object on a single line of the assistant
      message. No prose, no markdown fences, no leading commentary.
- 13. \`DepthShowcase\` and \`AuroraRibbon\` use parallax / WebGL — use at
+ 13. JSON strings must be valid JSON: escape newlines as \\n, quote marks
+     as \\", and never use invalid escapes like \\$, \\_, or backslash-backtick.
+ 14. \`DepthShowcase\` and \`AuroraRibbon\` use parallax / WebGL — use at
      most ONE of EACH per page; never stack multiple full-bleed effects.
 `.trim();
 
@@ -288,6 +311,8 @@ export function buildSystemPrompt(): string {
     '',
     SDK_API,
     '',
+    THEME_CONTRACT,
+    '',
     RULES,
   ].join('\n');
 }
@@ -345,10 +370,12 @@ export function buildRepairPrompt(args: {
     .map(([name, body]) => `--- ${name} ---\n${body}`)
     .join('\n\n');
   return [
-    'Your previous output failed validation. Fix the error and return the corrected JSON object only.',
+    'Your previous output failed validation or TypeScript build checks. Fix the error and return the corrected JSON object only.',
     '',
     'Error:',
     args.errorSummary,
+    '',
+    THEME_CONTRACT,
     '',
     'Previous files:',
     filesBlock,
@@ -398,7 +425,7 @@ export function parseSouqyOutput(raw: string): SouqyOutput {
   // long as the outer envelope is JSON.
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    parsed = parseJsonEnvelope(text);
   } catch (err) {
     throw new SouqyOutputParseError(`Souqy output was not valid JSON: ${(err as Error).message}`);
   }
@@ -427,6 +454,95 @@ export function parseSouqyOutput(raw: string): SouqyOutput {
     files: fileMap,
     notes: typeof obj.notes === 'string' ? obj.notes : undefined,
   };
+}
+
+function parseJsonEnvelope(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (firstError) {
+    const repaired = repairJsonStringEscapes(text);
+    if (repaired !== text) {
+      try {
+        return JSON.parse(repaired);
+      } catch {
+        // Keep the original parse error; it points to the model output.
+      }
+    }
+    throw firstError;
+  }
+}
+
+function repairJsonStringEscapes(text: string): string {
+  let result = '';
+  let inString = false;
+  let escaped = false;
+  let changed = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]!;
+
+    if (!inString) {
+      result += char;
+      if (char === '"') inString = true;
+      continue;
+    }
+
+    if (escaped) {
+      if (char === 'u') {
+        const hex = text.slice(index + 1, index + 5);
+        if (/^[0-9a-fA-F]{4}$/u.test(hex)) {
+          result += char;
+        } else {
+          result += `\\${char}`;
+          changed = true;
+        }
+      } else if (/["\\/bfnrt]/u.test(char)) {
+        result += char;
+      } else {
+        result += `\\${char}`;
+        changed = true;
+      }
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      result += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = false;
+      result += char;
+      continue;
+    }
+
+    if (char === '\n') {
+      result += '\\n';
+      changed = true;
+      continue;
+    }
+    if (char === '\r') {
+      result += '\\r';
+      changed = true;
+      continue;
+    }
+    if (char === '\t') {
+      result += '\\t';
+      changed = true;
+      continue;
+    }
+
+    result += char;
+  }
+
+  if (escaped) {
+    result += '\\';
+    changed = true;
+  }
+
+  return changed ? result : text;
 }
 
 /**

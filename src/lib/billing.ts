@@ -12,8 +12,6 @@ import {
   PLAN_RANK,
   PLANS,
   PREMIUM_BLOCK_TYPES,
-  platformFeeBpsForPlan,
-  platformFeeForTotal,
   isPremiumBlockType,
   planUnlocksAnalytics,
   planUnlocksApiAccess,
@@ -23,6 +21,7 @@ import {
   planUnlocksDiscounts,
   planUnlocksIntegrations,
   planUnlocksMonthlyPayments,
+  planUnlocksOnlinePayments,
   planUnlocksPremiumBlocks,
   planUnlocksSeoSettings,
   planUnlocksSouqy,
@@ -31,7 +30,6 @@ import {
   planLabel,
   priceFor,
   productCapForPlan,
-  sellerNetForTotal,
   storefrontCapForPlan,
   type BillingCycle,
   type Plan,
@@ -41,9 +39,9 @@ import {
  * Billing tiers — four cumulative tiers, ranked by capability.
  *
  *   - `free`     - displayed as Free. 1 storefront, 10 products, 25 orders/month.
- *   - `starter`  - displayed as Pro. 2 storefronts, custom domain, 3% fee.
- *   - `pro`      - displayed as Pro+. 8 storefronts, Souqy, automation, 1% fee.
- *   - `atelier`  - displayed as Max+. Unlimited storefronts, API, 0% fee.
+ *   - `starter`  - displayed as Pro. 2 storefronts, custom domain, growth tools.
+ *   - `pro`      - displayed as Pro+. 8 storefronts, Souqy, automation.
+ *   - `atelier`  - displayed as Max+. Unlimited storefronts, API, white-label tools.
  *
  * The pure data (Plan literal, ranks, marketing copy, helpers) lives in
  * `src/lib/plans.ts` so client components can import it without pulling
@@ -73,8 +71,6 @@ export {
   PLAN_RANK,
   PLANS,
   PREMIUM_BLOCK_TYPES,
-  platformFeeBpsForPlan,
-  platformFeeForTotal,
   isPremiumBlockType,
   planUnlocksAnalytics,
   planUnlocksApiAccess,
@@ -84,6 +80,7 @@ export {
   planUnlocksDiscounts,
   planUnlocksIntegrations,
   planUnlocksMonthlyPayments,
+  planUnlocksOnlinePayments,
   planUnlocksPremiumBlocks,
   planUnlocksSeoSettings,
   planUnlocksSouqy,
@@ -92,7 +89,6 @@ export {
   planLabel,
   priceFor,
   productCapForPlan,
-  sellerNetForTotal,
   storefrontCapForPlan,
 };
 export type { BillingCycle, Plan };
@@ -122,10 +118,8 @@ function normalisePlan(v: string): Plan {
  */
 /**
  * Returns the opaque `meta` blob for a user's plan row. Used by the
- * checkout action to look up the existing Stripe customer id (so we
- * don't create a fresh customer for the same Clerk user every time
- * they click "Upgrade") and by the webhook to read `subscriptionId`,
- * `currentPeriodEnd`, etc. Returns an empty object when the row is
+ * checkout action and webhook to read provider-specific billing state.
+ * Returns an empty object when the row is
  * missing, the DB is unavailable, or the meta is malformed — same
  * defaulting philosophy as `getPlan`.
  */
@@ -145,9 +139,9 @@ export async function getPlanMeta(clerkUserId: string): Promise<Record<string, u
 
 /**
  * Merge-patch the `meta` jsonb for a user's plan row without changing
- * the plan itself. Used to stash Stripe customer ids before the first
- * subscription event lands. The row is created (with `plan = 'free'`)
- * if it doesn't exist yet.
+ * the plan itself. Used to stash hosted checkout state before the
+ * provider event lands. The row is created (with `plan = 'free'`) if
+ * it doesn't exist yet.
  */
 export async function patchPlanMeta(
   clerkUserId: string,
@@ -181,7 +175,7 @@ export async function getPlan(clerkUserId: string): Promise<Plan> {
 
 /**
  * Idempotent upsert of a user's plan. Used by:
- *   - the Stripe / Vercel Marketplace webhook (Phase 0.5; not wired yet)
+ *   - the SkipCash webhook / poller after payment confirmation
  *   - the manual admin grant action (`grantPlan`) for closed-beta access
  *
  * `meta` carries provider-specific subscription state — opaque to us.
@@ -227,7 +221,6 @@ export async function recordPlanHistory(input: {
   source:
     | 'skipcash_webhook'
     | 'skipcash_poll'
-    | 'stripe_webhook'
     | 'admin_grant'
     | 'system_default';
   providerEventId?: string | null;

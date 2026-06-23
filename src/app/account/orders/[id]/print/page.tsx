@@ -190,7 +190,7 @@ export default async function PrintInvoicePage({
                         <div>{it.titleSnapshot}</div>
                         {it.variantLabel ? (
                           <div style={{ marginTop: 2, fontSize: '9pt', color: '#71717a' }}>
-                            Size: {it.variantLabel}
+                            Option: {it.variantLabel}
                           </div>
                         ) : null}
                         {it.customInputs.height ? (
@@ -219,6 +219,16 @@ export default async function PrintInvoicePage({
                     {order.currency} {Number(order.subtotalQar).toLocaleString()}
                   </td>
                 </tr>
+                {Number(order.discountQar) > 0 ? (
+                  <tr>
+                    <td colSpan={3} style={{ textAlign: 'end', color: '#71717a' }}>
+                      {order.discountCode ? `Discount (${order.discountCode})` : 'Discount'}
+                    </td>
+                    <td className="num">
+                      - {order.currency} {Number(order.discountQar).toLocaleString()}
+                    </td>
+                  </tr>
+                ) : null}
                 {Number(order.shippingQar) > 0 ? (
                   <tr>
                     <td colSpan={3} style={{ textAlign: 'end', color: '#71717a' }}>

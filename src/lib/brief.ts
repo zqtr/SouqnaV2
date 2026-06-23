@@ -10,6 +10,7 @@ import type {
   PaymentMethod,
   PayLink,
   PolicyKey,
+  ThankYouSettings,
   StorefrontPolicies,
 } from './storefrontSettings';
 
@@ -260,6 +261,7 @@ type StorefrontRow = {
   checkout_currency: string | null;
   checkout_min_order_qar: number | null;
   checkout_shipping_flat_qar: number | null;
+  checkout_thank_you: unknown;
   custom_domain: string | null;
   custom_domain_added_at: string | null;
   custom_domain_verified_at: string | null;
@@ -361,6 +363,7 @@ function fromRow(row: StorefrontRow): Storefront {
 const ALLOWED_PAYMENT_METHODS = new Set<string>([
   'cod',
   'bank_transfer',
+  'fawran',
   'skipcash',
   'sadad',
   'pay_link',
@@ -392,7 +395,9 @@ function parseCheckoutFromRow(row: StorefrontRow): CheckoutSettings {
     .filter((m, i, arr) => arr.indexOf(m) === i);
   if (paymentMethods.length === 0) paymentMethods.push('cod', 'bank_transfer');
 
-  const requiredPolicies: PolicyKey[] = (row.checkout_required_policies ?? ['terms', 'privacy', 'refund'])
+  const requiredPolicies: PolicyKey[] = (
+    row.checkout_required_policies ?? ['terms', 'privacy', 'refund']
+  )
     .filter((p): p is PolicyKey => ALLOWED_REQUIRED_POLICIES.has(p))
     .filter((p, i, arr) => arr.indexOf(p) === i);
 
@@ -401,6 +406,7 @@ function parseCheckoutFromRow(row: StorefrontRow): CheckoutSettings {
       ? { url: row.checkout_pay_link_url, label: row.checkout_pay_link_label }
       : null;
   const skipCashRef = parseSkipCashCredentialsRef(row.checkout_skipcash_credentials);
+  const skipCashEnabled = Boolean(skipCashRef && row.cr_number && row.cr_confirmed_at);
   const sadadRef = parseSadadCredentialsRef(row.checkout_sadad_credentials);
 
   return {
@@ -412,13 +418,13 @@ function parseCheckoutFromRow(row: StorefrontRow): CheckoutSettings {
           hasCredentials: true,
           clientIdHint: skipCashRef.clientIdHint,
           crConfirmedAt: row.cr_confirmed_at,
-          enabled: Boolean(row.cr_number && row.cr_confirmed_at),
+          enabled: skipCashEnabled,
         }
       : {
           hasCredentials: false,
           clientIdHint: null,
           crConfirmedAt: row.cr_confirmed_at,
-          enabled: Boolean(row.cr_number && row.cr_confirmed_at),
+          enabled: false,
         },
     sadad: sadadRef
       ? {
@@ -441,7 +447,46 @@ function parseCheckoutFromRow(row: StorefrontRow): CheckoutSettings {
     currency: (row.checkout_currency ?? 'QAR').toUpperCase(),
     minOrderQar: row.checkout_min_order_qar,
     shippingFlatQar: row.checkout_shipping_flat_qar,
+    thankYou: parseThankYouSettings(row.checkout_thank_you),
   };
+}
+
+function parseThankYouSettings(value: unknown): ThankYouSettings {
+  const defaults: ThankYouSettings = {
+    title: null,
+    message: null,
+    ctaLabel: null,
+    ctaUrl: null,
+    showOrderSummary: true,
+  };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return defaults;
+  const obj = value as Record<string, unknown>;
+  return {
+    title: normalizeThankYouText(obj.title, 120),
+    message: normalizeThankYouText(obj.message, 600),
+    ctaLabel: normalizeThankYouText(obj.ctaLabel, 80),
+    ctaUrl: normalizeThankYouUrl(obj.ctaUrl),
+    showOrderSummary: obj.showOrderSummary === false ? false : true,
+  };
+}
+
+function normalizeThankYouText(value: unknown, max: number): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.replace(/\s+/g, ' ').trim().slice(0, max);
+  return normalized || null;
+}
+
+function normalizeThankYouUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().slice(0, 500);
+  if (!trimmed) return null;
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return trimmed;
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseSadadCredentialsRef(value: unknown): {
@@ -492,9 +537,7 @@ const LEGACY_TEMPLATE_MAP: Record<string, TemplateId> = {
 
 function normalizeTemplateId(raw: string | null | undefined): TemplateId {
   const id = (raw ?? '').trim();
-  if (
-    (TEMPLATE_IDS as readonly string[]).includes(id)
-  ) {
+  if ((TEMPLATE_IDS as readonly string[]).includes(id)) {
     return id as TemplateId;
   }
   return LEGACY_TEMPLATE_MAP[id] ?? 'atrium';
@@ -747,9 +790,7 @@ export async function publishDraft(slug: string): Promise<Storefront | null> {
  * republish without re-saving). Returns the updated row, or null when
  * the slug doesn't match an active row.
  */
-export async function unpublishStorefront(
-  slug: string,
-): Promise<Storefront | null> {
+export async function unpublishStorefront(slug: string): Promise<Storefront | null> {
   const rows = (await db()`
     update briefs set is_published = false
     where slug = ${slug} and expires_at > now()
@@ -764,10 +805,7 @@ export async function unpublishStorefront(
  * SEO meta). Used by the dedicated Theme page; block-level edits go
  * through `saveDraft` instead.
  */
-export async function saveTheme(
-  slug: string,
-  theme: ThemeOverrides,
-): Promise<Storefront | null> {
+export async function saveTheme(slug: string, theme: ThemeOverrides): Promise<Storefront | null> {
   const rows = (await db()`
     update briefs set theme_overrides = ${JSON.stringify(theme)}::jsonb
     where slug = ${slug} and expires_at > now()
@@ -844,10 +882,7 @@ export async function setCustomDomain(
  * cert as live. Idempotent — no-op when already verified or when the
  * stored host no longer matches (founder swapped domains in flight).
  */
-export async function markCustomDomainVerified(
-  slug: string,
-  host: string,
-): Promise<void> {
+export async function markCustomDomainVerified(slug: string, host: string): Promise<void> {
   const normalized = host.trim().toLowerCase();
   await db()`
     update briefs

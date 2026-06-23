@@ -21,12 +21,14 @@ import {
 import { createNotification } from '@/lib/notifications';
 import { blocksSchema, themeOverridesSchema } from '@/lib/blocks/schemas';
 import { bootBlocksFromStorefront } from '@/lib/blocks/boot';
-import { seedTemplateDemoProducts } from '@/lib/blocks/demoProducts';
 import {
-  isTemplateUnlocked,
-  minPlanForTemplate,
-  templatePresets,
-} from '@/lib/templates';
+  COMPONENT_SHOWCASE_THEME,
+  buildComponentShowcaseBlocks,
+  isComponentShowcaseDraftCurrent,
+  isComponentShowcaseSlug,
+} from '@/lib/blocks/componentShowcase';
+import { seedTemplateDemoProducts } from '@/lib/blocks/demoProducts';
+import { isTemplateUnlocked, minPlanForTemplate, templatePresets } from '@/lib/templates';
 import {
   getPlan,
   isPremiumBlockType,
@@ -108,7 +110,7 @@ async function resolvePageForSlug(
 
 /**
  * Deletes require a `confirm` field that exactly matches the slug. This
- * is the same pattern GitHub / Stripe use for irreversible destructive
+ * is the same pattern account and payment platforms use for irreversible destructive
  * actions — it makes accidental deletion (autofill, click-through,
  * misclicked menu items) statistically impossible without surfacing
  * jarring native dialogs.
@@ -125,7 +127,9 @@ export type BuilderActionState =
   | { status: 'success'; publishedAt?: string | null; blocks?: Block[]; theme?: ThemeOverrides }
   | { status: 'error'; message: string };
 
-async function gate(slug: string): Promise<{ ok: true; userId: string } | { ok: false; message: string }> {
+async function gate(
+  slug: string,
+): Promise<{ ok: true; userId: string } | { ok: false; message: string }> {
   if (!hasDb()) return { ok: false, message: 'Database unavailable' };
   const { userId } = await auth();
   if (!userId) return { ok: false, message: 'Forbidden' };
@@ -418,9 +422,9 @@ export async function discardBuilderDraft(
  * by the Websites settings page so a founder can pause a store
  * during a rebrand without losing the published tree.
  */
-export async function unpublishStorefrontAction(
-  input: { slug: string },
-): Promise<BuilderActionState> {
+export async function unpublishStorefrontAction(input: {
+  slug: string;
+}): Promise<BuilderActionState> {
   const slug = SlugSchema.safeParse(input.slug);
   if (!slug.success) return { status: 'error', message: 'Invalid request' };
   if (!(await rateGate('builder-unpublish', 30))) {
@@ -653,8 +657,13 @@ export async function resetBuilderToTemplate(
     const sf = await getStorefront(slug);
     if (!sf) return { status: 'error', message: 'Storefront not found' };
 
-    const blocks = bootBlocksFromStorefront(sf);
-    const seedTheme = templatePresets[sf.templateId]?.theme ?? null;
+    const isComponentShowcase = isComponentShowcaseSlug(slug);
+    const blocks = isComponentShowcase
+      ? buildComponentShowcaseBlocks()
+      : bootBlocksFromStorefront(sf);
+    const seedTheme = isComponentShowcase
+      ? COMPONENT_SHOWCASE_THEME
+      : (templatePresets[sf.templateId]?.theme ?? null);
     const saved = await saveDraft(slug, blocks, seedTheme);
     if (!saved) return { status: 'error', message: 'Reset failed' };
     await publishDraft(slug);
@@ -667,6 +676,14 @@ export async function resetBuilderToTemplate(
       await publishPageRow(home.id);
     } catch (mirrorErr) {
       console.warn('[resetBuilderToTemplate] home-page mirror failed', mirrorErr);
+    }
+
+    if (isComponentShowcase) {
+      try {
+        await seedTemplateDemoProducts(slug, 'atrium', sf.businessType, sf.locale);
+      } catch (err) {
+        console.warn('[resetBuilderToTemplate] component demo product seed failed', err);
+      }
     }
 
     revalidatePath(`/brief/${slug}`, 'layout');
@@ -709,9 +726,15 @@ export async function seedBuilderIfEmpty(
     if (!resolved.ok) return { status: 'error', message: resolved.message };
     const page = resolved.page;
 
-    const seedTheme = templatePresets[sf.templateId]?.theme ?? null;
+    const isComponentShowcase = isComponentShowcaseSlug(slug);
+    const seedTheme = isComponentShowcase
+      ? COMPONENT_SHOWCASE_THEME
+      : (templatePresets[sf.templateId]?.theme ?? null);
     const themeIsEmpty = Object.keys(sf.themeOverrides ?? {}).length === 0;
     const draftIsEmpty = page.draftBlocks.length === 0;
+    const draftIsComponentShowcaseCurrent =
+      isComponentShowcase && isComponentShowcaseDraftCurrent(page.draftBlocks);
+    const shouldReseedComponentShowcase = isComponentShowcase && !draftIsComponentShowcaseCurrent;
     // Stale-seed detection only applies to the home page — secondary
     // pages start blank and aren't migrated from a legacy auto-seed.
     // Existing stores must not be silently converted into the refreshed
@@ -722,7 +745,7 @@ export async function seedBuilderIfEmpty(
     // Existing, customized draft → leave the block tree alone, but
     // back-fill the template's theme preset (storefront-level) when
     // it's never been written.
-    if (!draftIsEmpty && !draftIsStale) {
+    if (!draftIsEmpty && !draftIsStale && !shouldReseedComponentShowcase) {
       if (themeIsEmpty && seedTheme) {
         const patched = await saveTheme(slug, seedTheme);
         if (patched) {
@@ -741,15 +764,26 @@ export async function seedBuilderIfEmpty(
     // First-open seed (or stale-default migration) installs the
     // template's theme preset (storefront-level) and the template's
     // composition (per-page) so the canvas isn't empty on first open.
-    const blocks = bootBlocksFromStorefront(sf);
+    const blocks = isComponentShowcase
+      ? buildComponentShowcaseBlocks()
+      : bootBlocksFromStorefront(sf);
     if (page.isHome) {
-      const themeForWrite = seedTheme ?? (themeIsEmpty ? null : sf.themeOverrides);
+      const themeForWrite = isComponentShowcase
+        ? seedTheme
+        : (seedTheme ?? (themeIsEmpty ? null : sf.themeOverrides));
       const saved = await saveDraft(slug, blocks, themeForWrite);
       if (!saved) return { status: 'error', message: 'Seed failed' };
     } else if (themeIsEmpty && seedTheme) {
       await saveTheme(slug, seedTheme);
     }
     const seededPage = await savePageDraftBlocks(page.id, blocks);
+    if (isComponentShowcase) {
+      try {
+        await seedTemplateDemoProducts(slug, 'atrium', sf.businessType, sf.locale);
+      } catch (err) {
+        console.warn('[seedBuilderIfEmpty] component demo product seed failed', err);
+      }
+    }
     revalidatePath('/account');
     revalidatePath(`/account/${slug}/preview`);
     return {

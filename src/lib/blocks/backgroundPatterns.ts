@@ -105,7 +105,7 @@ export const BACKGROUND_PATTERNS: readonly BgPattern[] = [
     css: `linear-gradient(${ink(20)} 1px, transparent 1px) 0 0/80px 80px, linear-gradient(90deg, ${ink(20)} 1px, transparent 1px) 0 0/80px 80px, linear-gradient(${ink(7)} 1px, transparent 1px) 0 0/16px 16px, linear-gradient(90deg, ${ink(7)} 1px, transparent 1px) 0 0/16px 16px, ${ground}`,
   },
 
-  // ── STRIPES ───────────────────────────────────────────────────────
+  // ── LINE PATTERNS ─────────────────────────────────────────────────
   {
     id: 'stripes-diag',
     name: 'Diagonal stripes',

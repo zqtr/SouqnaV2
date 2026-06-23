@@ -1,9 +1,11 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useLocale } from 'next-intl';
+import { createPortal, flushSync } from 'react-dom';
 import {
   Collapsible,
   CollapsibleContent,
@@ -26,6 +28,7 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
+import { RouteSkeleton } from '@/components/system/RouteSkeleton';
 import { StoreSwitcher } from './StoreSwitcher';
 import { SETTINGS_NAV_SECTIONS } from './settingsNav';
 import {
@@ -107,9 +110,44 @@ export function AdminSidebar({
   const t = adminText(locale);
   const searchParams = useSearchParams();
   const store = searchParams?.get('store');
+  const [mounted, setMounted] = useState(false);
+  const [pendingTarget, setPendingTarget] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingTarget) return;
+    const id = window.setTimeout(() => setPendingTarget(null), 8_000);
+    return () => window.clearTimeout(id);
+  }, [pendingTarget]);
+
+  useEffect(() => {
+    if (!pendingTarget) return;
+    const targetPath = pendingTarget.split('?')[0] ?? '';
+    if (pathname === targetPath || pathname.startsWith(`${targetPath}/`)) {
+      const id = window.setTimeout(() => setPendingTarget(null), 320);
+      return () => window.clearTimeout(id);
+    }
+    return undefined;
+  }, [pathname, pendingTarget]);
 
   const hrefFor = (href: string) =>
     store && isStoreScopedNavHref(href) ? `${href}?store=${encodeURIComponent(store)}` : href;
+  const startNavLoading = (href: string) => {
+    try {
+      const url = new URL(href, window.location.href);
+      if (!isStoreScopedNavHref(url.pathname)) {
+        setPendingTarget(null);
+        return;
+      }
+      if (url.pathname === window.location.pathname) return;
+      flushSync(() => setPendingTarget(url.pathname + url.search));
+    } catch {
+      // Ignore malformed hrefs; the browser/Next will handle the click.
+    }
+  };
   const salesChannelsOpen =
     pathname === '/account/builder' ||
     pathname.startsWith('/account/builder/') ||
@@ -118,7 +156,13 @@ export function AdminSidebar({
   const settingsOpen =
     pathname === '/account/settings' || pathname.startsWith('/account/settings/');
 
+  const loadingOverlay =
+    mounted && pendingTarget
+      ? createPortal(<AdminNavLoadingOverlay target={pendingTarget} />, document.body)
+      : null;
+
   return (
+    <>
     <Sidebar
       side={side}
       collapsible="icon"
@@ -166,6 +210,7 @@ export function AdminSidebar({
                       item={item}
                       pathname={pathname}
                       href={hrefFor(item.href)}
+                      onNavigate={startNavLoading}
                     />
                   ))}
                 </SidebarMenu>
@@ -180,6 +225,7 @@ export function AdminSidebar({
               items={SALES_CHANNELS_ITEMS}
               pathname={pathname}
               hrefFor={hrefFor}
+              onNavigate={startNavLoading}
             />
 
             <SidebarSeparator />
@@ -196,12 +242,14 @@ export function AdminSidebar({
                     }}
                     pathname={pathname}
                     href={hrefFor('/account/apps')}
+                    onNavigate={startNavLoading}
                   />
                   {installedApps.length > 0 ? (
                     <InstalledAppsList
                       apps={installedApps}
                       pathname={pathname}
                       hrefFor={hrefFor}
+                      onNavigate={startNavLoading}
                     />
                   ) : null}
                 </SidebarMenu>
@@ -224,6 +272,7 @@ export function AdminSidebar({
                   ]}
                   pathname={pathname}
                   hrefFor={hrefFor}
+                  onNavigate={startNavLoading}
                 />
               </>
             ) : null}
@@ -241,6 +290,7 @@ export function AdminSidebar({
                 item={item}
                 pathname={pathname}
                 href={hrefFor(item.href)}
+                onNavigate={startNavLoading}
               />
             ))}
           </SidebarMenu>
@@ -248,6 +298,8 @@ export function AdminSidebar({
       )}
       <SidebarRail className="after:bg-sidebar-border hover:after:bg-sidebar-foreground/45" />
     </Sidebar>
+    {loadingOverlay}
+    </>
   );
 }
 
@@ -257,12 +309,14 @@ function NavGroup({
   items,
   pathname,
   hrefFor,
+  onNavigate,
 }: {
   title: string;
   defaultOpen?: boolean;
   items: NavItem[];
   pathname: string;
   hrefFor: (href: string) => string;
+  onNavigate: (href: string) => void;
 }) {
   return (
     <Collapsible defaultOpen={defaultOpen} className="group/collapsible">
@@ -295,6 +349,7 @@ function NavGroup({
                   item={item}
                   pathname={pathname}
                   href={hrefFor(item.href)}
+                  onNavigate={onNavigate}
                 />
               ))}
             </SidebarMenu>
@@ -431,10 +486,12 @@ function AdminNavItem({
   item,
   pathname,
   href,
+  onNavigate,
 }: {
   item: NavItem;
   pathname: string;
   href: string;
+  onNavigate: (href: string) => void;
 }) {
   const active = item.prefix
     ? pathname === item.href || pathname.startsWith(`${item.href}/`)
@@ -454,6 +511,20 @@ function AdminNavItem({
         <Link
           href={href}
           aria-current={active ? 'page' : undefined}
+          onClick={(event) => {
+            if (
+              active ||
+              event.defaultPrevented ||
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            ) {
+              return;
+            }
+            onNavigate(href);
+          }}
         >
           <span className="mt-0.5 shrink-0 opacity-80">
             <Glyph size={17} />
@@ -471,10 +542,12 @@ function InstalledAppsList({
   apps,
   pathname,
   hrefFor,
+  onNavigate,
 }: {
   apps: InstalledAppNavItem[];
   pathname: string;
   hrefFor: (href: string) => string;
+  onNavigate: (href: string) => void;
 }) {
   return (
     <SidebarMenuSub>
@@ -495,6 +568,20 @@ function InstalledAppsList({
               <Link
                 href={hrefFor(base)}
                 aria-current={active ? 'page' : undefined}
+                onClick={(event) => {
+                  if (
+                    active ||
+                    event.defaultPrevented ||
+                    event.button !== 0 ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  ) {
+                    return;
+                  }
+                  onNavigate(hrefFor(base));
+                }}
               >
                 <AppNavMark app={app} />
                 <span>{app.name}</span>
@@ -504,6 +591,37 @@ function InstalledAppsList({
         );
       })}
     </SidebarMenuSub>
+  );
+}
+
+function AdminNavLoadingOverlay({ target }: { target: string }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 2147483600,
+        background: 'color-mix(in srgb, var(--surface-bg) 72%, transparent)',
+        backdropFilter: 'blur(2px)',
+        WebkitBackdropFilter: 'blur(2px)',
+        overflow: 'hidden',
+        animation: 'souqnaSkelFade 150ms ease-out both',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          opacity: 0.9,
+          pointerEvents: 'none',
+        }}
+      >
+        <RouteSkeleton pathname={target.split('?')[0] ?? '/account'} />
+      </div>
+    </div>
   );
 }
 

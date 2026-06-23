@@ -26,6 +26,10 @@ const schema = z.object({
   BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
   CRANL_RUNTIME_URL: z.string().url().optional(),
   CRANL_API_KEY: z.string().min(16).optional(),
+  FANAR_API_URL: z.string().url().optional(),
+  FANAR_API_KEY: z.string().min(16).optional(),
+  FANAR_MODEL: z.string().min(1).default('QCRI/Fanar-1-9B-Instruct'),
+  FANAR_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(180_000).default(90_000),
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1).optional(),
   CLERK_SECRET_KEY: z.string().min(1).optional(),
   // Signing secret for the Clerk → /api/clerk-webhooks bridge. Pulled from
@@ -40,7 +44,7 @@ const schema = z.object({
   PULSE_IP_SALT: z.string().min(8).optional(),
   // Souqy — paid-tier AI code-emit feature.
   // SOUQY_ADMIN_TOKEN gates the manual `grantAtelierPro` server action
-  // until billing (Stripe / Vercel Marketplace) is wired. Operator-only.
+  // for operator-only billing overrides.
   SOUQY_ADMIN_TOKEN: z.string().min(16).optional(),
   // Pre-baked Vercel Sandbox snapshot ID with tsup + the SDK type defs
   // already installed. Without it every Souqy build pays a ~30s cold
@@ -51,12 +55,15 @@ const schema = z.object({
   // Gateway like the rest of the Souqy stack — see SDK docs at
   // https://sdk.vercel.ai/providers/ai-sdk-providers — so any
   // `provider/model` slug the gateway supports works here.
+  SOUQY_GENERATE_MODEL: z.string().min(1).default('google/gemini-2.5-flash-lite'),
+  SOUQY_REPLICATE_TEXT_MODEL: z.string().min(1).default('qwen/qwen3-235b-a22b-instruct-2507'),
   SOUQY_BLOCK_EDIT_MODEL: z.string().min(1).default('google/gemini-2.5-flash-lite'),
   SOUQY_CHAT_MODEL: z.string().min(1).default('google/gemini-2.5-flash-lite'),
   // Souqy Studio — creative asset generation. These are optional at
   // build-time; the Studio actions return a typed configuration error
   // when none are present rather than falling back to fake assets.
   REPLICATE_API_TOKEN: z.string().min(1).optional(),
+  OPENAI_API_KEY: z.string().min(1).optional(),
   IDEOGRAM_API_KEY: z.string().min(1).optional(),
   FAL_KEY: z.string().min(1).optional(),
   // Apps marketplace.
@@ -80,26 +87,17 @@ const schema = z.object({
   SOUQNA_WHATSAPP_ACCESS_TOKEN: z.string().min(1).optional(),
   // Sent.dm — Souqna-owned unified SMS/WhatsApp/RCS templates.
   SENT_API_KEY: z.string().min(1).optional(),
-  SENT_TEMPLATE_MARKETING_ID: z
-    .string()
-    .uuid()
-    .default('298977b3-2b1e-417f-b21a-01cb736f7e74'),
-  SENT_TEMPLATE_CUSTOMER_CARE_ID: z
-    .string()
-    .uuid()
-    .default('8681a1e0-70af-4960-8874-3668917bfdb6'),
-  SENT_TEMPLATE_FRAUD_ALERT_ID: z
-    .string()
-    .uuid()
-    .default('8f800498-7173-4385-b6ba-dc3947e6ba7d'),
+  SENT_TEMPLATE_MARKETING_ID: z.string().uuid().default('298977b3-2b1e-417f-b21a-01cb736f7e74'),
+  SENT_TEMPLATE_CUSTOMER_CARE_ID: z.string().uuid().default('9d4a9ff0-f30f-459b-bb36-8ac5a439d9a4'),
+  SENT_TEMPLATE_FRAUD_ALERT_ID: z.string().uuid().default('ac10bc6b-cfe9-414d-aecc-ebd39c7cd46b'),
   SENT_TEMPLATE_DELIVERY_NOTIFICATION_ID: z
     .string()
     .uuid()
-    .default('0507e170-a5f5-4cdd-8762-5da349c2851b'),
+    .default('03d03346-b6c3-4d51-8bb1-ada44226ad78'),
   SENT_TEMPLATE_ACCOUNT_NOTIFICATION_ID: z
     .string()
     .uuid()
-    .default('46ce102a-e54d-4ce0-a177-683133b0c551'),
+    .default('9d4a9ff0-f30f-459b-bb36-8ac5a439d9a4'),
   SENT_WEBHOOK_SIGNING_SECRET: z.string().min(1).optional(),
   GIPHY_API_KEY: z.string().min(1).optional(),
   // XAPI — server-only market and social research feed for Souqy. Kept
@@ -111,10 +109,19 @@ const schema = z.object({
   // push security is enabled in EAS; when present it is sent as the
   // bearer token to Expo's push API.
   EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
+  // Flutter merchant app push notifications. Prefer the JSON service
+  // account value; the split vars support hosts that do not handle
+  // multi-line private keys cleanly.
+  FIREBASE_SERVICE_ACCOUNT_JSON: z.string().min(1).optional(),
+  FIREBASE_PROJECT_ID: z.string().min(1).optional(),
+  FIREBASE_CLIENT_EMAIL: z.string().email().optional(),
+  FIREBASE_PRIVATE_KEY: z.string().min(1).optional(),
   // The AI SDK reads VERCEL_OIDC_TOKEN automatically (auto-refreshed on
   // Vercel). Locally `vercel env pull` populates it. We don't validate
   // it in our env schema because the @ai-sdk/gateway package owns the
-  // auth lifecycle entirely.
+  // auth lifecycle entirely. For local development, prefer a stable
+  // AI_GATEWAY_API_KEY in `.env.local`; stale pulled OIDC tokens can be
+  // rejected by the Gateway.
   //
   // ── Observability ─────────────────────────────────────────────────
   // Sentry. `SENTRY_DSN` is the server/edge ingest URL; the public DSN
@@ -140,30 +147,9 @@ const schema = z.object({
   NEXT_PUBLIC_POSTHOG_KEY: z.string().min(1).optional(),
   NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional(),
   POSTHOG_API_KEY: z.string().min(1).optional(),
-  // ── Stripe billing (self-serve checkout + webhook) ────────────────
-  // `STRIPE_SECRET_KEY` is the server-only API key (sk_live_… / sk_test_…).
-  // `STRIPE_WEBHOOK_SECRET` is the signing secret for the
-  // `/api/billing/webhook` endpoint, copied from the Stripe Dashboard
-  // when the webhook is created. Without these, `startCheckout` returns
-  // a typed error and the webhook 503s — gating logic still works.
-  STRIPE_SECRET_KEY: z.string().min(1).optional(),
-  STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
-  // Stripe Price IDs — six SKUs (paid plan × billing cycle). Created in
-  // the Stripe Dashboard against three Products (Pro / Pro+ / Max+),
-  // each with a recurring monthly QAR price and a recurring annual QAR
-  // price. The numeric amounts stay the source of truth in
-  // `src/lib/plans.ts`; these env vars only point Stripe Checkout at
-  // the matching SKU.
-  STRIPE_PRICE_STARTER_MONTHLY: z.string().min(1).optional(),
-  STRIPE_PRICE_STARTER_ANNUAL: z.string().min(1).optional(),
-  STRIPE_PRICE_PRO_MONTHLY: z.string().min(1).optional(),
-  STRIPE_PRICE_PRO_ANNUAL: z.string().min(1).optional(),
-  STRIPE_PRICE_ATELIER_MONTHLY: z.string().min(1).optional(),
-  STRIPE_PRICE_ATELIER_ANNUAL: z.string().min(1).optional(),
   // ── Billing: SkipCash (active provider) ──────────────────────────
   // SkipCash hosted payment links for the three paid plans. Credentials
   // stay server-only; the browser only receives the returned payUrl.
-  BILLING_PROVIDER: z.enum(['skipcash', 'stripe']).default('skipcash'),
   SKIPCASH_ENV: z.enum(['live', 'sandbox']).default('sandbox'),
   SKIPCASH_CLIENT_ID: z.string().min(1).optional(),
   SKIPCASH_KEY_ID: z.string().min(1).optional(),
@@ -184,6 +170,10 @@ const parsed = schema.safeParse({
   BLOB_READ_WRITE_TOKEN: clean(process.env.BLOB_READ_WRITE_TOKEN),
   CRANL_RUNTIME_URL: clean(process.env.CRANL_RUNTIME_URL),
   CRANL_API_KEY: clean(process.env.CRANL_API_KEY),
+  FANAR_API_URL: clean(process.env.FANAR_API_URL),
+  FANAR_API_KEY: clean(process.env.FANAR_API_KEY),
+  FANAR_MODEL: clean(process.env.FANAR_MODEL),
+  FANAR_TIMEOUT_MS: clean(process.env.FANAR_TIMEOUT_MS),
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: clean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY),
   CLERK_SECRET_KEY: clean(process.env.CLERK_SECRET_KEY),
   CLERK_WEBHOOK_SIGNING_SECRET: clean(process.env.CLERK_WEBHOOK_SIGNING_SECRET),
@@ -191,9 +181,12 @@ const parsed = schema.safeParse({
   PULSE_IP_SALT: clean(process.env.PULSE_IP_SALT),
   SOUQY_ADMIN_TOKEN: clean(process.env.SOUQY_ADMIN_TOKEN),
   SOUQY_BUILD_SNAPSHOT_ID: clean(process.env.SOUQY_BUILD_SNAPSHOT_ID),
+  SOUQY_GENERATE_MODEL: clean(process.env.SOUQY_GENERATE_MODEL),
+  SOUQY_REPLICATE_TEXT_MODEL: clean(process.env.SOUQY_REPLICATE_TEXT_MODEL),
   SOUQY_BLOCK_EDIT_MODEL: clean(process.env.SOUQY_BLOCK_EDIT_MODEL),
   SOUQY_CHAT_MODEL: clean(process.env.SOUQY_CHAT_MODEL),
   REPLICATE_API_TOKEN: clean(process.env.REPLICATE_API_TOKEN),
+  OPENAI_API_KEY: clean(process.env.OPENAI_API_KEY),
   IDEOGRAM_API_KEY: clean(process.env.IDEOGRAM_API_KEY),
   FAL_KEY: clean(process.env.FAL_KEY),
   APPS_ENCRYPTION_KEY: clean(process.env.APPS_ENCRYPTION_KEY),
@@ -218,6 +211,10 @@ const parsed = schema.safeParse({
   XAPI_KEY: clean(process.env.XAPI_KEY),
   XAPI_ACTION_HOST: clean(process.env.XAPI_ACTION_HOST),
   EXPO_ACCESS_TOKEN: clean(process.env.EXPO_ACCESS_TOKEN),
+  FIREBASE_SERVICE_ACCOUNT_JSON: clean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON),
+  FIREBASE_PROJECT_ID: clean(process.env.FIREBASE_PROJECT_ID),
+  FIREBASE_CLIENT_EMAIL: clean(process.env.FIREBASE_CLIENT_EMAIL),
+  FIREBASE_PRIVATE_KEY: clean(process.env.FIREBASE_PRIVATE_KEY),
   SENTRY_DSN: clean(process.env.SENTRY_DSN),
   NEXT_PUBLIC_SENTRY_DSN: clean(process.env.NEXT_PUBLIC_SENTRY_DSN),
   SENTRY_ORG: clean(process.env.SENTRY_ORG),
@@ -229,15 +226,6 @@ const parsed = schema.safeParse({
   NEXT_PUBLIC_POSTHOG_KEY: clean(process.env.NEXT_PUBLIC_POSTHOG_KEY),
   NEXT_PUBLIC_POSTHOG_HOST: clean(process.env.NEXT_PUBLIC_POSTHOG_HOST),
   POSTHOG_API_KEY: clean(process.env.POSTHOG_API_KEY),
-  STRIPE_SECRET_KEY: clean(process.env.STRIPE_SECRET_KEY),
-  STRIPE_WEBHOOK_SECRET: clean(process.env.STRIPE_WEBHOOK_SECRET),
-  STRIPE_PRICE_STARTER_MONTHLY: clean(process.env.STRIPE_PRICE_STARTER_MONTHLY),
-  STRIPE_PRICE_STARTER_ANNUAL: clean(process.env.STRIPE_PRICE_STARTER_ANNUAL),
-  STRIPE_PRICE_PRO_MONTHLY: clean(process.env.STRIPE_PRICE_PRO_MONTHLY),
-  STRIPE_PRICE_PRO_ANNUAL: clean(process.env.STRIPE_PRICE_PRO_ANNUAL),
-  STRIPE_PRICE_ATELIER_MONTHLY: clean(process.env.STRIPE_PRICE_ATELIER_MONTHLY),
-  STRIPE_PRICE_ATELIER_ANNUAL: clean(process.env.STRIPE_PRICE_ATELIER_ANNUAL),
-  BILLING_PROVIDER: clean(process.env.BILLING_PROVIDER) as 'skipcash' | 'stripe' | undefined,
   SKIPCASH_ENV: clean(process.env.SKIPCASH_ENV) as 'live' | 'sandbox' | undefined,
   SKIPCASH_CLIENT_ID: clean(process.env.SKIPCASH_CLIENT_ID),
   SKIPCASH_KEY_ID: clean(process.env.SKIPCASH_KEY_ID),
@@ -264,6 +252,10 @@ export const env = parsed.success
       BLOB_READ_WRITE_TOKEN: undefined as string | undefined,
       CRANL_RUNTIME_URL: undefined as string | undefined,
       CRANL_API_KEY: undefined as string | undefined,
+      FANAR_API_URL: undefined as string | undefined,
+      FANAR_API_KEY: undefined as string | undefined,
+      FANAR_MODEL: 'QCRI/Fanar-1-9B-Instruct',
+      FANAR_TIMEOUT_MS: 90_000,
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: undefined as string | undefined,
       CLERK_SECRET_KEY: undefined as string | undefined,
       CLERK_WEBHOOK_SIGNING_SECRET: undefined as string | undefined,
@@ -271,9 +263,12 @@ export const env = parsed.success
       PULSE_IP_SALT: undefined as string | undefined,
       SOUQY_ADMIN_TOKEN: undefined as string | undefined,
       SOUQY_BUILD_SNAPSHOT_ID: undefined as string | undefined,
+      SOUQY_GENERATE_MODEL: 'google/gemini-2.5-flash-lite',
+      SOUQY_REPLICATE_TEXT_MODEL: 'qwen/qwen3-235b-a22b-instruct-2507',
       SOUQY_BLOCK_EDIT_MODEL: 'google/gemini-2.5-flash-lite',
       SOUQY_CHAT_MODEL: 'google/gemini-2.5-flash-lite',
       REPLICATE_API_TOKEN: undefined as string | undefined,
+      OPENAI_API_KEY: undefined as string | undefined,
       IDEOGRAM_API_KEY: undefined as string | undefined,
       FAL_KEY: undefined as string | undefined,
       APPS_ENCRYPTION_KEY: undefined as string | undefined,
@@ -289,15 +284,19 @@ export const env = parsed.success
       SOUQNA_WHATSAPP_ACCESS_TOKEN: undefined as string | undefined,
       SENT_API_KEY: undefined as string | undefined,
       SENT_TEMPLATE_MARKETING_ID: '298977b3-2b1e-417f-b21a-01cb736f7e74',
-      SENT_TEMPLATE_CUSTOMER_CARE_ID: '8681a1e0-70af-4960-8874-3668917bfdb6',
-      SENT_TEMPLATE_FRAUD_ALERT_ID: '8f800498-7173-4385-b6ba-dc3947e6ba7d',
-      SENT_TEMPLATE_DELIVERY_NOTIFICATION_ID: '0507e170-a5f5-4cdd-8762-5da349c2851b',
-      SENT_TEMPLATE_ACCOUNT_NOTIFICATION_ID: '46ce102a-e54d-4ce0-a177-683133b0c551',
+      SENT_TEMPLATE_CUSTOMER_CARE_ID: '9d4a9ff0-f30f-459b-bb36-8ac5a439d9a4',
+      SENT_TEMPLATE_FRAUD_ALERT_ID: 'ac10bc6b-cfe9-414d-aecc-ebd39c7cd46b',
+      SENT_TEMPLATE_DELIVERY_NOTIFICATION_ID: '03d03346-b6c3-4d51-8bb1-ada44226ad78',
+      SENT_TEMPLATE_ACCOUNT_NOTIFICATION_ID: '9d4a9ff0-f30f-459b-bb36-8ac5a439d9a4',
       SENT_WEBHOOK_SIGNING_SECRET: undefined as string | undefined,
       GIPHY_API_KEY: undefined as string | undefined,
       XAPI_KEY: undefined as string | undefined,
       XAPI_ACTION_HOST: 'https://action.xapi.to',
       EXPO_ACCESS_TOKEN: undefined as string | undefined,
+      FIREBASE_SERVICE_ACCOUNT_JSON: undefined as string | undefined,
+      FIREBASE_PROJECT_ID: undefined as string | undefined,
+      FIREBASE_CLIENT_EMAIL: undefined as string | undefined,
+      FIREBASE_PRIVATE_KEY: undefined as string | undefined,
       SENTRY_DSN: undefined as string | undefined,
       NEXT_PUBLIC_SENTRY_DSN: undefined as string | undefined,
       SENTRY_ORG: undefined as string | undefined,
@@ -309,15 +308,6 @@ export const env = parsed.success
       NEXT_PUBLIC_POSTHOG_KEY: undefined as string | undefined,
       NEXT_PUBLIC_POSTHOG_HOST: undefined as string | undefined,
       POSTHOG_API_KEY: undefined as string | undefined,
-      STRIPE_SECRET_KEY: undefined as string | undefined,
-      STRIPE_WEBHOOK_SECRET: undefined as string | undefined,
-      STRIPE_PRICE_STARTER_MONTHLY: undefined as string | undefined,
-      STRIPE_PRICE_STARTER_ANNUAL: undefined as string | undefined,
-      STRIPE_PRICE_PRO_MONTHLY: undefined as string | undefined,
-      STRIPE_PRICE_PRO_ANNUAL: undefined as string | undefined,
-      STRIPE_PRICE_ATELIER_MONTHLY: undefined as string | undefined,
-      STRIPE_PRICE_ATELIER_ANNUAL: undefined as string | undefined,
-      BILLING_PROVIDER: 'skipcash' as 'skipcash' | 'stripe',
       SKIPCASH_ENV: 'sandbox' as 'live' | 'sandbox',
       SKIPCASH_CLIENT_ID: undefined as string | undefined,
       SKIPCASH_KEY_ID: undefined as string | undefined,

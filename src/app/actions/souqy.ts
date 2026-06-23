@@ -15,10 +15,11 @@ import { templatePresets } from '@/lib/templates';
 import { isReserved, isTaken, nextAvailable, slugify } from '@/lib/slug';
 import {
   generateSouqyStorefront,
+  repairSouqyStorefrontBuild,
   repromptSouqyStorefront,
   type GenerateResult,
 } from '@/lib/souqy/generate';
-import { buildSouqyArtifact, type BuildResult } from '@/lib/souqy/build';
+import { buildSouqyArtifact, type BuildOk, type BuildResult } from '@/lib/souqy/build';
 import {
   getSouqyAuditById,
   getSouqyMonthlyCount,
@@ -623,28 +624,28 @@ export async function souqyReprompt(
     return { status: 'error', message: gen.message };
   }
 
-  const built = await buildSouqyArtifact({
+  const build = await buildSouqyOutputWithRepair({
     slug: sf.slug,
-    files: {
-      'index.tsx': gen.output.files['index.tsx']!,
-      'theme.ts': gen.output.files['theme.ts']!,
-    },
+    output: gen.output,
+    clerkUserId: owner.userId,
+    attempts: gen.attempts,
+    usage: gen.usage,
   });
-  if (built.status !== 'ok') {
+  if (build.status !== 'ok') {
     if (auditId != null) {
       await updateSouqyAudit(auditId, {
         status: 'build_failed',
-        meta: { buildStatus: built.status, message: built.message, log: built.log },
+        meta: { buildStatus: build.status, message: build.message, ...build.meta },
       });
     }
-    return { status: 'error', message: built.message };
+    return { status: 'error', message: build.message };
   }
 
-  const sourceConcat = serializeSource(gen.output);
+  const sourceConcat = serializeSource(build.output);
   await setSouqyRevision({
     slug: sf.slug,
-    revision: built.revision,
-    blobUrl: built.blobUrl,
+    revision: build.built.revision,
+    blobUrl: build.built.blobUrl,
     source: sourceConcat,
     brief: null,
   });
@@ -653,18 +654,158 @@ export async function souqyReprompt(
       status: 'success',
       source: sourceConcat,
       meta: {
-        revision: built.revision,
-        bytes: built.bytes,
-        buildMs: built.buildMs,
-        blobUrl: built.blobUrl,
-        attempts: gen.attempts,
-        usage: gen.usage,
+        revision: build.built.revision,
+        bytes: build.built.bytes,
+        buildMs: build.built.buildMs,
+        blobUrl: build.built.blobUrl,
+        attempts: build.attempts,
+        usage: build.usage,
+        repairedBuild: build.repairedBuild,
       },
     });
   }
   revalidatePath(`/account/${sf.slug}/souqy`);
   revalidatePath(`/brief/${sf.slug}`);
-  return { status: 'success', revision: built.revision };
+  return { status: 'success', revision: build.built.revision };
+}
+
+/**
+ * Studio Web prompt: first prompt generates the Souqy source when the
+ * selected storefront is still on the JSON builder; later prompts apply
+ * as diffs to the generated source.
+ */
+export async function souqyDesignStorefront(
+  input: z.input<typeof RepromptSchema>,
+): Promise<SouqyActionState> {
+  const parsed = RepromptSchema.safeParse(input);
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Invalid request' };
+  }
+  const owner = await souqyGate(parsed.data.slug);
+  if (!owner.ok) return { status: 'error', message: owner.message };
+  if (!rateLimit(`souqy-design:${await ipKey()}`, 8, 60_000).ok) {
+    return { status: 'error', message: 'Too many edits â€” give it a moment.' };
+  }
+  if ((await getSouqyMonthlyCount(owner.userId)) >= MONTHLY_GENERATION_CAP) {
+    return {
+      status: 'error',
+      message: `You've reached this month's Souqy quota (${MONTHLY_GENERATION_CAP}).`,
+    };
+  }
+
+  const sf = owner.storefront;
+  const previousSource = (sf as unknown as { souqySource?: string }).souqySource ?? '';
+  if (previousSource) {
+    const auditId = await logSouqyAudit({
+      clerkUserId: owner.userId,
+      storefront: sf.slug,
+      kind: 'reprompt',
+      status: 'pending',
+      prompt: parsed.data.request,
+      meta: { surface: 'studio_web_prompt' },
+    });
+
+    const gen: GenerateResult = await repromptSouqyStorefront({
+      request: parsed.data.request,
+      previousSource,
+      storefront: sf,
+      clerkUserId: owner.userId,
+    });
+    if (gen.status !== 'ok') {
+      if (auditId != null) {
+        await updateSouqyAudit(auditId, {
+          status: gen.status,
+          meta: { message: gen.message, issues: gen.issues ?? [] },
+        });
+      }
+      return { status: 'error', message: gen.message };
+    }
+
+    const build = await buildSouqyOutputWithRepair({
+      slug: sf.slug,
+      output: gen.output,
+      clerkUserId: owner.userId,
+      attempts: gen.attempts,
+      usage: gen.usage,
+    });
+    if (build.status !== 'ok') {
+      if (auditId != null) {
+        await updateSouqyAudit(auditId, {
+          status: 'build_failed',
+          meta: { buildStatus: build.status, message: build.message, ...build.meta },
+        });
+      }
+      return { status: 'error', message: build.message };
+    }
+
+    const sourceConcat = serializeSource(build.output);
+    await setSouqyRevision({
+      slug: sf.slug,
+      revision: build.built.revision,
+      blobUrl: build.built.blobUrl,
+      source: sourceConcat,
+      brief: null,
+    });
+    if (auditId != null) {
+      await updateSouqyAudit(auditId, {
+        status: 'success',
+        source: sourceConcat,
+        meta: {
+          revision: build.built.revision,
+          bytes: build.built.bytes,
+          buildMs: build.built.buildMs,
+          blobUrl: build.built.blobUrl,
+          attempts: build.attempts,
+          usage: build.usage,
+          repairedBuild: build.repairedBuild,
+        },
+      });
+    }
+    revalidatePath(`/account/${sf.slug}/souqy`);
+    revalidatePath(`/brief/${sf.slug}`);
+    return { status: 'success', revision: build.built.revision };
+  }
+
+  const briefMeta = (sf as unknown as { souqyBrief?: Record<string, unknown> }).souqyBrief;
+  const designRequest = parsed.data.request;
+  const brief = {
+    businessName: sf.businessName,
+    slug: sf.slug,
+    businessType: sf.businessType,
+    vibe:
+      typeof briefMeta?.vibe === 'string'
+        ? `${briefMeta.vibe}\n\nWebsite design request: ${designRequest}`
+        : designRequest,
+    locale: sf.locale,
+  };
+
+  const auditId = await logSouqyAudit({
+    clerkUserId: owner.userId,
+    storefront: sf.slug,
+    kind: 'generate',
+    status: 'pending',
+    prompt: designRequest,
+    meta: { source: 'studio_web_prompt' },
+  });
+  const result = await runGenerateAndBuild({
+    storefront: sf,
+    clerkUserId: owner.userId,
+    brief,
+  });
+  if (auditId != null) {
+    await updateSouqyAudit(auditId, {
+      status: result.status === 'ok' ? 'success' : (result.status as never),
+      source: result.status === 'ok' ? result.source : null,
+      meta: result.meta,
+    });
+  }
+
+  if (result.status !== 'ok') {
+    return { status: 'error', message: result.message };
+  }
+  revalidatePath(`/account/${sf.slug}/souqy`);
+  revalidatePath(`/brief/${sf.slug}`);
+  return { status: 'success', revision: result.revision };
 }
 
 /**
@@ -783,40 +924,123 @@ async function runGenerateAndBuild(args: {
       meta: { issues: gen.issues ?? [] },
     };
   }
-  const built = await buildSouqyArtifact({
+  const build = await buildSouqyOutputWithRepair({
     slug: args.storefront.slug,
-    files: {
-      'index.tsx': gen.output.files['index.tsx']!,
-      'theme.ts': gen.output.files['theme.ts']!,
-    },
+    output: gen.output,
+    clerkUserId: args.clerkUserId,
+    attempts: gen.attempts,
+    usage: gen.usage,
   });
-  if (built.status !== 'ok') {
+  if (build.status !== 'ok') {
     return {
-      status: built.status,
-      message: built.message,
-      meta: { log: built.log, attempts: gen.attempts, usage: gen.usage },
+      status: build.status,
+      message: build.message,
+      meta: build.meta,
     };
   }
-  const source = serializeSource(gen.output);
+  const source = serializeSource(build.output);
   await setSouqyRevision({
     slug: args.storefront.slug,
-    revision: built.revision,
-    blobUrl: built.blobUrl,
+    revision: build.built.revision,
+    blobUrl: build.built.blobUrl,
     source,
     brief: args.brief,
   });
   return {
     status: 'ok',
-    revision: built.revision,
+    revision: build.built.revision,
     source,
     meta: {
-      revision: built.revision,
-      bytes: built.bytes,
-      buildMs: built.buildMs,
-      blobUrl: built.blobUrl,
-      attempts: gen.attempts,
-      usage: gen.usage,
+      revision: build.built.revision,
+      bytes: build.built.bytes,
+      buildMs: build.built.buildMs,
+      blobUrl: build.built.blobUrl,
+      attempts: build.attempts,
+      usage: build.usage,
+      repairedBuild: build.repairedBuild,
     },
+  };
+}
+
+async function buildSouqyOutputWithRepair(args: {
+  slug: string;
+  output: SouqyOutput;
+  clerkUserId: string;
+  attempts: number;
+  usage: { inputTokens: number; outputTokens: number };
+}): Promise<
+  | {
+      status: 'ok';
+      built: BuildOk;
+      output: SouqyOutput;
+      attempts: number;
+      usage: { inputTokens: number; outputTokens: number };
+      repairedBuild: boolean;
+    }
+  | {
+      status: Exclude<GenerateResult['status'] | BuildResult['status'], 'ok'>;
+      message: string;
+      meta: Record<string, unknown>;
+    }
+> {
+  let output = args.output;
+  let attempts = args.attempts;
+  let usage = args.usage;
+  let repairedBuild = false;
+
+  for (let buildAttempt = 0; buildAttempt < 2; buildAttempt += 1) {
+    const built = await buildSouqyArtifact({
+      slug: args.slug,
+      files: {
+        'index.tsx': output.files['index.tsx']!,
+        'theme.ts': output.files['theme.ts']!,
+      },
+    });
+
+    if (built.status === 'ok') {
+      return { status: 'ok', built, output, attempts, usage, repairedBuild };
+    }
+
+    if (buildAttempt > 0 || (built.status !== 'tsc_failed' && built.status !== 'bundle_failed')) {
+      return {
+        status: built.status,
+        message: built.message,
+        meta: { log: built.log, attempts, usage, repairedBuild },
+      };
+    }
+
+    const repaired = await repairSouqyStorefrontBuild({
+      output,
+      errorSummary: built.log ?? built.message,
+      clerkUserId: args.clerkUserId,
+    });
+    if (repaired.status !== 'ok') {
+      return {
+        status: repaired.status,
+        message: repaired.message,
+        meta: {
+          log: built.log,
+          issues: repaired.issues ?? [],
+          attempts,
+          usage,
+          repairedBuild,
+        },
+      };
+    }
+
+    output = repaired.output;
+    attempts += repaired.attempts;
+    usage = {
+      inputTokens: usage.inputTokens + repaired.usage.inputTokens,
+      outputTokens: usage.outputTokens + repaired.usage.outputTokens,
+    };
+    repairedBuild = true;
+  }
+
+  return {
+    status: 'tsc_failed',
+    message: 'Souqy output failed type check.',
+    meta: { attempts, usage, repairedBuild },
   };
 }
 

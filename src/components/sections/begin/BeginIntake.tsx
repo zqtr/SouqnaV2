@@ -39,6 +39,7 @@ import { env } from '@/lib/env';
  */
 
 type Path = 'have_business' | 'want_to_start';
+type FawranMode = 'fawran_number' | 'commercial_registration';
 
 const ROOT_DOMAIN = env.BRIEF_ROOT_DOMAIN;
 
@@ -48,6 +49,8 @@ type FormState = {
   slug: string;
   businessType: '' | CreateBriefInput['businessType'];
   templateId: '' | CreateBriefInput['templateId'];
+  fawranMode: FawranMode;
+  fawranNumber: string;
   crNumber: string;
   logoUrl: string;
   logoPrompt: string;
@@ -87,6 +90,8 @@ export function BeginIntake({ locale, copy, currentPlan = 'free' }: Props) {
     slug: '',
     businessType: '',
     templateId: '',
+    fawranMode: 'fawran_number',
+    fawranNumber: '',
     crNumber: '',
     logoUrl: '',
     logoPrompt: '',
@@ -114,12 +119,13 @@ export function BeginIntake({ locale, copy, currentPlan = 'free' }: Props) {
     | 'cr'
     | 'template'
     | 'csv'
+    | 'fawran'
     | 'summary';
   const stepsForPath = (p: '' | Path): StepKey[] => {
     if (p === 'want_to_start')
-      return ['welcome', 'name', 'logo', 'businessType', 'template', 'summary'];
+      return ['welcome', 'name', 'logo', 'businessType', 'template', 'fawran', 'summary'];
     if (p === 'have_business')
-      return ['welcome', 'name', 'logo', 'cr', 'template', 'csv', 'summary'];
+      return ['welcome', 'name', 'logo', 'cr', 'template', 'csv', 'fawran', 'summary'];
     return ['welcome'];
   };
   const steps = stepsForPath(form.ownership);
@@ -178,6 +184,11 @@ export function BeginIntake({ locale, copy, currentPlan = 'free' }: Props) {
     if (key === 'cr') return true; // optional
     if (key === 'template') return form.templateId !== '';
     if (key === 'csv') return true; // optional
+    if (key === 'fawran') {
+      return form.fawranMode === 'commercial_registration'
+        ? form.crNumber.trim().length > 0
+        : form.fawranNumber.trim().length > 0;
+    }
     return true;
   }
 
@@ -211,6 +222,8 @@ export function BeginIntake({ locale, copy, currentPlan = 'free' }: Props) {
         ownership: form.ownership as Path,
         businessType,
         templateId: form.templateId as CreateBriefInput['templateId'],
+        fawranMode: form.fawranMode,
+        fawranNumber: form.fawranNumber.trim(),
         crNumber: form.crNumber.trim(),
         logoUrl: form.logoUrl.trim(),
         slug: form.slug,
@@ -373,6 +386,18 @@ export function BeginIntake({ locale, copy, currentPlan = 'free' }: Props) {
               t={t.step6}
               file={form.csvFile}
               onFile={(f) => update('csvFile', f)}
+              isRtl={isRtl}
+            />
+          )}
+
+          {currentKey === 'fawran' && (
+            <FawranStep
+              mode={form.fawranMode}
+              fawranNumber={form.fawranNumber}
+              crNumber={form.crNumber}
+              onMode={(v) => update('fawranMode', v)}
+              onFawranNumber={(v) => update('fawranNumber', v)}
+              onCrNumber={(v) => update('crNumber', v)}
               isRtl={isRtl}
             />
           )}
@@ -603,87 +628,87 @@ function WelcomeStep({
         style={{ display: 'flex', width: '100%', marginTop: 18 }}
       >
         <a
-        href="/begin/souqy"
-        className="souqy-card"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 16,
-          width: '100%',
-          padding: '20px 22px',
-          background: 'linear-gradient(135deg, rgba(201,169,97,0.12), rgba(201,169,97,0.04))',
-          border: `1px solid ${palette.gold}55`,
-          borderRadius: 6,
-          textDecoration: 'none',
-          color: 'var(--color-sand-pale)',
-          fontFamily: isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)',
-          textAlign: isRtl ? 'right' : 'left',
-          transition: 'all 220ms',
-          flexDirection: isRtl ? 'row-reverse' : 'row',
-        }}
-      >
-        <span
-          aria-hidden
+          href="/begin/souqy"
+          className="souqy-card"
           style={{
-            fontSize: 28,
-            color: palette.gold,
-            fontFamily: 'var(--font-serif), serif',
-            fontStyle: 'italic',
-            flex: '0 0 auto',
-            lineHeight: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 16,
+            width: '100%',
+            padding: '20px 22px',
+            background: 'linear-gradient(135deg, rgba(201,169,97,0.12), rgba(201,169,97,0.04))',
+            border: `1px solid ${palette.gold}55`,
+            borderRadius: 6,
+            textDecoration: 'none',
+            color: 'var(--color-sand-pale)',
+            fontFamily: isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)',
+            textAlign: isRtl ? 'right' : 'left',
+            transition: 'all 220ms',
+            flexDirection: isRtl ? 'row-reverse' : 'row',
           }}
         >
-          ✶
-        </span>
-        <span style={{ flex: 1, minWidth: 0 }}>
           <span
+            aria-hidden
             style={{
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: 10,
-              flexWrap: 'wrap',
-              flexDirection: isRtl ? 'row-reverse' : 'row',
+              fontSize: 28,
+              color: palette.gold,
+              fontFamily: 'var(--font-serif), serif',
+              fontStyle: 'italic',
+              flex: '0 0 auto',
+              lineHeight: 1,
             }}
           >
-            <span style={{ fontWeight: 500, fontSize: 18 }}>{souqy.label}</span>
+            ✶
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
             <span
               style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                color: palette.gold,
-                border: `1px solid ${palette.gold}66`,
-                padding: '2px 8px',
-                borderRadius: 999,
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 10,
+                flexWrap: 'wrap',
+                flexDirection: isRtl ? 'row-reverse' : 'row',
               }}
             >
-              {souqy.chip}
+              <span style={{ fontWeight: 500, fontSize: 18 }}>{souqy.label}</span>
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  color: palette.gold,
+                  border: `1px solid ${palette.gold}66`,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                }}
+              >
+                {souqy.chip}
+              </span>
+            </span>
+            <span
+              style={{
+                display: 'block',
+                marginTop: 6,
+                fontSize: 13,
+                color: 'rgba(232,220,196,0.65)',
+                lineHeight: 1.55,
+              }}
+            >
+              {souqy.helper}
             </span>
           </span>
           <span
+            aria-hidden
             style={{
-              display: 'block',
-              marginTop: 6,
-              fontSize: 13,
-              color: 'rgba(232,220,196,0.65)',
-              lineHeight: 1.55,
+              color: palette.gold,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 18,
+              transform: isRtl ? 'scaleX(-1)' : undefined,
             }}
           >
-            {souqy.helper}
+            →
           </span>
-        </span>
-        <span
-          aria-hidden
-          style={{
-            color: palette.gold,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 18,
-            transform: isRtl ? 'scaleX(-1)' : undefined,
-          }}
-        >
-          →
-        </span>
         </a>
       </MetalFrame>
     </div>
@@ -1175,7 +1200,8 @@ async function generatePromptIconPng(prompt: string, businessName: string): Prom
   if (result.status === 'error') throw new Error(result.message);
   const logo = result.assets.find((asset) => asset.kind === 'logo') ?? result.assets[0];
   if (!logo?.url) throw new Error('Souqy did not return an icon.');
-  if (logo.mimeType === 'image/svg+xml') throw new Error('Souqy returned SVG instead of a raster icon.');
+  if (logo.mimeType === 'image/svg+xml')
+    throw new Error('Souqy returned SVG instead of a raster icon.');
   return logo.url;
 }
 
@@ -1274,6 +1300,178 @@ function CrStep({
         {t.helpers.crNumber}
       </p>
     </div>
+  );
+}
+
+function FawranStep({
+  mode,
+  fawranNumber,
+  crNumber,
+  onMode,
+  onFawranNumber,
+  onCrNumber,
+  isRtl,
+}: {
+  mode: FawranMode;
+  fawranNumber: string;
+  crNumber: string;
+  onMode: (v: FawranMode) => void;
+  onFawranNumber: (v: string) => void;
+  onCrNumber: (v: string) => void;
+  isRtl: boolean;
+}) {
+  const idBase = useId();
+  const copy = isRtl
+    ? {
+        eyebrow: 'Fawran · checkout',
+        title: 'Set up Fawran for checkout.',
+        sub: 'Enter your Fawran number, or use the Commercial Registration option. Fawran will be selected automatically at checkout.',
+        fawran: 'Fawran Number',
+        cr: 'Commercial Registration',
+        fawranPlaceholder: '5500 0000',
+        crPlaceholder: '00000000',
+        ready: 'Auto checkout: Fawran',
+      }
+    : {
+        eyebrow: 'Fawran · checkout',
+        title: 'Set up Fawran for checkout.',
+        sub: 'Enter your Fawran number, or use the Commercial Registration option. Fawran will be selected automatically at checkout.',
+        fawran: 'Fawran Number',
+        cr: 'Commercial Registration',
+        fawranPlaceholder: '5500 0000',
+        crPlaceholder: '00000000',
+        ready: 'Auto checkout: Fawran',
+      };
+  const useCr = mode === 'commercial_registration';
+
+  return (
+    <div>
+      <StepHeading eyebrow={copy.eyebrow} title={copy.title} sub={copy.sub} />
+      <div
+        style={{
+          border: `1px solid ${palette.gold}44`,
+          borderRadius: 6,
+          background: 'rgba(232,220,196,0.025)',
+          padding: 16,
+        }}
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <FawranModeButton
+            active={!useCr}
+            label={copy.fawran}
+            marker="#"
+            onClick={() => onMode('fawran_number')}
+            isRtl={isRtl}
+          />
+          <FawranModeButton
+            active={useCr}
+            label={copy.cr}
+            marker="CR"
+            onClick={() => onMode('commercial_registration')}
+            isRtl={isRtl}
+          />
+        </div>
+
+        <div className="mt-5">
+          {useCr ? (
+            <Field
+              id={`${idBase}-fawran-cr`}
+              label={copy.cr}
+              value={crNumber}
+              onChange={onCrNumber}
+              placeholder={copy.crPlaceholder}
+              isRtl={false}
+              autoComplete="off"
+              maxLength={40}
+            />
+          ) : (
+            <Field
+              id={`${idBase}-fawran-number`}
+              label={copy.fawran}
+              value={fawranNumber}
+              onChange={onFawranNumber}
+              placeholder={copy.fawranPlaceholder}
+              isRtl={false}
+              autoComplete="off"
+              maxLength={40}
+            />
+          )}
+        </div>
+
+        <div
+          className="mt-5 flex items-center justify-between gap-3"
+          style={{
+            border: `1px solid ${palette.gold}40`,
+            borderRadius: 6,
+            background: 'rgba(201,169,97,0.08)',
+            padding: '10px 12px',
+            color: 'var(--color-sand-pale)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            letterSpacing: '0.04em',
+          }}
+        >
+          <span>{copy.ready}</span>
+          <span aria-hidden style={{ color: palette.gold, fontWeight: 700 }}>
+            $$$
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FawranModeButton({
+  active,
+  label,
+  marker,
+  onClick,
+  isRtl,
+}: {
+  active: boolean;
+  label: string;
+  marker: string;
+  onClick: () => void;
+  isRtl: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      style={{
+        border: `1px solid ${active ? palette.gold : 'rgba(232,220,196,0.18)'}`,
+        borderRadius: 6,
+        background: active ? 'rgba(201,169,97,0.12)' : 'rgba(232,220,196,0.02)',
+        color: active ? palette.gold : 'var(--color-sand-pale)',
+        padding: '15px 14px',
+        fontFamily: isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        cursor: 'pointer',
+        textAlign: isRtl ? 'right' : 'left',
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 999,
+          border: `1px solid ${active ? palette.gold : 'rgba(232,220,196,0.24)'}`,
+          display: 'grid',
+          placeItems: 'center',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          flex: '0 0 auto',
+        }}
+      >
+        {marker}
+      </span>
+      <span style={{ fontWeight: 500 }}>{label}</span>
+    </button>
   );
 }
 
@@ -1394,7 +1592,6 @@ function TemplateStep({
     </div>
   );
 }
-
 
 function TemplateTierBadge({ plan }: { plan: Plan }) {
   const limits = PLAN_LIMITS[plan];
@@ -1597,6 +1794,17 @@ function SummaryStep({
         : isRtl
           ? 'بدون شعار'
           : 'No logo',
+    },
+    {
+      label: 'Checkout',
+      value:
+        form.fawranMode === 'commercial_registration'
+          ? form.crNumber.trim()
+            ? 'Fawran via CR'
+            : 'Fawran'
+          : form.fawranNumber.trim()
+            ? `Fawran ••••${form.fawranNumber.trim().slice(-4)}`
+            : 'Fawran',
     },
   ];
   if (form.ownership === 'have_business') {
@@ -1839,6 +2047,31 @@ function SuccessPanel({
       >
         ◈ {title.toUpperCase()}
       </div>
+      <motion.div
+        aria-hidden
+        initial={{ opacity: 0, y: 8, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.34, ease: [0.2, 0.7, 0.15, 1] }}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minWidth: 92,
+          height: 46,
+          marginBottom: 16,
+          borderRadius: 999,
+          border: `1px solid ${palette.gold}66`,
+          background: 'rgba(201,169,97,0.10)',
+          color: palette.gold,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 18,
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          boxShadow: `0 18px 42px ${palette.gold}22`,
+        }}
+      >
+        $$$
+      </motion.div>
       <p style={{ fontSize: 18, lineHeight: 1.55, margin: 0, marginBottom: 16 }}>{body}</p>
       {importMessage ? (
         <p

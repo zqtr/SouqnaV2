@@ -1,5 +1,6 @@
 import type { BlockRenderProps } from './BlockContext';
 import type { MawidBlockProps } from '@/lib/blocks/types';
+import { COMPONENT_SHOWCASE_EVENT_ID } from '@/lib/blocks/componentShowcase';
 import { getInstalledApp } from '@/lib/apps/installed';
 import {
   getMawidSettings,
@@ -29,6 +30,10 @@ export async function MawidBlock({ block, ctx }: BlockRenderProps<MawidBlockProp
     ? ctx.products.find((p) => p.id === block.props.productId)
     : null;
 
+  if (eventId === COMPONENT_SHOWCASE_EVENT_ID) {
+    return <MawidShowcaseCard block={block} ctx={ctx} targetIso={fallbackTarget} />;
+  }
+
   const installed = await getInstalledApp(slug, 'mawid').catch(() => null);
   if (!installed || !installed.enabled) {
     return ctx.isPreview ? (
@@ -42,26 +47,43 @@ export async function MawidBlock({ block, ctx }: BlockRenderProps<MawidBlockProp
   const settings = await getMawidSettings(slug);
   if (!settings.enabled) {
     return ctx.isPreview ? (
-      <MawidSetupCard title="Mawid is disabled" body="Enable Mawid in Apps to show this countdown publicly." />
+      <MawidSetupCard
+        title="Mawid is disabled"
+        body="Enable Mawid in Apps to show this countdown publicly."
+      />
     ) : null;
   }
   const event = eventId ? getEventById(settings, eventId) : null;
-  if (event && !event.enabled) return ctx.isPreview ? (
-    <MawidSetupCard title="This Mawid event is disabled" body="Enable the event, or use the block-level time controls." />
-  ) : null;
+  if (event && !event.enabled)
+    return ctx.isPreview ? (
+      <MawidSetupCard
+        title="This Mawid event is disabled"
+        body="Enable the event, or use the block-level time controls."
+      />
+    ) : null;
   if (eventId && !event) {
     return ctx.isPreview ? (
-      <MawidSetupCard title="Choose a Mawid event" body="The saved event id was not found. Pick another event or use the launch time field." />
+      <MawidSetupCard
+        title="Choose a Mawid event"
+        body="The saved event id was not found. Pick another event or use the launch time field."
+      />
     ) : null;
   }
   if (!event && !fallbackTarget) {
     return ctx.isPreview ? (
-      <MawidSetupCard title="Set a launch time" body="Pick a product and a launch time in the inspector to make this countdown visible." />
+      <MawidSetupCard
+        title="Set a launch time"
+        body="Pick a product and a launch time in the inspector to make this countdown visible."
+      />
     ) : null;
   }
 
   const now = new Date();
-  const phase = event ? mawidPhase(event, now) : Date.parse(fallbackTarget!) > now.getTime() ? 'pre' : 'live';
+  const phase = event
+    ? mawidPhase(event, now)
+    : Date.parse(fallbackTarget!) > now.getTime()
+      ? 'pre'
+      : 'live';
   if (event && phase === 'pre' && event.preLaunch === 'hide') return null;
   if (event && phase === 'ended' && event.postLaunch === 'hide') return null;
 
@@ -111,7 +133,16 @@ export async function MawidBlock({ block, ctx }: BlockRenderProps<MawidBlockProp
             color: accent.startsWith('--') ? `var(${accent})` : accent,
           }}
         >
-          ◷ {event ? phaseLabel(phase, event, isAr) : phase === 'pre' ? (isAr ? 'يبدأ خلال' : 'Live in') : (isAr ? 'متاح الآن' : 'Live now')}
+          ◷{' '}
+          {event
+            ? phaseLabel(phase, event, isAr)
+            : phase === 'pre'
+              ? isAr
+                ? 'يبدأ خلال'
+                : 'Live in'
+              : isAr
+                ? 'متاح الآن'
+                : 'Live now'}
         </span>
         <h2
           style={{
@@ -164,6 +195,69 @@ export async function MawidBlock({ block, ctx }: BlockRenderProps<MawidBlockProp
   );
 }
 
+function MawidShowcaseCard({
+  block,
+  ctx,
+  targetIso,
+}: BlockRenderProps<MawidBlockProps> & { targetIso: string | null }) {
+  const isAr = ctx.isRtl;
+  const accent = 'var(--sf-accent)';
+  const variant = block.props.variant ?? 'banner';
+  const target = targetIso ?? new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+  return (
+    <section style={variantShell(variant, accent)}>
+      <header style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            color: accent,
+          }}
+        >
+          ◇ {isAr ? 'يبدأ خلال' : 'Live in'}
+        </span>
+        <h2
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-serif, var(--font-sans))',
+            fontWeight: 'var(--sf-heading-weight, 400)' as unknown as number,
+            fontSize: 'clamp(24px, 3vw, 36px)',
+            lineHeight: 1.15,
+            color: 'var(--sf-ink)',
+          }}
+        >
+          {block.props.heading?.trim() || (isAr ? 'إطلاق بوقت محدد' : 'Scheduled launch')}
+        </h2>
+        {block.props.subheading ? (
+          <p
+            style={{
+              margin: 0,
+              fontSize: 14.5,
+              color: 'color-mix(in srgb, var(--sf-ink) 70%, transparent)',
+              maxWidth: 640,
+            }}
+          >
+            {block.props.subheading}
+          </p>
+        ) : null}
+      </header>
+      <MawidCountdown
+        targetIso={target}
+        variant={variant}
+        size="md"
+        accent="--sf-accent"
+        showDays
+        showHours
+        showMinutes
+        showSeconds={false}
+        locale={ctx.storefront.locale}
+      />
+    </section>
+  );
+}
+
 function resolveBlockTarget(startsAt?: string): string | null {
   if (!startsAt) return null;
   const parsed = Date.parse(startsAt);
@@ -211,18 +305,20 @@ function MawidSetupCard({ title, body }: { title: string; body: string }) {
       <strong style={{ fontFamily: 'var(--font-serif, var(--font-sans))', fontSize: 22 }}>
         ◷ {title}
       </strong>
-      <p style={{ margin: 0, fontSize: 14, color: 'color-mix(in srgb, var(--sf-ink) 68%, transparent)' }}>
+      <p
+        style={{
+          margin: 0,
+          fontSize: 14,
+          color: 'color-mix(in srgb, var(--sf-ink) 68%, transparent)',
+        }}
+      >
         {body}
       </p>
     </section>
   );
 }
 
-function phaseLabel(
-  phase: 'pre' | 'live' | 'ended',
-  event: MawidEvent,
-  isAr: boolean,
-): string {
+function phaseLabel(phase: 'pre' | 'live' | 'ended', event: MawidEvent, isAr: boolean): string {
   if (phase === 'pre') return isAr ? event.countdown.labelAr : event.countdown.labelEn;
   if (phase === 'live') return isAr ? event.countdown.finishedAr : event.countdown.finishedEn;
   return isAr ? 'انتهى' : 'Ended';

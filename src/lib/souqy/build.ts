@@ -4,6 +4,9 @@ import { Sandbox } from '@vercel/sandbox';
 import { put } from '@vercel/blob';
 import { env } from '@/lib/env';
 import {
+  reactPackageJson,
+  reactStubJs,
+  reactTypesDts,
   souqnaSdkDts,
   souqnaSdkPackageJson,
   souqnaSdkStubJs,
@@ -237,6 +240,8 @@ async function materialize(
   files: BuildInput['files'],
 ): Promise<void> {
   await sandbox.runCommand('mkdir', ['-p', `${PROJECT_ROOT}/node_modules/@souqna/sdk`]);
+  await sandbox.runCommand('mkdir', ['-p', `${PROJECT_ROOT}/node_modules/@types/react`]);
+  await sandbox.runCommand('mkdir', ['-p', `${PROJECT_ROOT}/node_modules/react`]);
   await writeFile(sandbox, `${PROJECT_ROOT}/index.tsx`, files['index.tsx']);
   await writeFile(sandbox, `${PROJECT_ROOT}/theme.ts`, files['theme.ts']);
   await writeFile(sandbox, `${PROJECT_ROOT}/tsconfig.json`, tsconfigJson());
@@ -255,6 +260,14 @@ async function materialize(
     `${PROJECT_ROOT}/node_modules/@souqna/sdk/index.js`,
     souqnaSdkStubJs(),
   );
+  await writeFile(sandbox, `${PROJECT_ROOT}/node_modules/@types/react/index.d.ts`, reactTypesDts());
+  await writeFile(
+    sandbox,
+    `${PROJECT_ROOT}/node_modules/react/package.json`,
+    reactPackageJson(),
+  );
+  await writeFile(sandbox, `${PROJECT_ROOT}/node_modules/react/index.js`, reactStubJs());
+  await writeFile(sandbox, `${PROJECT_ROOT}/node_modules/react/index.d.ts`, reactTypesDts());
 }
 
 async function writeFile(

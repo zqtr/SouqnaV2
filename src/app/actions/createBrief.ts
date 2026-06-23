@@ -21,17 +21,23 @@ import {
 import { isReserved, isTaken, nextAvailable, slugify } from '@/lib/slug';
 import { hasDb } from '@/lib/db';
 import { isTemplateUnlocked, minPlanForTemplate, templatePresets } from '@/lib/templates';
-import { getPlan, patchPlanMeta, PLAN_LIMITS, storefrontCapForPlan } from '@/lib/billing';
+import {
+  getPlan,
+  patchPlanMeta,
+  PLAN_LIMITS,
+  planUnlocksOnlinePayments,
+  storefrontCapForPlan,
+} from '@/lib/billing';
 import { logEvent } from '@/lib/events';
 import { bootBlocksFromStorefront } from '@/lib/blocks/boot';
 import { seedTemplateDemoProducts } from '@/lib/blocks/demoProducts';
 import { pushFirstWebsiteCongratsNotification } from '@/lib/notifications';
 import { sendSouqnaStoreCreatedTemplate } from '@/lib/apps/whatsapp';
+import { ensureHomePage, publishPage, saveDraftBlocks } from '@/lib/storefrontPages';
 import {
-  ensureHomePage,
-  publishPage,
-  saveDraftBlocks,
-} from '@/lib/storefrontPages';
+  DEFAULT_CHECKOUT_SETTINGS,
+  writeStorefrontCheckoutSettings,
+} from '@/lib/storefrontSettings';
 
 /**
  * createBrief — provisions a new storefront from the /begin intake.
@@ -78,6 +84,11 @@ const Schema = z.object({
     'something_else',
   ]),
   templateId: z.enum(TEMPLATE_IDS),
+  fawranMode: z
+    .enum(['fawran_number', 'commercial_registration'])
+    .optional()
+    .default('fawran_number'),
+  fawranNumber: z.string().trim().max(40).optional().or(z.literal('')).default(''),
   crNumber: z.string().trim().max(40).optional().or(z.literal('')).default(''),
   logoUrl: z
     .string()
@@ -138,6 +149,8 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
   const data = parsed.data;
   const locale = data.locale as Locale;
   const tBegin = getCopy(locale).begin;
+  const fawranCredential =
+    data.fawranMode === 'commercial_registration' ? data.crNumber.trim() : data.fawranNumber.trim();
 
   if (data.website.length > 0) {
     return {
@@ -156,6 +169,7 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
   // Plan-tier gates. Both run before any DB write so a founder hitting
   // their cap never gets a half-provisioned storefront.
   const callerPlan = await getPlan(userId);
+  const canAcceptOnlinePayments = planUnlocksOnlinePayments(callerPlan);
   let existingStorefrontCount: number | null = null;
 
   // 1. Template tier — block, with an upsell CTA, if the caller picked
@@ -277,6 +291,29 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
   } catch (err) {
     console.error('[createBrief] insert failed', err);
     return { status: 'error', message: tBegin.error.generic };
+  }
+
+  try {
+    const enableFawran = canAcceptOnlinePayments && fawranCredential.length > 0;
+    await writeStorefrontCheckoutSettings(finalSlug, {
+      ...DEFAULT_CHECKOUT_SETTINGS,
+      paymentMethods: enableFawran ? ['fawran'] : ['cod'],
+      bankDetails: enableFawran
+        ? {
+            accountName: data.businessName,
+            bankName: 'Fawran',
+            iban: 'Fawran',
+            notes:
+              data.fawranMode === 'commercial_registration'
+                ? `Commercial Registration: ${fawranCredential}`
+                : `Fawran Number: ${fawranCredential}`,
+          }
+        : null,
+      requiredPolicies: [],
+      currency: 'QAR',
+    });
+  } catch (err) {
+    console.warn('[createBrief] Fawran checkout setup failed', err);
   }
 
   // Seed themed demo products so the new storefront's product blocks

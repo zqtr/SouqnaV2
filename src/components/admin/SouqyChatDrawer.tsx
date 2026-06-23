@@ -18,8 +18,6 @@ type Props = {
   onClose: () => void;
 };
 
-type SouqyMode = 'ask' | 'agent';
-
 type Plan = {
   id: string;
   summary: string;
@@ -51,7 +49,6 @@ export function SouqyChatDrawer({ open, storefront, onClose }: Props) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<SouqyChatMessageDto[]>([]);
   const [draft, setDraft] = useState('');
-  const [mode, setMode] = useState<SouqyMode>('ask');
   const [error, setError] = useState<string | null>(null);
   const [loading, startTransition] = useTransition();
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -111,7 +108,6 @@ export function SouqyChatDrawer({ open, storefront, onClose }: Props) {
         storefrontSlug: storefront.slug,
         conversationId,
         message: value,
-        mode,
       });
       if (res.status === 'success') {
         setConversationId(res.conversationId);
@@ -141,8 +137,7 @@ export function SouqyChatDrawer({ open, storefront, onClose }: Props) {
     });
   }
 
-  function setQuickPrompt(prompt: string, nextMode: SouqyMode = mode) {
-    setMode(nextMode);
+  function setQuickPrompt(prompt: string) {
     setDraft(prompt);
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }
@@ -169,7 +164,7 @@ export function SouqyChatDrawer({ open, storefront, onClose }: Props) {
             </div>
             <div className="souqy-status">
               <span aria-hidden />
-              {mode === 'ask' ? 'Ready to answer' : 'Staging changes'}
+              Auto-detecting request
             </div>
             <div className="souqy-signal" aria-hidden>
               <span />
@@ -228,34 +223,24 @@ export function SouqyChatDrawer({ open, storefront, onClose }: Props) {
             icon={<BagIcon />}
             label="Products"
             onClick={() =>
-              setQuickPrompt(
-                'Review my products and tell me what I should add, edit, or publish next.',
-                'ask',
-              )
+              setQuickPrompt('Review my products and tell me what I should add, edit, or publish next.')
             }
           />
           <ToolChip
             icon={<ChartIcon />}
             label="SEO"
-            onClick={() =>
-              setQuickPrompt('Recommend a stronger SEO direction for this store.', 'ask')
-            }
+            onClick={() => setQuickPrompt('Recommend a stronger SEO direction for this store.')}
           />
           <ToolChip
             icon={<TagIcon />}
             label="Bulk edit"
-            onClick={() =>
-              setQuickPrompt('Stage a batch edit plan for products that need cleanup.', 'agent')
-            }
+            onClick={() => setQuickPrompt('Stage a batch edit plan for products that need cleanup.')}
           />
           <ToolChip
             icon={<GridIcon />}
             label="Apps"
             onClick={() =>
-              setQuickPrompt(
-                'Which Souqna apps or OAuth plugins should I connect for this store?',
-                'ask',
-              )
+              setQuickPrompt('Which Souqna apps or OAuth plugins should I connect for this store?')
             }
           />
         </div>
@@ -267,26 +252,6 @@ export function SouqyChatDrawer({ open, storefront, onClose }: Props) {
             submit();
           }}
         >
-          <div className="souqy-mode" aria-label="Assistant mode">
-            <button
-              type="button"
-              className={mode === 'ask' ? 'is-active' : ''}
-              onClick={() => setMode('ask')}
-              disabled={loading}
-            >
-              Ask
-              <span>Info, ideas, recommendations</span>
-            </button>
-            <button
-              type="button"
-              className={mode === 'agent' ? 'is-active' : ''}
-              onClick={() => setMode('agent')}
-              disabled={loading}
-            >
-              Agent
-              <span>Stage commands for Apply</span>
-            </button>
-          </div>
           <div className="souqy-input-wrap">
             <textarea
               ref={inputRef}
@@ -301,11 +266,7 @@ export function SouqyChatDrawer({ open, storefront, onClose }: Props) {
               dir="auto"
               maxLength={1600}
               disabled={!storefront || loading}
-              placeholder={
-                mode === 'ask'
-                  ? 'Ask for ideas, recommendations, or store advice...'
-                  : 'Tell Agent what to stage or execute...'
-              }
+              placeholder="Ask for advice or describe the change you want..."
               aria-label="Ask assistant"
             />
             <button
@@ -321,11 +282,11 @@ export function SouqyChatDrawer({ open, storefront, onClose }: Props) {
           </div>
           {activePlan ? (
             <div className="souqy-compose-hint">Review pending plan above before applying.</div>
-          ) : mode === 'ask' ? (
+          ) : (
             <div className="souqy-compose-hint">
-              Ask mode only answers. Switch to Agent to stage executable changes.
+              Souqy auto-detects whether to answer or stage supported changes.
             </div>
-          ) : null}
+          )}
         </form>
       </aside>
     </>
@@ -576,7 +537,7 @@ function StarterGuide({
   onUsePrompt,
 }: {
   storefront: StorefrontSummary;
-  onUsePrompt: (prompt: string, mode?: SouqyMode) => void;
+  onUsePrompt: (prompt: string) => void;
 }) {
   const storeParam = encodeURIComponent(storefront.slug);
   const recommendations = [
@@ -588,20 +549,17 @@ function StarterGuide({
         ? 'Check your hero, product images, and SEO so the first visit feels intentional.'
         : 'Add a few real products, confirm contact details, then open the builder and publish.',
       prompt: 'Give me a short launch checklist for this store in Souqna style.',
-      mode: 'ask' as SouqyMode,
     },
     {
       title: 'Add or clean up products',
       body: 'Souqna can handle product creation, product copy, categories, and bulk-style edits from one request.',
       prompt: 'Stage a safe product cleanup plan for this store.',
-      mode: 'agent' as SouqyMode,
     },
     {
       title: 'Try Apps when you are ready',
       body: 'Use Apps for OAuth-based email, commerce, messaging, and growth integrations as they come online.',
       prompt:
         'Which OAuth plugins should this store connect first for email, analytics, and customer follow-up?',
-      mode: 'ask' as SouqyMode,
     },
   ];
 
@@ -616,7 +574,7 @@ function StarterGuide({
           <button
             key={item.title}
             type="button"
-            onClick={() => onUsePrompt(item.prompt, item.mode)}
+            onClick={() => onUsePrompt(item.prompt)}
           >
             <strong>{item.title}</strong>
             <span>{item.body}</span>
@@ -690,6 +648,17 @@ function formatTime(iso: string): string {
 
 function cleanAssistantCopy(value: string): string {
   return value
+    .replace(
+      /\bAsk mode only answers\.?\s*Switch to Agent(?: mode)? to stage executable changes\.?/giu,
+      'Souqy auto-detects whether to answer or stage supported changes.',
+    )
+    .replace(/\bswitch to Agent mode\b/giu, 'give me the exact change')
+    .replace(/\bswitch to Agent\b/giu, 'give me the exact change')
+    .replace(/\bswitch to Ask mode\b/giu, 'ask it directly')
+    .replace(/\bAgent mode\b/giu, 'the supported change workflow')
+    .replace(/\bAsk mode\b/giu, 'advisory chat')
+    .replace(/وضع\s*Ask/giu, 'المحادثة الإرشادية')
+    .replace(/وضع\s*Agent/giu, 'مسار التغييرات المدعومة')
     .replace(/\bSouqy\s+v1\b/gi, 'Assistant')
     .replace(/\bSouqy\b/g, 'the assistant')
     .replace(/\bsouqy\b/g, 'the assistant')

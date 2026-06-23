@@ -12,7 +12,7 @@ import {
   markOnlinePaymentSucceeded,
 } from '@/lib/checkout-orders';
 import { getStorefrontSkipCashCredentials } from '@/lib/storefrontSkipcash';
-import { recordPlatformFeeForPaidOrder } from '@/lib/platformFees';
+import { recordPlatformPayoutForPaidOrder } from '@/lib/platformPayouts';
 import { getStorefront } from '@/lib/brief';
 import { sendSentPaymentStatusNotification } from '@/lib/sent';
 
@@ -45,7 +45,10 @@ export async function POST(req: Request) {
     }
   } else {
     const credentials = await getStorefrontSkipCashCredentials(order.storefrontSlug);
-    if (credentials?.webhookKey && !verifySkipCashWebhookSignatureWithKey(payload, signature, credentials.webhookKey)) {
+    if (
+      credentials?.webhookKey &&
+      !verifySkipCashWebhookSignatureWithKey(payload, signature, credentials.webhookKey)
+    ) {
       return NextResponse.json({ ok: false, error: 'bad_signature' }, { status: 401 });
     }
   }
@@ -54,7 +57,7 @@ export async function POST(req: Request) {
   if (statusId === 2) {
     const updated = await markOnlinePaymentSucceeded(order.id, order.storefrontSlug);
     if (updated) {
-      await recordPlatformFeeForPaidOrder(updated);
+      await recordPlatformPayoutForPaidOrder(updated);
       await notifyPaymentStatus(updated, 'paid');
     }
   } else if (statusId === 3 || statusId === 4 || statusId === 5) {
@@ -78,7 +81,7 @@ async function notifyPaymentStatus(
       status,
       idempotencyKey: `skipcash-${status}-${order.id}`,
     });
-    if (sent.status === 'error') {
+    if (sent.status !== 'sent') {
       console.warn('[checkout.skipcash-webhook] Sent notification failed', sent.reason);
     }
   } catch (err) {

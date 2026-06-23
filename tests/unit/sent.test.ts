@@ -21,16 +21,17 @@ describe('Sent.dm helpers', () => {
     const sent = await loadSent();
     expect(sent.SENT_TEMPLATE_IDS).toEqual({
       marketing: '298977b3-2b1e-417f-b21a-01cb736f7e74',
-      customer_care: '8681a1e0-70af-4960-8874-3668917bfdb6',
-      fraud_alert: '8f800498-7173-4385-b6ba-dc3947e6ba7d',
-      delivery_notification: '0507e170-a5f5-4cdd-8762-5da349c2851b',
-      account_notification: '46ce102a-e54d-4ce0-a177-683133b0c551',
+      customer_care: '9d4a9ff0-f30f-459b-bb36-8ac5a439d9a4',
+      fraud_alert: 'ac10bc6b-cfe9-414d-aecc-ebd39c7cd46b',
+      delivery_notification: '03d03346-b6c3-4d51-8bb1-ada44226ad78',
+      account_notification: '9d4a9ff0-f30f-459b-bb36-8ac5a439d9a4',
     });
-    expect(sent.SENT_ORDER_TEMPLATE_IDS).toMatchObject({
-      confirmed: '541ef481-732f-4043-9633-f2b32a697bb1',
-      preparing: '2d98ebc9-df8a-430d-8840-52efd917f47e',
-      shipped: '7ff89a1e-4856-4dcb-b043-484ea6a8d4e1',
-      delivered: '14df81df-3897-4128-b9bb-8cafe0839f4d',
+    expect(sent.SENT_ORDER_TEMPLATE_IDS).toEqual({
+      pending: '1539350971245152',
+      confirmed: '2277019266458305',
+      preparing: '980516908223295',
+      shipped: '4498195207132467',
+      delivered: '904381476010781',
     });
   });
 
@@ -71,72 +72,6 @@ describe('Sent.dm helpers', () => {
     });
   });
 
-  it('sends lifecycle order notifications with the approved sent.dm order template id', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 202,
-      json: async () => ({ data: { messages: [{ id: 'msg_order' }] } }),
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const { sendSentDeliveryNotification } = await loadSent({ SENT_API_KEY: 'test_key' });
-
-    await expect(
-      sendSentDeliveryNotification({
-        phone: '55554444',
-        storeName: 'Thisisatest',
-        idempotencyKey: 'order-status-confirmed-A28C77C7',
-        order: {
-          id: 'A28C77C7',
-          storefrontSlug: 'thisisatest',
-          customerName: 'Abdulla',
-          customerPhone: '55554444',
-          customerEmail: null,
-          address: null,
-          paymentMethod: 'cod',
-          paymentStatus: 'unpaid',
-          orderStatus: 'confirmed',
-          currency: 'QAR',
-          subtotalQar: 6000,
-          shippingQar: 0,
-          taxQar: 0,
-          totalQar: 6000,
-          planSnapshot: '{}',
-          platformFeeBps: 0,
-          platformFeeQar: 0,
-          sellerNetQar: 6000,
-          collectionMode: 'offline',
-          platformProvider: null,
-          platformFeeStatus: 'not_due',
-          payoutStatus: 'not_applicable',
-          acceptedPolicies: [],
-          notes: null,
-          metadata: null,
-          createdAt: '2026-06-16T00:00:00.000Z',
-          updatedAt: '2026-06-16T00:00:00.000Z',
-          items: [],
-        },
-      }),
-    ).resolves.toMatchObject({ status: 'sent', messageId: 'msg_order' });
-
-    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
-      'Idempotency-Key': 'order-status-confirmed-A28C77C7',
-    });
-    expect(request).toEqual({
-      to: ['+97455554444'],
-      channel: ['whatsapp'],
-      template: {
-        id: '541ef481-732f-4043-9633-f2b32a697bb1',
-        parameters: {
-          customerName: 'Abdulla',
-          orderNumber: 'A28C77C7',
-          storeName: 'Thisisatest',
-          orderTotal: 'QAR 6,000',
-        },
-      },
-    });
-  });
-
   it('adds generic Sent template variable aliases before sending', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -166,13 +101,18 @@ describe('Sent.dm helpers', () => {
       to: ['+97455554444'],
       sandbox: true,
       template: {
-        id: '46ce102a-e54d-4ce0-a177-683133b0c551',
+        id: '9d4a9ff0-f30f-459b-bb36-8ac5a439d9a4',
         parameters: {
           customerName: 'Maha',
           storeName: 'Test',
           subject: 'Welcome',
           message: 'Your store is ready.',
           actionUrl: 'https://souqna.qa/account',
+          foundername: 'Maha',
+          dashboardURL: 'https://souqna.qa/account',
+          founder_name: 'Maha',
+          store_name: 'Test',
+          dashboard_url: 'https://souqna.qa/account',
           var_1: 'Maha',
           var_2: 'Test',
           var_3: 'Welcome',
@@ -180,6 +120,177 @@ describe('Sent.dm helpers', () => {
           var_5: 'https://souqna.qa/account',
         },
       },
+    });
+  });
+
+  it('adds approved order template variables before delivery sends', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({ data: { messages: [{ id: 'msg_123' }] } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { sendSentTemplate } = await loadSent({ SENT_API_KEY: 'test_key' });
+
+    await sendSentTemplate({
+      kind: 'delivery_notification',
+      to: ['55554444'],
+      parameters: {
+        customerName: 'Maha',
+        storeName: 'Test',
+        orderNumber: '#ABC',
+        orderStatus: 'pending',
+        total: 'QAR 130',
+        actionUrl: 'https://test.souqna.qa/checkout/thank-you/order',
+        storeUrl: 'https://test.souqna.qa',
+      },
+    });
+
+    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(request).toMatchObject({
+      template: {
+        id: '03d03346-b6c3-4d51-8bb1-ada44226ad78',
+        parameters: {
+          customer_name: 'Maha',
+          store_name: 'Test',
+          order_number: '#ABC',
+          order_total: 'QAR 130',
+          order_url: 'https://test.souqna.qa/checkout/thank-you/order',
+          store_url: 'https://test.souqna.qa',
+          visit_store_url: 'https://test.souqna.qa',
+          button_url: 'https://test.souqna.qa',
+          var_1: 'Maha',
+          var_2: 'Test',
+          var_3: '#ABC',
+          var_4: 'pending',
+          var_5: 'QAR 130',
+          var_6: 'https://test.souqna.qa',
+        },
+      },
+    });
+  });
+
+  it('sends lifecycle order notifications with the approved sent.dm order template id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({ data: { messages: [{ id: 'msg_order' }] } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { sendSentDeliveryNotification } = await loadSent({ SENT_API_KEY: 'test_key' });
+
+    await expect(
+      sendSentDeliveryNotification({
+        phone: '55554444',
+        storeName: 'Thisisatest',
+        idempotencyKey: 'order-status-confirmed-A28C77C7',
+        order: {
+          id: 'A28C77C7',
+          storefrontSlug: 'thisisatest',
+          customerName: 'Abdulla',
+          customerPhone: '55554444',
+          customerEmail: null,
+          address: null,
+          paymentMethod: 'cod',
+          paymentStatus: 'unpaid',
+          orderStatus: 'confirmed',
+          currency: 'QAR',
+          subtotalQar: 6000,
+          discountQar: 0,
+          discountCode: null,
+          discountId: null,
+          shippingQar: 0,
+          taxQar: 0,
+          totalQar: 6000,
+          planSnapshot: '{}',
+          sellerNetQar: 6000,
+          collectionMode: 'offline',
+          platformProvider: null,
+          payoutStatus: 'not_applicable',
+          acceptedPolicies: [],
+          notes: null,
+          metadata: null,
+          createdAt: '2026-06-16T00:00:00.000Z',
+          updatedAt: '2026-06-16T00:00:00.000Z',
+          items: [],
+        },
+      }),
+    ).resolves.toMatchObject({ status: 'sent', messageId: 'msg_order' });
+
+    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
+      'Idempotency-Key': 'order-status-confirmed-A28C77C7',
+    });
+    expect(request).toEqual({
+      to: ['+97455554444'],
+      channel: ['whatsapp'],
+      template: {
+        id: '2277019266458305',
+        parameters: {
+          customerName: 'Abdulla',
+          orderNumber: 'A28C77C7',
+          storeName: 'Thisisatest',
+          orderTotal: 'QAR 6,000',
+        },
+      },
+    });
+  });
+
+  it('builds a storefront homepage URL for the delivery Visit Store button', async () => {
+    const { deliveryParameters, sentTemplateParameters } = await loadSent({
+      BRIEF_ROOT_DOMAIN: 'souqna.qa',
+      NEXT_PUBLIC_SITE_URL: 'https://souqna.qa',
+    });
+
+    const parameters = deliveryParameters({
+      storeName: 'Thisisatest',
+      message: 'We will update you when your order moves forward.',
+      order: {
+        id: 'A28C77C7',
+        storefrontSlug: 'thisisatest',
+        customerName: 'Abdulla',
+        customerPhone: '55554444',
+        customerEmail: null,
+        address: null,
+        paymentMethod: 'cod',
+        paymentStatus: 'unpaid',
+        orderStatus: 'pending',
+        currency: 'QAR',
+        subtotalQar: 6000,
+        discountQar: 0,
+        discountCode: null,
+        discountId: null,
+        shippingQar: 0,
+        taxQar: 0,
+        totalQar: 6000,
+        planSnapshot: '{}',
+        sellerNetQar: 6000,
+        collectionMode: 'offline',
+        platformProvider: null,
+        payoutStatus: 'not_applicable',
+        acceptedPolicies: [],
+        notes: null,
+        metadata: null,
+        createdAt: '2026-06-16T00:00:00.000Z',
+        updatedAt: '2026-06-16T00:00:00.000Z',
+        items: [],
+      },
+    });
+
+    expect(parameters).toMatchObject({
+      actionUrl: 'https://thisisatest.souqna.qa/checkout/thank-you/A28C77C7',
+      orderUrl: 'https://thisisatest.souqna.qa/checkout/thank-you/A28C77C7',
+      storeUrl: 'https://thisisatest.souqna.qa',
+      store_url: 'https://thisisatest.souqna.qa',
+      visit_store_url: 'https://thisisatest.souqna.qa',
+      button_url: 'https://thisisatest.souqna.qa',
+    });
+    expect(sentTemplateParameters('delivery_notification', parameters)).toMatchObject({
+      order_url: 'https://thisisatest.souqna.qa/checkout/thank-you/A28C77C7',
+      store_url: 'https://thisisatest.souqna.qa',
+      visit_store_url: 'https://thisisatest.souqna.qa',
+      button_url: 'https://thisisatest.souqna.qa',
+      var_6: 'https://thisisatest.souqna.qa',
     });
   });
 

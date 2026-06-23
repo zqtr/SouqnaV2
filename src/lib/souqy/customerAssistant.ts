@@ -4,6 +4,7 @@ import { generateText } from 'ai';
 import { env } from '@/lib/env';
 import type { Storefront } from '@/lib/brief';
 import type { Product } from '@/lib/products';
+import { fanarChatCompletion, isFanarConfigured } from '@/lib/fanar/provider';
 import { getMarketSignals, type MarketSignalsResult } from '@/lib/xapi/marketSignals';
 
 export type CustomerChatMessage = {
@@ -50,23 +51,49 @@ export async function answerCustomerWithSouqy(input: CustomerAssistantInput): Pr
       })
     : ({ status: 'disabled', signals: [] } satisfies MarketSignalsResult);
 
-  try {
-    const result = await generateText({
-      model: env.SOUQY_CHAT_MODEL,
-      system: buildCustomerSystem(input.storefront, input.products, marketSignals),
-      messages: input.messages.slice(-MAX_HISTORY),
-      temperature: 0.35,
-      maxOutputTokens: 700,
-      providerOptions: {
-        gateway: {
-          tags: ['feature:souqy-customer-chat', 'surface:storefront'],
-        },
-      },
-    });
-    return clampAnswer(result.text, input.storefront.locale);
-  } catch {
-    return buildCatalogueSummary(input.storefront, input.products);
+  const system = buildCustomerSystem(input.storefront, input.products, marketSignals);
+  const fanarConfigured = isFanarConfigured();
+  if (fanarConfigured) {
+    try {
+      const result = await fanarChatCompletion({
+        useCase: 'chat-completions',
+        messages: [
+          { role: 'system', content: system },
+          ...input.messages.slice(-MAX_HISTORY),
+        ],
+        temperature: 0.35,
+        maxOutputTokens: 700,
+      });
+      return clampAnswer(result.text, input.storefront.locale);
+    } catch (err) {
+      console.warn(
+        '[souqy-customer-chat] Fanar failed',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
   }
+
+  if (!fanarConfigured) {
+    try {
+      const result = await generateText({
+        model: env.SOUQY_CHAT_MODEL,
+        system,
+        messages: input.messages.slice(-MAX_HISTORY),
+        temperature: 0.35,
+        maxOutputTokens: 700,
+        providerOptions: {
+          gateway: {
+            tags: ['feature:souqy-customer-chat', 'surface:storefront'],
+          },
+        },
+      });
+      return clampAnswer(result.text, input.storefront.locale);
+    } catch {
+      return buildCatalogueSummary(input.storefront, input.products);
+    }
+  }
+
+  return buildCatalogueSummary(input.storefront, input.products);
 }
 
 export function buildCatalogueSummary(storefront: Storefront, products: Product[]): string {

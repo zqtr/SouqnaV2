@@ -6,7 +6,7 @@
 -- having a row-per-tier in Postgres gives us:
 --   - an auditable record of when each tier's price changed
 --   - a join target for analytics (`events.* x plan_tiers.*`)
---   - a place future Stripe / webhook code can read on the server
+--   - a place future billing webhook code can read on the server
 --     without importing a TypeScript module
 --
 -- The internal `id` column intentionally keeps the old shape

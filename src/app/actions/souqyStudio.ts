@@ -1,7 +1,7 @@
 'use server';
 
 import { put } from '@vercel/blob';
-import { auth } from '@clerk/nextjs/server';
+import { auth, verifyToken } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { z } from 'zod';
@@ -19,6 +19,12 @@ import {
   saveDraftBlocks as savePageDraftBlocks,
   setPageSeo,
 } from '@/lib/storefrontPages';
+import {
+  SOUQY_STUDIO_MODEL_IDS,
+  estimateSouqyStudioModelCost,
+  getSouqyStudioModel,
+  type SouqyStudioModel,
+} from '@/lib/souqy-studio/modelCatalog';
 
 const StudioTemplateSchema = z.enum([
   'ad-creative',
@@ -47,6 +53,8 @@ const StudioFormatSchema = z.enum([
   'logo-square',
   'wide-banner',
 ]);
+
+const StudioModelSchema = z.enum(SOUQY_STUDIO_MODEL_IDS);
 
 const BusinessTypeSchema = z.enum([
   'graphic_design',
@@ -90,6 +98,7 @@ const GenerateSchema = z.object({
   brandInstructions: z.string().trim().max(500).optional(),
   creativity: z.number().min(0).max(10).optional(),
   references: z.array(ReferenceSchema).max(5).default([]),
+  modelId: StudioModelSchema.optional(),
 });
 
 const AssetSchema = z.object({
@@ -209,6 +218,21 @@ export type SouqyStudioLibraryState =
     }
   | { status: 'error'; message: string };
 
+export type SouqyStudioProjectSummary = {
+  id: string;
+  businessName: string;
+  locale: 'en' | 'ar';
+  currentStep: SouqyStudioStep;
+  storefrontSlug: string | null;
+  assetCount: number;
+  latestAssetUrl: string | null;
+  updatedAt: string;
+};
+
+export type SouqyStudioProjectsState =
+  | { status: 'success'; projects: SouqyStudioProjectSummary[] }
+  | { status: 'error'; message: string };
+
 type StudioBrandKit = {
   palette: ThemeOverrides['palette'];
   heading: string;
@@ -294,7 +318,8 @@ const CONTRACTS: Record<string, AssetContract> = {
     height: 1200,
     mimeType: 'image/webp',
     blobPrefix: 'banners',
-    promptHint: 'wide storefront hero banner, strong product scene, no clipped text, no invented brand logo',
+    promptHint:
+      'wide storefront hero banner, strong product scene, no clipped text, no invented brand logo',
   },
   poster: {
     kind: 'poster',
@@ -303,7 +328,8 @@ const CONTRACTS: Record<string, AssetContract> = {
     height: 1080,
     mimeType: 'image/webp',
     blobPrefix: 'brand',
-    promptHint: 'square launch key visual, clear focal composition, no readable text unless exact text is provided',
+    promptHint:
+      'square launch key visual, clear focal composition, no readable text unless exact text is provided',
   },
   story: {
     kind: 'story',
@@ -312,7 +338,8 @@ const CONTRACTS: Record<string, AssetContract> = {
     height: 1920,
     mimeType: 'image/webp',
     blobPrefix: 'brand',
-    promptHint: 'vertical story promo, centered source subject, calm top and bottom breathing room, no readable text unless exact text is provided',
+    promptHint:
+      'vertical story promo, centered source subject, calm top and bottom breathing room, no readable text unless exact text is provided',
   },
   og: {
     kind: 'og',
@@ -330,7 +357,8 @@ const CONTRACTS: Record<string, AssetContract> = {
     height: 1350,
     mimeType: 'image/webp',
     blobPrefix: 'brand',
-    promptHint: 'performance ad visual, clear source subject hierarchy, clean empty action space, no invented text, no invented brand logo',
+    promptHint:
+      'performance ad visual, clear source subject hierarchy, clean empty action space, no invented text, no invented brand logo',
   },
   menu: {
     kind: 'menu',
@@ -339,7 +367,8 @@ const CONTRACTS: Record<string, AssetContract> = {
     height: 1754,
     mimeType: 'image/webp',
     blobPrefix: 'brand',
-    promptHint: 'restaurant menu layout, grouped sections, elegant print spacing, use only provided menu text',
+    promptHint:
+      'restaurant menu layout, grouped sections, elegant print spacing, use only provided menu text',
   },
   productCard: {
     kind: 'productCard',
@@ -348,7 +377,8 @@ const CONTRACTS: Record<string, AssetContract> = {
     height: 1080,
     mimeType: 'image/webp',
     blobPrefix: 'brand',
-    promptHint: 'commerce product visual, strong product image area, ad-ready layout, no invented title or price',
+    promptHint:
+      'commerce product visual, strong product image area, ad-ready layout, no invented title or price',
   },
   packaging: {
     kind: 'packaging',
@@ -357,7 +387,8 @@ const CONTRACTS: Record<string, AssetContract> = {
     height: 1080,
     mimeType: 'image/webp',
     blobPrefix: 'brand',
-    promptHint: 'premium packaging mockup, box or bag presentation, realistic retail lighting, no invented brand mark',
+    promptHint:
+      'premium packaging mockup, box or bag presentation, realistic retail lighting, no invented brand mark',
   },
   brandIdentity: {
     kind: 'brand',
@@ -366,7 +397,8 @@ const CONTRACTS: Record<string, AssetContract> = {
     height: 1200,
     mimeType: 'image/webp',
     blobPrefix: 'brand',
-    promptHint: 'brand identity board with placement zones, palette, materials, patterns, and applied mockup examples, no invented brand text',
+    promptHint:
+      'brand identity board with placement zones, palette, materials, patterns, and applied mockup examples, no invented brand text',
   },
 };
 
@@ -381,6 +413,7 @@ export async function generateSouqyStudioAssets(
     };
   }
   const data = parsed.data;
+  const selectedModel = data.modelId ? getSouqyStudioModel(data.modelId) : null;
   const access = await requireSouqyStudioAccess();
   if (!access.ok) return { status: 'error', message: access.message };
   const userId = access.userId;
@@ -467,13 +500,24 @@ export async function generateSouqyStudioAssets(
     const references = data.references;
     const assets = await Promise.all(
       contracts.map(async (contract) => {
-        const provider = pickProvider(contract, references.length > 0, creativeRoute);
+        const provider = pickProvider(
+          contract,
+          references.length > 0,
+          creativeRoute,
+          selectedModel,
+        );
         const mimeType = outputMimeTypeForGeneration(
           provider.provider,
           contract,
           references.length > 0,
           creativeRoute,
         );
+        const pricing = estimateSouqyStudioModelCost({
+          modelId: provider.model.id,
+          width: contract.width,
+          height: contract.height,
+          quality: data.quality ?? 'high',
+        });
         const sourceUrl = await maybeUpscaleWithFal(
           await generateContractImage({
             contract,
@@ -481,7 +525,9 @@ export async function generateSouqyStudioAssets(
             locale: data.locale,
             references,
             provider: provider.provider,
+            selectedModel: provider.model,
             route: creativeRoute,
+            quality: data.quality ?? 'high',
           }),
           creativeRoute,
         );
@@ -497,7 +543,7 @@ export async function generateSouqyStudioAssets(
           width: contract.width,
           height: contract.height,
           mimeType,
-          metadata: { contract: contract.kind, route: creativeRoute },
+          metadata: { contract: contract.kind, route: creativeRoute, pricing },
           formatKey: contract.formatKey ?? data.formatKey,
           assetType: contract.assetType ?? data.template,
           downloadFilename: downloadFilenameFor(
@@ -507,7 +553,7 @@ export async function generateSouqyStudioAssets(
             mimeType,
           ),
           provider: provider.provider,
-          model: modelNameForRoute(provider.provider, creativeRoute),
+          model: provider.model.providerModel,
         };
       }),
     );
@@ -543,6 +589,9 @@ export async function generateSouqyStudioAssets(
 }
 
 async function getSouqyStudioUserId(): Promise<string | null> {
+  const mobileUserId = await getMobileStudioUserId();
+  if (mobileUserId) return mobileUserId;
+
   try {
     const { userId } = await auth();
     return userId;
@@ -558,6 +607,25 @@ async function getSouqyStudioUserId(): Promise<string | null> {
     if (isLocalHost) return 'local-souqy-studio';
     throw err;
   }
+}
+
+async function getMobileStudioUserId(): Promise<string | null> {
+  const hdrs = headers();
+
+  if (process.env.NODE_ENV !== 'production' && process.env.SOUQNA_MOBILE_DEV_AUTH === '1') {
+    const expectedToken = process.env.SOUQNA_MOBILE_DEV_TOKEN?.trim();
+    const userId = process.env.SOUQNA_MOBILE_DEV_USER_ID?.trim();
+    const actualToken = hdrs.get('x-souqna-mobile-dev-token')?.trim();
+    if (expectedToken && userId && actualToken === expectedToken) return userId;
+  }
+
+  const bearerToken = hdrs.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
+  if (!bearerToken || !env.CLERK_SECRET_KEY) return null;
+
+  const verified = await verifyToken(bearerToken, {
+    secretKey: env.CLERK_SECRET_KEY,
+  }).catch(() => null);
+  return verified?.sub ?? null;
 }
 
 async function requireSouqyStudioAccess(): Promise<
@@ -603,6 +671,17 @@ type StudioAssetRow = {
   download_filename?: string | null;
 };
 
+type StudioProjectSummaryRow = {
+  id: string;
+  locale: 'en' | 'ar';
+  business_name: string;
+  current_step: SouqyStudioStep;
+  storefront_slug: string | null;
+  asset_count: number | string | null;
+  latest_asset_url: string | null;
+  updated_at: string | Date;
+};
+
 function parseBrandKit(value: unknown): StudioBrandKit | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const parsed = value as Partial<StudioBrandKit>;
@@ -646,6 +725,20 @@ function fromStudioAssetRow(row: StudioAssetRow): SouqyStudioAsset {
     assetType: row.asset_type ?? undefined,
     formatKey: row.format_key ?? undefined,
     downloadFilename: row.download_filename ?? undefined,
+  };
+}
+
+function fromProjectSummaryRow(row: StudioProjectSummaryRow): SouqyStudioProjectSummary {
+  return {
+    id: row.id,
+    businessName: row.business_name,
+    locale: row.locale,
+    currentStep: row.current_step,
+    storefrontSlug: row.storefront_slug,
+    assetCount: Number(row.asset_count ?? 0),
+    latestAssetUrl: row.latest_asset_url,
+    updatedAt:
+      row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
   };
 }
 
@@ -697,6 +790,44 @@ export async function loadSouqyStudioProject(
   const project = await getOwnedStudioProject(projectId, userId);
   if (!project) return { status: 'error', message: 'Souqy Studio project not found.' };
   return { status: 'success', project };
+}
+
+export async function loadSouqyStudioProjects(): Promise<SouqyStudioProjectsState> {
+  const access = await requireSouqyStudioAccess();
+  if (!access.ok) return { status: 'error', message: access.message };
+  const userId = access.userId;
+  if (!hasDb()) return { status: 'error', message: 'Database unavailable.' };
+
+  const rows = (await db()`
+    select
+      p.id,
+      p.locale,
+      p.business_name,
+      p.current_step,
+      p.storefront_slug,
+      p.updated_at,
+      coalesce(asset_stats.asset_count, 0)::int as asset_count,
+      asset_stats.latest_asset_url
+    from souqy_studio_projects p
+    left join lateral (
+      select
+        count(*)::int as asset_count,
+        (
+          select latest.url
+          from souqy_studio_assets latest
+          where latest.project_id = p.id and latest.clerk_user_id = ${userId}
+          order by latest.created_at desc
+          limit 1
+        ) as latest_asset_url
+      from souqy_studio_assets asset
+      where asset.project_id = p.id and asset.clerk_user_id = ${userId}
+    ) asset_stats on true
+    where p.clerk_user_id = ${userId}
+    order by p.updated_at desc
+    limit 30
+  `) as unknown as StudioProjectSummaryRow[];
+
+  return { status: 'success', projects: rows.map(fromProjectSummaryRow) };
 }
 
 export async function loadSouqyStudioLibrary(
@@ -1042,28 +1173,19 @@ function messageForStep(step: SouqyStudioStep): string {
   return 'This Souqy Studio project is already in the builder.';
 }
 
-type StudioImageProvider = 'fal' | 'ideogram' | 'replicate';
+type StudioImageProvider = 'fal' | 'ideogram' | 'openai' | 'replicate';
+type ResolvedStudioModel = Omit<SouqyStudioModel, 'id' | 'provider'> & {
+  id: string;
+  provider: StudioImageProvider;
+};
 
 const REPLICATE_PRIMARY_IMAGE_MODEL = 'black-forest-labs/flux-2-max';
 
 function modelNameForProvider(provider: StudioImageProvider): string {
+  if (provider === 'openai') return 'gpt-image-1';
   if (provider === 'ideogram') return 'ideogram-v3';
   if (provider === 'replicate') return 'replicate';
   return 'fal-image';
-}
-
-function modelNameForRoute(provider: StudioImageProvider, route: SouqyCreativeRoute): string {
-  if (provider === 'replicate') return replicateModelNameForRoute();
-  if (provider !== 'fal') return modelNameForProvider(provider);
-  if (
-    route.primary === 'qwen-image' ||
-    route.primary === 'qwen-image-edit' ||
-    route.primary === 'flux-dev' ||
-    route.primary === 'sdxl-turbo'
-  ) {
-    return route.primary;
-  }
-  return 'fal-recraft-v3';
 }
 
 async function insertStudioAssets(args: {
@@ -1131,8 +1253,10 @@ async function catalogContextForGeneration(args: {
   const products = await getProductsForUser(args.userId);
   const selected = products
     .filter((product) => {
-      if (args.sourceStorefrontSlug && product.storefrontSlug !== args.sourceStorefrontSlug) return false;
-      if (args.selectedProductIds.length > 0 && !args.selectedProductIds.includes(product.id)) return false;
+      if (args.sourceStorefrontSlug && product.storefrontSlug !== args.sourceStorefrontSlug)
+        return false;
+      if (args.selectedProductIds.length > 0 && !args.selectedProductIds.includes(product.id))
+        return false;
       return true;
     })
     .slice(0, 8);
@@ -1210,18 +1334,25 @@ function visibleTextPolicy(args: {
 }
 
 function formatPromptHint(formatKey: SouqyStudioFormat): string {
-  const base = 'Canvas instruction only. Do not draw the user interface of the named app or platform.';
+  const base =
+    'Canvas instruction only. Do not draw the user interface of the named app or platform.';
   if (formatKey === 'instagram-post') return `${base} Use a 4:5 vertical ad canvas.`;
-  if (formatKey === 'instagram-story') return `${base} Use a 9:16 vertical story canvas with clean breathing room.`;
+  if (formatKey === 'instagram-story')
+    return `${base} Use a 9:16 vertical story canvas with clean breathing room.`;
   if (formatKey === 'tiktok') return `${base} Use a 9:16 vertical short-video cover canvas.`;
   if (formatKey === 'whatsapp-status') return `${base} Use a 9:16 vertical status canvas.`;
   if (formatKey === 'snapchat') return `${base} Use a 9:16 vertical story canvas.`;
   if (formatKey === 'x-banner') return `${base} Use a wide landscape banner canvas.`;
-  if (formatKey === 'a3-print') return 'Use an A3 print poster canvas. Do not add print marks, labels, or fake text.';
-  if (formatKey === 'menu-print') return 'Use an A4 menu print canvas. Use only exact menu text supplied by the user.';
-  if (formatKey === 'product-card') return 'Use a square product-card canvas. Do not invent product names, prices, badges, or logos.';
-  if (formatKey === 'logo-square') return 'Use a square logo canvas. Generate only the requested logo, with no extra text unless supplied.';
-  if (formatKey === 'wide-banner') return 'Use a wide storefront banner canvas. Do not invent brand names or labels.';
+  if (formatKey === 'a3-print')
+    return 'Use an A3 print poster canvas. Do not add print marks, labels, or fake text.';
+  if (formatKey === 'menu-print')
+    return 'Use an A4 menu print canvas. Use only exact menu text supplied by the user.';
+  if (formatKey === 'product-card')
+    return 'Use a square product-card canvas. Do not invent product names, prices, badges, or logos.';
+  if (formatKey === 'logo-square')
+    return 'Use a square logo canvas. Generate only the requested logo, with no extra text unless supplied.';
+  if (formatKey === 'wide-banner')
+    return 'Use a wide storefront banner canvas. Do not invent brand names or labels.';
   return base;
 }
 
@@ -1265,7 +1396,9 @@ function buildWorkplacePrompt(args: {
       : 'If exact English typography is explicitly requested, it must be correct and readable. Otherwise do not include visible text.',
     args.brandInstructions ? `Brand instructions: ${args.brandInstructions}` : '',
     args.quality ? `Quality mode: ${args.quality}.` : '',
-    args.printBleed ? 'Include print bleed and keep important visual content away from the outer edge.' : '',
+    args.printBleed
+      ? 'Include print bleed and keep important visual content away from the outer edge.'
+      : '',
     typeof args.creativity === 'number' ? `Creativity level: ${args.creativity}/10.` : '',
     catalogHint,
     textPolicy,
@@ -1276,16 +1409,26 @@ function buildWorkplacePrompt(args: {
 }
 
 function templatePromptHint(template: SouqyStudioTemplate): string {
-  if (template === 'logo') return 'Create a logo or mark suitable for storefront header, app icon, and profile avatar use.';
-  if (template === 'wide-banner') return 'Create a banner suitable for a storefront hero and campaign header.';
-  if (template === 'launch-poster') return 'Create a campaign key visual with a clear focal area and polished retail composition.';
-  if (template === 'story-promo') return 'Create a vertical story creative with calm mobile framing and clean negative space.';
-  if (template === 'ad-creative') return 'Create a standalone advertising visual with strong product hierarchy and clean empty action space.';
-  if (template === 'restaurant-menu') return 'Create an elegant menu layout. Use only provided menu text; otherwise show abstract menu structure without readable words.';
-  if (template === 'product-card') return 'Create a product card visual for commerce listings and marketplace selling. Do not invent titles or prices.';
-  if (template === 'packaging-mockup') return 'Create a packaging mockup visual for boxes, bags, stickers, or labels.';
-  if (template === 'brand-identity' || template === 'brand-kit') return 'Create a brand identity moodboard with placement areas, palette, material cues, pattern zones, and applied mockup examples. Do not invent brand names.';
-  if (template === 'short-video') return 'Create a single vertical key visual/frame suitable as the cover for a future short video.';
+  if (template === 'logo')
+    return 'Create a logo or mark suitable for storefront header, app icon, and profile avatar use.';
+  if (template === 'wide-banner')
+    return 'Create a banner suitable for a storefront hero and campaign header.';
+  if (template === 'launch-poster')
+    return 'Create a campaign key visual with a clear focal area and polished retail composition.';
+  if (template === 'story-promo')
+    return 'Create a vertical story creative with calm mobile framing and clean negative space.';
+  if (template === 'ad-creative')
+    return 'Create a standalone advertising visual with strong product hierarchy and clean empty action space.';
+  if (template === 'restaurant-menu')
+    return 'Create an elegant menu layout. Use only provided menu text; otherwise show abstract menu structure without readable words.';
+  if (template === 'product-card')
+    return 'Create a product card visual for commerce listings and marketplace selling. Do not invent titles or prices.';
+  if (template === 'packaging-mockup')
+    return 'Create a packaging mockup visual for boxes, bags, stickers, or labels.';
+  if (template === 'brand-identity' || template === 'brand-kit')
+    return 'Create a brand identity moodboard with placement areas, palette, material cues, pattern zones, and applied mockup examples. Do not invent brand names.';
+  if (template === 'short-video')
+    return 'Create a single vertical key visual/frame suitable as the cover for a future short video.';
   return 'Create a polished AI creative asset.';
 }
 
@@ -1314,7 +1457,8 @@ function routeSouqyCreativeTask(args: {
     args.selectedProductIds.length > 0 ||
     /\b(product|ad|advert|perfume|coffee|restaurant|menu|campaign)\b/u.test(text);
   const isLuxury = /\b(luxury|cinematic|premium|editorial|perfume|jewelry|fashion)\b/u.test(text);
-  const wantsFastPreview = args.quality === 'standard' || /\b(preview|draft|quick|fast)\b/u.test(text);
+  const wantsFastPreview =
+    args.quality === 'standard' || /\b(preview|draft|quick|fast)\b/u.test(text);
 
   if (args.hasReferences) {
     return {
@@ -1412,12 +1556,13 @@ function downloadFilenameFor(
   contract: AssetContract,
   mimeType = contract.mimeType,
 ): string {
-  const base = businessName
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 42) || 'souqy';
+  const base =
+    businessName
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 42) || 'souqy';
   return `${base}-${contract.formatKey ?? template}-${contract.width}x${contract.height}.${extensionFor(mimeType)}`;
 }
 
@@ -1425,30 +1570,70 @@ function pickProvider(
   contract: AssetContract,
   hasReferences: boolean,
   route?: SouqyCreativeRoute,
-): { provider: StudioImageProvider } {
-  if (env.REPLICATE_API_TOKEN) return { provider: 'replicate' };
+  selectedModel?: SouqyStudioModel | null,
+): { provider: StudioImageProvider; model: ResolvedStudioModel } {
+  if (selectedModel) {
+    if (selectedModel.provider === 'openai') {
+      if (hasReferences && !selectedModel.supportsReferences) {
+        throw new Error(
+          'This Souqy Studio model does not support reference-image edits yet. Choose FLUX.2 Max or remove the reference image.',
+        );
+      }
+      if (!env.OPENAI_API_KEY) {
+        throw new Error('Connect OPENAI_API_KEY so Souqy can use OpenAI image models.');
+      }
+      return { provider: 'openai', model: selectedModel };
+    }
+
+    if (selectedModel.provider === 'replicate') {
+      if (!env.REPLICATE_API_TOKEN) {
+        throw new Error('Connect REPLICATE_API_TOKEN so Souqy can use FLUX.2 Max.');
+      }
+      return { provider: 'replicate', model: selectedModel };
+    }
+  }
+
+  if (env.REPLICATE_API_TOKEN) {
+    return { provider: 'replicate', model: getSouqyStudioModel('replicate:flux-2-max') };
+  }
   if (hasReferences) {
-    if (env.FAL_KEY) return { provider: 'fal' };
-    if (env.IDEOGRAM_API_KEY) return { provider: 'ideogram' };
+    if (env.FAL_KEY) return { provider: 'fal', model: fallbackModelForProvider('fal') };
+    if (env.IDEOGRAM_API_KEY)
+      return { provider: 'ideogram', model: fallbackModelForProvider('ideogram') };
     throw new Error(
       'Connect REPLICATE_API_TOKEN, FAL_KEY, or IDEOGRAM_API_KEY so Souqy can generate from reference images.',
     );
   }
-  if (
-    env.FAL_KEY &&
-    route &&
-    ['flux-dev', 'qwen-image', 'sdxl-turbo'].includes(route.primary)
-  ) {
-    return { provider: 'fal' };
+  if (env.FAL_KEY && route && ['flux-dev', 'qwen-image', 'sdxl-turbo'].includes(route.primary)) {
+    return { provider: 'fal', model: fallbackModelForProvider('fal') };
   }
-  if (env.IDEOGRAM_API_KEY) return { provider: 'ideogram' };
+  if (env.IDEOGRAM_API_KEY)
+    return { provider: 'ideogram', model: fallbackModelForProvider('ideogram') };
   if ((contract.kind === 'logo' || contract.kind === 'wideLogo') && env.REPLICATE_API_TOKEN) {
-    return { provider: 'replicate' };
+    return { provider: 'replicate', model: getSouqyStudioModel('replicate:flux-2-max') };
   }
-  if (env.FAL_KEY) return { provider: 'fal' };
+  if (env.FAL_KEY) return { provider: 'fal', model: fallbackModelForProvider('fal') };
   throw new Error(
     'Connect REPLICATE_API_TOKEN, IDEOGRAM_API_KEY, or FAL_KEY so Souqy can generate AI images.',
   );
+}
+
+function fallbackModelForProvider(
+  provider: Exclude<StudioImageProvider, 'openai' | 'replicate'>,
+): ResolvedStudioModel {
+  return {
+    id: `fallback:${provider}`,
+    provider,
+    providerModel: modelNameForProvider(provider),
+    label: modelNameForProvider(provider),
+    shortLabel: modelNameForProvider(provider),
+    badge: provider,
+    description: 'Fallback provider selected by server configuration.',
+    bestFor: 'Fallback generation.',
+    latency: 'Medium',
+    supportsReferences: provider !== 'ideogram',
+    pricingNote: 'Fallback pricing is estimated from Souqy default image credits.',
+  };
 }
 
 function outputMimeTypeFor(
@@ -1509,9 +1694,11 @@ function contractsForTemplate(
 function formatContractOverride(formatKey?: SouqyStudioFormat): Partial<AssetContract> {
   if (!formatKey) return {};
   if (formatKey === 'instagram-post') return { width: 1080, height: 1350, title: 'Instagram post' };
-  if (formatKey === 'instagram-story') return { width: 1080, height: 1920, title: 'Instagram story' };
+  if (formatKey === 'instagram-story')
+    return { width: 1080, height: 1920, title: 'Instagram story' };
   if (formatKey === 'tiktok') return { width: 1080, height: 1920, title: 'TikTok creative' };
-  if (formatKey === 'whatsapp-status') return { width: 1080, height: 1920, title: 'WhatsApp status' };
+  if (formatKey === 'whatsapp-status')
+    return { width: 1080, height: 1920, title: 'WhatsApp status' };
   if (formatKey === 'snapchat') return { width: 1080, height: 1920, title: 'Snapchat story' };
   if (formatKey === 'x-banner') return { width: 1600, height: 900, title: 'X banner' };
   if (formatKey === 'a3-print') {
@@ -1519,7 +1706,8 @@ function formatContractOverride(formatKey?: SouqyStudioFormat): Partial<AssetCon
       width: 3508,
       height: 4961,
       title: 'A3 print',
-      promptHint: 'A3 print poster, 300dpi design intent, generous outer margins, no readable text unless exact text is provided',
+      promptHint:
+        'A3 print poster, 300dpi design intent, generous outer margins, no readable text unless exact text is provided',
     };
   }
   if (formatKey === 'menu-print') {
@@ -1527,7 +1715,8 @@ function formatContractOverride(formatKey?: SouqyStudioFormat): Partial<AssetCon
       width: 2480,
       height: 3508,
       title: 'Menu print',
-      promptHint: 'A4 vertical menu print, generous margins, print-ready spacing, use only provided menu sections and prices',
+      promptHint:
+        'A4 vertical menu print, generous margins, print-ready spacing, use only provided menu sections and prices',
     };
   }
   if (formatKey === 'product-card') return { width: 1080, height: 1080, title: 'Product card' };
@@ -1542,7 +1731,9 @@ async function generateContractImage(args: {
   locale: 'en' | 'ar';
   references: z.infer<typeof ReferenceSchema>[];
   provider: StudioImageProvider;
+  selectedModel: ResolvedStudioModel;
   route: SouqyCreativeRoute;
+  quality: 'standard' | 'high' | 'print';
 }): Promise<string> {
   const referenceInstruction =
     args.references.length > 0 && args.route.primary !== 'qwen-image-edit'
@@ -1565,7 +1756,81 @@ async function generateContractImage(args: {
   if (args.provider === 'ideogram') {
     return generateWithIdeogram(prompt, args.contract, args.references);
   }
+  if (args.provider === 'openai') {
+    return generateWithOpenAi(
+      prompt,
+      args.contract,
+      args.selectedModel.providerModel,
+      args.quality,
+    );
+  }
   return generateWithReplicate(prompt, args.contract, args.references, args.route);
+}
+
+async function generateWithOpenAi(
+  prompt: string,
+  contract: AssetContract,
+  model: string,
+  quality: 'standard' | 'high' | 'print',
+): Promise<string> {
+  if (!env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not configured.');
+  }
+  const outputFormat = openAiOutputFormat(contract);
+  const response = await fetch('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      prompt,
+      size: openAiSizeForContract(contract),
+      quality: openAiQuality(quality),
+      output_format: outputFormat,
+      n: 1,
+      moderation: 'auto',
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
+  const json = (await response.json().catch(() => null)) as {
+    data?: Array<{ b64_json?: string; url?: string }>;
+    error?: { message?: string };
+  } | null;
+  if (!response.ok) {
+    throw new Error(
+      `OpenAI image generation failed (${response.status})${summarizeProviderError(
+        JSON.stringify(json ?? {}),
+      )}.`,
+    );
+  }
+  const output = json?.data?.[0];
+  if (output?.url) return output.url;
+  if (output?.b64_json) return `data:image/${outputFormat};base64,${output.b64_json}`;
+  throw new Error('OpenAI did not return image data.');
+}
+
+function openAiQuality(quality: 'standard' | 'high' | 'print'): 'low' | 'medium' | 'high' {
+  if (quality === 'standard') return 'low';
+  if (quality === 'print') return 'high';
+  return 'medium';
+}
+
+function openAiOutputFormat(contract: AssetContract): 'png' | 'webp' {
+  return contract.mimeType === 'image/png' || contract.mimeType === 'image/svg+xml'
+    ? 'png'
+    : 'webp';
+}
+
+function openAiSizeForContract(contract: AssetContract): '1024x1024' | '1024x1536' | '1536x1024' {
+  if (
+    Math.abs(contract.width - contract.height) <=
+    Math.max(contract.width, contract.height) * 0.08
+  ) {
+    return '1024x1024';
+  }
+  return contract.height > contract.width ? '1024x1536' : '1536x1024';
 }
 
 async function generateWithReplicate(
@@ -1615,17 +1880,17 @@ function replicateModelForRoute(route?: SouqyCreativeRoute, hasReferences = fals
   return REPLICATE_PRIMARY_IMAGE_MODEL;
 }
 
-function replicateModelNameForRoute(): string {
-  return 'flux-2-max';
-}
-
 function replicateInputForRoute(args: {
   prompt: string;
   contract: AssetContract;
   references: z.infer<typeof ReferenceSchema>[];
   route?: SouqyCreativeRoute;
 }): Record<string, unknown> {
-  const outputFormat = replicateOutputFormatFor(args.contract, args.references.length > 0, args.route);
+  const outputFormat = replicateOutputFormatFor(
+    args.contract,
+    args.references.length > 0,
+    args.route,
+  );
   if (args.references.length > 0) {
     return {
       prompt: referenceEditPrompt(args.prompt),
@@ -1865,11 +2130,12 @@ async function pollFalResponse(url: string): Promise<string> {
   throw new Error('Fal generation timed out.');
 }
 
-async function maybeUpscaleWithFal(
-  sourceUrl: string,
-  route: SouqyCreativeRoute,
-): Promise<string> {
-  if (env.REPLICATE_API_TOKEN && route.post.includes('real-esrgan') && !sourceUrl.startsWith('data:')) {
+async function maybeUpscaleWithFal(sourceUrl: string, route: SouqyCreativeRoute): Promise<string> {
+  if (
+    env.REPLICATE_API_TOKEN &&
+    route.post.includes('real-esrgan') &&
+    !sourceUrl.startsWith('data:')
+  ) {
     return runReplicatePrediction('nightmareai/real-esrgan', {
       image: sourceUrl,
       scale: 2,
@@ -1921,9 +2187,9 @@ async function persistRemoteAsset(args: {
   pathname: string;
   contentType: string;
 }): Promise<string> {
-  const response = await fetch(args.sourceUrl, { signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) throw new Error(`Could not download generated asset (${response.status}).`);
-  const blob = await response.blob();
+  const blob = args.sourceUrl.startsWith('data:')
+    ? blobFromDataUrl(args.sourceUrl, args.contentType)
+    : await fetchRemoteBlob(args.sourceUrl);
   const stored = await withTimeout(
     put(args.pathname, blob, {
       access: 'public',
@@ -1934,6 +2200,24 @@ async function persistRemoteAsset(args: {
   ).catch(() => null);
   if (!stored) return args.sourceUrl;
   return stored.url;
+}
+
+async function fetchRemoteBlob(sourceUrl: string): Promise<Blob> {
+  const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(15_000) });
+  if (!response.ok) throw new Error(`Could not download generated asset (${response.status}).`);
+  return response.blob();
+}
+
+function blobFromDataUrl(dataUrl: string, fallbackContentType: string): Blob {
+  const match = /^data:([^;,]+)?(;base64)?,(.*)$/u.exec(dataUrl);
+  if (!match) throw new Error('Generated image data was not readable.');
+  const contentType = match[1] || fallbackContentType;
+  const isBase64 = Boolean(match[2]);
+  const payload = match[3] ?? '';
+  const bytes = isBase64
+    ? Buffer.from(payload, 'base64')
+    : Buffer.from(decodeURIComponent(payload), 'utf8');
+  return new Blob([bytes], { type: contentType });
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

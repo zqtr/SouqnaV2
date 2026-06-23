@@ -22,12 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import type {
-  Order,
-  OrderStatus,
-  PaymentMethod,
-  PaymentStatus,
-} from '@/lib/checkout-orders';
+import type { Order, OrderStatus, PaymentMethod, PaymentStatus } from '@/lib/checkout-orders';
 import { EmptyState } from '@/components/admin/primitives';
 import { OrderDrawer } from './OrderDrawer';
 import { cn } from '@/lib/utils';
@@ -68,6 +63,7 @@ const PAYMENT_LABEL: Record<PaymentStatus, string> = {
 const METHOD_LABEL: Record<PaymentMethod, string> = {
   cod: 'cod',
   bank_transfer: 'bank',
+  fawran: 'fawran',
   skipcash: 'skipcash',
   sadad: 'sadad',
   pay_link: 'pay link',
@@ -220,7 +216,11 @@ export function OrdersTable({
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label={t('On this page')} value={orders.length.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')} sub={`${t('of')} ${total.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')} ${t('total')}`} />
+        <Stat
+          label={t('On this page')}
+          value={orders.length.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')}
+          sub={`${t('of')} ${total.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')} ${t('total')}`}
+        />
         <Stat
           label={t('Pending')}
           value={String(stats.pending)}
@@ -254,7 +254,9 @@ export function OrdersTable({
         <EmptyState
           eyebrow={t('No matches')}
           title={t('No orders to show')}
-          body={t('Once a buyer places an order through your storefront checkout it will appear here. Try clearing the filters above if you have narrowed the view.')}
+          body={t(
+            'Once a buyer places an order through your storefront checkout it will appear here. Try clearing the filters above if you have narrowed the view.',
+          )}
         />
       ) : (
         <Card className="overflow-hidden p-0">
@@ -405,7 +407,8 @@ function Pagination({
   return (
     <nav className="mt-5 flex items-center justify-between gap-3" aria-label={t('Pagination')}>
       <span className="font-mono text-xs text-muted-foreground tabular-nums">
-        {t('Page')} {(page + 1).toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')} {t('of')} {totalPages.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')}
+        {t('Page')} {(page + 1).toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')} {t('of')}{' '}
+        {totalPages.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')}
       </span>
       <ButtonGroup>
         <Button
@@ -465,7 +468,9 @@ function statusTone(status: OrderStatus): 'success' | 'warning' | 'critical' | '
   return 'info';
 }
 
-function paymentTone(status: PaymentStatus): 'success' | 'warning' | 'critical' | 'info' | 'neutral' {
+function paymentTone(
+  status: PaymentStatus,
+): 'success' | 'warning' | 'critical' | 'info' | 'neutral' {
   if (status === 'marked_paid') return 'success';
   if (status === 'payment_failed') return 'critical';
   if (status === 'refunded') return 'critical';

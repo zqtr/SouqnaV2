@@ -9,6 +9,8 @@ import {
 } from '@/lib/storefrontSettings';
 import { resolveSettingsContext } from '../_helpers';
 import { adminPhrase } from '@/components/admin/adminLocale';
+import { storefrontBaseUrl } from '@/lib/storefrontUrl';
+import { getPlan, planUnlocksOnlinePayments } from '@/lib/billing';
 
 export default async function PaymentsPage({
   searchParams,
@@ -20,10 +22,12 @@ export default async function PaymentsPage({
   const locale = (await cookies()).get('NEXT_LOCALE')?.value;
   const t = (text: string) => adminPhrase(locale, text);
 
-  const [checkout, policies] = await Promise.all([
+  const [checkout, policies, plan] = await Promise.all([
     getStorefrontCheckoutSettings(storefront.slug),
     getStorefrontPolicies(storefront.slug),
+    getPlan(storefront.clerkUserId),
   ]);
+  const canAcceptOnlinePayments = planUnlocksOnlinePayments(plan);
 
   const policiesPresent = POLICY_KEYS.reduce(
     (acc, key) => {
@@ -39,15 +43,23 @@ export default async function PaymentsPage({
       <PageHeader
         eyebrow={t('Commerce · Payments')}
         title={t('Payments')}
-        subtitle={t('Manage cash on delivery, bank transfer, and GCC online gateways. Provider credentials only appear after selecting a logo, and live providers verify before activation.')}
+        subtitle={t(
+          'Manage cash on delivery, bank transfer, and GCC online gateways. Provider credentials only appear after selecting a logo, and live providers verify before activation.',
+        )}
       />
       <CheckoutSettings
         slug={storefront.slug}
         initial={checkout}
+        storefrontBaseUrl={
+          storefront.customDomain
+            ? `https://${storefront.customDomain}`
+            : storefrontBaseUrl(storefront.slug)
+        }
         policiesPresent={policiesPresent}
         skipCashEligible={Boolean(storefront.crNumber)}
         skipCashBlockedReason={storefront.crNumber ? 'Confirm CR ownership' : 'Add CR number'}
         crNumber={storefront.crNumber}
+        canAcceptOnlinePayments={canAcceptOnlinePayments}
       />
     </>
   );

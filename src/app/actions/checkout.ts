@@ -13,7 +13,9 @@ import { getStorefront } from '@/lib/brief';
 import { assertStorefrontOwner } from '@/lib/products';
 import { bumpCustomerOrder, upsertCustomer } from '@/lib/customers';
 import {
+  checkoutPaymentMethodsForPlan,
   getStorefrontCheckoutSettings,
+  isOnlinePaymentMethod,
   POLICY_KEYS,
   type PolicyKey,
 } from '@/lib/storefrontSettings';
@@ -31,32 +33,22 @@ import {
   type OrderStatus,
   type PaymentMethod,
 } from '@/lib/checkout-orders';
-import { getPlan } from '@/lib/billing';
-import { checkoutOrderFeeSnapshot, monthlyOrderCapFailure } from '@/lib/planEnforcement';
-import {
-  claimDiscountUse,
-  evaluateCheckoutDiscount,
-  getDiscountByCode,
-  normalizeDiscountCode,
-  releaseDiscountUse,
-  type CheckoutDiscountLine,
-  type Discount,
-} from '@/lib/discounts';
-import {
-  sendNewOrderToOwner,
-  sendOrderConfirmationToBuyer,
-  type PaymentInstructionBlock,
-} from '@/lib/email/checkout-emails';
-import { notifyMobileNewOrder } from '@/lib/mobile/push';
-import { sendWhatsAppOrderConfirmation } from '@/lib/apps/whatsapp';
-import {
-  sendSentDeliveryNotification,
-  sendSentPaymentStatusNotification,
-} from '@/lib/sent';
-import { pushOrderCreatedNotification } from '@/lib/notifications';
-import { createSkipCashPayment, hasSkipCash, newSkipCashTransactionId } from '@/lib/skipcash';
+import { getPlan, planUnlocksOnlinePayments } from '@/lib/billing';
+import { checkoutOrderFinancialSnapshot, monthlyOrderCapFailure } from '@/lib/planEnforcement';
+import { type PaymentInstructionBlock } from '@/lib/email/checkout-emails';
+import { notifyCheckoutOrderCreated } from '@/lib/checkout-notifications';
+import { sendSentDeliveryNotification, sendSentPaymentStatusNotification } from '@/lib/sent';
+import { createSkipCashPaymentForMerchant, newSkipCashTransactionId } from '@/lib/skipcash';
+import { getStorefrontSkipCashCredentials } from '@/lib/storefrontSkipcash';
 import { getStorefrontSadadCredentials } from '@/lib/storefrontSadad';
-import { recordPlatformFeeForPaidOrder } from '@/lib/platformFees';
+import { recordPlatformPayoutForPaidOrder } from '@/lib/platformPayouts';
+import {
+  incrementDiscountUsage,
+  normalizeDiscountCode,
+  validateCheckoutDiscount,
+  type CheckoutDiscountApplication,
+  type CheckoutDiscountLine,
+} from '@/lib/discounts';
 import {
   DEFAULT_PRODUCT_HEIGHT_OPTIONS,
   isAllowedHeightOption,
@@ -65,7 +57,7 @@ import {
   normalizeCustomSizeValue,
   normalizeHeightInputLabel,
   normalizeHeightOptions,
-  normalizeSizeOptions,
+  normalizeVariantOptions,
 } from '@/lib/productOptions';
 
 const ItemSchema = z.object({
@@ -111,7 +103,11 @@ const BuyerConsentsSchema = z.object({
   marketing: z.boolean().refine(Boolean, 'Opt in to store messages.'),
 });
 
-const ALWAYS_REQUIRED_POLICY_KEYS = ['terms', 'privacy', 'refund'] as const satisfies readonly PolicyKey[];
+const ALWAYS_REQUIRED_POLICY_KEYS = [
+  'terms',
+  'privacy',
+  'refund',
+] as const satisfies readonly PolicyKey[];
 
 const CreateOrderSchema = z.object({
   slug: z.string().trim().min(1).max(64),
@@ -119,13 +115,7 @@ const CreateOrderSchema = z.object({
   customer: CustomerSchema,
   address: AddressSchema,
   paymentMethod: z.enum(PAYMENT_METHODS as unknown as [PaymentMethod, ...PaymentMethod[]]),
-  discountCode: z
-    .string()
-    .trim()
-    .max(64)
-    .regex(/^[A-Za-z0-9_\-]+$/)
-    .optional()
-    .nullable(),
+  discountCode: z.string().trim().max(64).optional().nullable(),
   acceptedPolicies: z
     .array(z.enum(POLICY_KEYS as unknown as [PolicyKey, ...PolicyKey[]]))
     .max(POLICY_KEYS.length),
@@ -133,66 +123,112 @@ const CreateOrderSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
 });
 
+const DiscountPreviewSchema = z.object({
+  slug: z.string().trim().min(1).max(64),
+  code: z.string().trim().min(1).max(64),
+  items: z.array(ItemSchema).min(1).max(40),
+  customer: z
+    .object({
+      phone: z.string().trim().max(40).optional().nullable(),
+      email: z.string().trim().max(180).optional().nullable(),
+    })
+    .optional(),
+  address: z
+    .object({
+      city: z.string().trim().max(120).optional().nullable(),
+      country: z.string().trim().max(120).optional().nullable(),
+    })
+    .optional(),
+});
+
 export type CreateOrderInput = z.input<typeof CreateOrderSchema>;
 export type CreateOrderResult =
   | { status: 'success'; orderId: string; redirectUrl?: string }
   | { status: 'error'; message: string; field?: string };
 
-const PreviewDiscountSchema = z.object({
-  slug: z.string().trim().min(1).max(64),
-  code: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_\-]+$/),
-  items: z.array(ItemSchema.pick({ productId: true, quantity: true })).min(1).max(40),
-});
-
-export type PreviewCheckoutDiscountResult =
+export type ApplyDiscountCodeInput = z.input<typeof DiscountPreviewSchema>;
+export type ApplyDiscountCodeResult =
   | {
       status: 'success';
       code: string;
       title: string | null;
-      subtotalDiscountQar: number;
-      shippingDiscountQar: number;
-      totalDiscountQar: number;
+      discountQar: number;
+      subtotalQar: number;
+      shippingQar: number;
+      totalQar: number;
     }
   | { status: 'error'; message: string; field?: string };
 
-export async function previewCheckoutDiscount(
-  input: z.input<typeof PreviewDiscountSchema>,
-): Promise<PreviewCheckoutDiscountResult> {
-  const parsed = PreviewDiscountSchema.safeParse(input);
+export async function applyDiscountCode(
+  input: ApplyDiscountCodeInput,
+): Promise<ApplyDiscountCodeResult> {
+  const parsed = DiscountPreviewSchema.safeParse(input);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     return {
       status: 'error',
-      message: issue?.message ?? 'Invalid promo code.',
+      message: issue?.message ?? 'Invalid promo code',
       field: issue?.path.join('.'),
     };
   }
-
   const data = parsed.data;
-  const settings = await getStorefrontCheckoutSettings(data.slug);
-  const discount = await getDiscountByCode(data.slug, data.code);
-  if (!discount) {
-    return { status: 'error', message: 'Enter a valid promo code.', field: 'discountCode' };
+
+  const hdrs = await headers();
+  const ip =
+    hdrs.get('x-forwarded-for')?.split(',')[0]?.trim() ?? hdrs.get('x-real-ip') ?? 'unknown';
+  if (!rateLimit(`checkout:discount:${ip}`, 30, 60_000).ok) {
+    return { status: 'error', message: 'Too many attempts. Try again in a minute.' };
   }
 
-  const { subtotalQar, lines } = await buildCheckoutDiscountLines(data.slug, data.items);
-  const evaluation = evaluateCheckoutDiscount({
-    discount,
-    subtotalQar,
-    shippingQar: settings.shippingFlatQar ?? 0,
-    lines,
-  });
-  if (evaluation.status === 'error') {
-    return { status: 'error', message: evaluation.message, field: 'discountCode' };
+  const [storefront, settings] = await Promise.all([
+    getStorefront(data.slug),
+    getStorefrontCheckoutSettings(data.slug),
+  ]);
+  if (!storefront) {
+    return { status: 'error', message: 'Storefront not available.' };
   }
+
+  const preview = await buildDiscountPreviewLines(data.slug, data.items);
+  if ('error' in preview) return preview.error;
+
+  const shippingQar = await calculateShippingQar({
+    slug: data.slug,
+    subtotalQar: preview.subtotalQar,
+    fallbackShippingQar: settings.shippingFlatQar ?? 0,
+    address: data.address,
+  });
+  const result = await validateCheckoutDiscount({
+    storefrontSlug: data.slug,
+    code: data.code,
+    subtotalQar: preview.subtotalQar,
+    shippingQar,
+    lines: preview.lines,
+    customerEmail: data.customer?.email ?? null,
+    customerPhone: data.customer?.phone ?? null,
+  });
+  if (!result.ok) {
+    return { status: 'error', message: result.message, field: 'discountCode' };
+  }
+
+  const discountedSubtotalQar = Math.max(
+    0,
+    preview.subtotalQar - result.application.productDiscountQar,
+  );
+  const discountedShippingQar = Math.max(0, shippingQar - result.application.shippingDiscountQar);
+  const { totalQar } = await calculateTaxAndTotal({
+    slug: data.slug,
+    subtotalQar: discountedSubtotalQar,
+    shippingQar: discountedShippingQar,
+  });
 
   return {
     status: 'success',
-    code: evaluation.discount.code,
-    title: evaluation.discount.title,
-    subtotalDiscountQar: evaluation.subtotalDiscountQar,
-    shippingDiscountQar: evaluation.shippingDiscountQar,
-    totalDiscountQar: evaluation.totalDiscountQar,
+    code: result.application.code,
+    title: result.application.title,
+    discountQar: result.application.discountQar,
+    subtotalQar: preview.subtotalQar,
+    shippingQar,
+    totalQar,
   };
 }
 
@@ -208,8 +244,8 @@ export async function previewCheckoutDiscount(
  *  4. Recompute money server-side from `products.price_qar` — never
  *     trust client-supplied prices.
  *  5. Insert order + items via `createOrderRow`.
- *  6. Fire-and-forget owner + buyer email; mailer failures do NOT roll
- *     back the order — they're reported to Sentry.
+ *  6. Attempt owner/buyer email and WhatsApp notifications; failures do
+ *     not roll back the order, but they are reported to Sentry.
  *  7. Audit (no PII), revalidate `/account/orders`.
  */
 export async function createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
@@ -238,13 +274,26 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
   const settings = await getStorefrontCheckoutSettings(data.slug);
   const ownerPlan = await getPlan(storefront.clerkUserId);
+  const canAcceptOnlinePayments = planUnlocksOnlinePayments(ownerPlan);
   const monthlyOrders = await countCheckoutOrdersForUserMonth(storefront.clerkUserId);
   const orderCapError = monthlyOrderCapFailure(ownerPlan, monthlyOrders);
   if (orderCapError) {
     return orderCapError;
   }
 
-  if (!settings.paymentMethods.includes(data.paymentMethod)) {
+  const effectivePaymentMethods = checkoutPaymentMethodsForPlan(
+    settings.paymentMethods,
+    canAcceptOnlinePayments,
+  );
+  if (!canAcceptOnlinePayments && isOnlinePaymentMethod(data.paymentMethod)) {
+    return {
+      status: 'error',
+      message:
+        'Online payments are available on Pro+ and Max+. This store can receive cash-on-delivery orders and WhatsApp notifications on Pro.',
+      field: 'paymentMethod',
+    };
+  }
+  if (!effectivePaymentMethods.includes(data.paymentMethod)) {
     return {
       status: 'error',
       message: 'This payment method is not accepted.',
@@ -297,13 +346,6 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       field: 'paymentMethod',
     };
   }
-  if (data.paymentMethod === 'skipcash' && !hasSkipCash()) {
-    return {
-      status: 'error',
-      message: 'Online checkout is not configured yet.',
-      field: 'paymentMethod',
-    };
-  }
   if (data.paymentMethod === 'sadad' && !settings.sadad?.enabled) {
     return {
       status: 'error',
@@ -319,7 +361,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     price_qar: string | null;
     pricing_mode: 'one_time' | 'monthly_payment';
     monthly_price_qar: string | null;
-    category_ids?: string[] | null;
+    category: string | null;
     size_options?: unknown;
     allow_custom_size?: boolean | null;
     requires_height_input?: boolean | null;
@@ -330,12 +372,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   const productRows = (await db()`
     select
       id, title, price_qar, pricing_mode, monthly_price_qar, size_options,
-      allow_custom_size, requires_height_input, height_input_label, height_options, status,
-      (
-        select coalesce(array_agg(pc.category_id::text), '{}'::text[])
-        from product_categories pc
-        where pc.product_id = products.id
-      ) as category_ids
+      category, allow_custom_size, requires_height_input, height_input_label, height_options, status
     from products
     where storefront_slug = ${data.slug}
       and id = any(${productIds as unknown as string}::uuid[])
@@ -358,16 +395,16 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         field: 'items',
       };
     }
-    const sizeOptions = normalizeSizeOptions(p.size_options);
+    const sizeOptions = normalizeVariantOptions(p.size_options);
     if (!isAllowedProductSizeOption(sizeOptions, it.variantLabel, p.allow_custom_size === true)) {
       return {
         status: 'error',
         message:
           sizeOptions.length > 0
             ? p.allow_custom_size === true
-              ? `Choose or enter a size for "${p.title}".`
-              : `Choose a size for "${p.title}".`
-            : `"${p.title}" does not use size options.`,
+              ? `Choose or enter an option for "${p.title}".`
+              : `Choose an option for "${p.title}".`
+            : `"${p.title}" does not use variant options.`,
         field: 'items',
       };
     }
@@ -415,8 +452,8 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     subtotalQar += lineTotal;
     discountLines.push({
       productId: product.id,
+      category: product.category ?? null,
       lineTotalQar: lineTotal,
-      categoryIds: product.category_ids ?? [],
     });
     const customInputs: Record<string, string> =
       product.requires_height_input === true
@@ -429,7 +466,8 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       productId: product.id,
       titleSnapshot: product.title,
       variantLabel:
-        normalizeSizeOptions(product.size_options).length > 0 || product.allow_custom_size === true
+        normalizeVariantOptions(product.size_options).length > 0 ||
+        product.allow_custom_size === true
           ? normalizeCustomSizeValue(it.variantLabel)
           : null,
       customInputs,
@@ -438,7 +476,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     };
   });
 
-  const { shippingQar: baseShippingQar } = await calculateCheckoutTotals({
+  const shippingQar = await calculateShippingQar({
     slug: data.slug,
     subtotalQar,
     fallbackShippingQar: settings.shippingFlatQar ?? 0,
@@ -461,69 +499,60 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     };
   }
 
-  let discount: Discount | null = null;
-  let subtotalDiscountQar = 0;
-  let shippingDiscountQar = 0;
-  let totalDiscountQar = 0;
-  let discountClaimed = false;
-  const requestedDiscountCode = data.discountCode ? normalizeDiscountCode(data.discountCode) : null;
+  const requestedDiscountCode = normalizeDiscountCode(data.discountCode);
+  let discountApplication: CheckoutDiscountApplication | null = null;
   if (requestedDiscountCode) {
-    discount = await getDiscountByCode(data.slug, requestedDiscountCode);
-    if (!discount) {
-      return { status: 'error', message: 'Enter a valid promo code.', field: 'discountCode' };
-    }
-    const evaluation = evaluateCheckoutDiscount({
-      discount,
+    const discountResult = await validateCheckoutDiscount({
+      storefrontSlug: data.slug,
+      code: requestedDiscountCode,
       subtotalQar,
-      shippingQar: baseShippingQar,
+      shippingQar,
       lines: discountLines,
+      customerEmail: data.customer.email ?? null,
+      customerPhone: data.customer.phone,
     });
-    if (evaluation.status === 'error') {
-      return { status: 'error', message: evaluation.message, field: 'discountCode' };
-    }
-    if (
-      discount.perCustomerLimit !== null &&
-      (await countCustomerDiscountUses({
-        slug: data.slug,
-        discountId: discount.id,
-        phone: data.customer.phone,
-        email: data.customer.email ?? null,
-      })) >= discount.perCustomerLimit
-    ) {
+    if (!discountResult.ok) {
       return {
         status: 'error',
-        message: 'This code has already been used by this customer.',
+        message: discountResult.message,
         field: 'discountCode',
       };
     }
-    discountClaimed = await claimDiscountUse(data.slug, discount.id);
-    if (!discountClaimed) {
-      return {
-        status: 'error',
-        message: 'This code has reached its usage limit.',
-        field: 'discountCode',
-      };
-    }
-    subtotalDiscountQar = evaluation.subtotalDiscountQar;
-    shippingDiscountQar = evaluation.shippingDiscountQar;
-    totalDiscountQar = evaluation.totalDiscountQar;
+    discountApplication = discountResult.application;
   }
 
-  const discountedSubtotalQar = Math.max(subtotalQar - subtotalDiscountQar, 0);
-  const discountedShippingQar = Math.max(baseShippingQar - shippingDiscountQar, 0);
-  const { shippingQar, taxQar, totalQar: feeBaseQar } = await calculateCheckoutTotals({
+  const discountedSubtotalQar = Math.max(
+    0,
+    subtotalQar - (discountApplication?.productDiscountQar ?? 0),
+  );
+  const discountedShippingQar = Math.max(
+    0,
+    shippingQar - (discountApplication?.shippingDiscountQar ?? 0),
+  );
+  const { taxQar, totalQar: checkoutTotalQar } = await calculateTaxAndTotal({
     slug: data.slug,
     subtotalQar: discountedSubtotalQar,
-    fallbackShippingQar: discountedShippingQar,
-    overrideShippingQar: discountedShippingQar,
-    address: data.address,
+    shippingQar: discountedShippingQar,
   });
 
-  const feeSnapshot = checkoutOrderFeeSnapshot(ownerPlan, feeBaseQar, data.paymentMethod);
-  const { buyerTotalQar: totalQar, feeBaseQar: feeBaseSnapshotQar, ...orderFeeFields } = feeSnapshot;
+  const financialSnapshot = checkoutOrderFinancialSnapshot(
+    ownerPlan,
+    checkoutTotalQar,
+    data.paymentMethod,
+    { platformSkipCash: false },
+  );
+  const { buyerTotalQar: totalQar, ...orderFinancialFields } = financialSnapshot;
 
   const skipCashTransactionId =
     data.paymentMethod === 'skipcash' ? newSkipCashTransactionId() : null;
+  const appliedDiscountMetadata = discountApplication
+    ? {
+        id: discountApplication.id,
+        code: discountApplication.code,
+        productDiscountQar: discountApplication.productDiscountQar,
+        shippingDiscountQar: discountApplication.shippingDiscountQar,
+      }
+    : null;
   const consentMetadata = {
     buyerConsents: {
       terms: data.consents.terms,
@@ -535,22 +564,6 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       source: 'checkout',
     },
   };
-  const discountMetadata =
-    discount && totalDiscountQar > 0
-      ? {
-          discount: {
-            id: discount.id,
-            code: discount.code,
-            title: discount.title,
-            valueType: discount.valueType,
-            subtotalDiscountQar,
-            shippingDiscountQar,
-            totalDiscountQar,
-            rawSubtotalQar: subtotalQar,
-            rawShippingQar: baseShippingQar,
-          },
-        }
-      : {};
   let order;
   try {
     order = await createOrderRow({
@@ -563,56 +576,66 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       address: data.address as OrderAddress,
       paymentMethod: data.paymentMethod,
       currency: settings.currency,
-      subtotalQar: discountedSubtotalQar,
+      subtotalQar,
+      discountQar: discountApplication?.discountQar ?? 0,
+      discountCode: discountApplication?.code ?? null,
+      discountId: discountApplication?.id ?? null,
       shippingQar,
       taxQar,
       totalQar,
-      ...orderFeeFields,
+      ...orderFinancialFields,
       acceptedPolicies: data.acceptedPolicies,
       notes: data.notes ?? null,
       metadata: skipCashTransactionId
-          ? {
+        ? {
             paymentProvider: 'skipcash',
             skipcashTransactionId: skipCashTransactionId,
             monthlyPaymentOrder: hasMonthlyPaymentItem,
-            feeBaseQar: feeBaseSnapshotQar,
-            platformFeeAddedToCheckout: orderFeeFields.platformFeeQar > 0,
+            appliedDiscount: appliedDiscountMetadata,
             ...consentMetadata,
-            ...discountMetadata,
           }
         : data.paymentMethod === 'sadad'
           ? {
               paymentProvider: 'sadad',
               sadadOrderId: null,
-              feeBaseQar: feeBaseSnapshotQar,
-              platformFeeAddedToCheckout: orderFeeFields.platformFeeQar > 0,
+              appliedDiscount: appliedDiscountMetadata,
               ...consentMetadata,
-              ...discountMetadata,
             }
           : hasMonthlyPaymentItem
             ? {
                 monthlyPaymentOrder: true,
-                feeBaseQar: feeBaseSnapshotQar,
-                platformFeeAddedToCheckout: orderFeeFields.platformFeeQar > 0,
+                appliedDiscount: appliedDiscountMetadata,
                 ...consentMetadata,
-                ...discountMetadata,
               }
             : {
-                feeBaseQar: feeBaseSnapshotQar,
-                platformFeeAddedToCheckout: orderFeeFields.platformFeeQar > 0,
+                appliedDiscount: appliedDiscountMetadata,
                 ...consentMetadata,
-                ...discountMetadata,
               },
       items: itemRows,
     });
   } catch (err) {
-    if (discountClaimed && discount) {
-      await releaseDiscountUse(data.slug, discount.id);
-    }
     Sentry.captureException(err, {
       tags: { area: 'checkout', slug: data.slug },
     });
     return { status: 'error', message: 'Could not place order. Please try again.' };
+  }
+
+  if (discountApplication) {
+    try {
+      const counted = await incrementDiscountUsage(data.slug, discountApplication.id);
+      if (!counted) {
+        Sentry.captureMessage('checkout discount usage limit reached after order insert', {
+          level: 'warning',
+          tags: { area: 'checkout-discount', slug: data.slug },
+          extra: { orderId: order.id, discountId: discountApplication.id },
+        });
+      }
+    } catch (err) {
+      Sentry.captureException(err, {
+        tags: { area: 'checkout-discount', slug: data.slug },
+        extra: { orderId: order.id, discountId: discountApplication.id },
+      });
+    }
   }
 
   await syncCheckoutCustomer({
@@ -638,15 +661,27 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         };
       }
       const [firstName, ...lastParts] = data.customer.name.split(/\s+/);
-      const payment = await createSkipCashPayment({
-        amountQar: totalQar,
-        firstName: firstName || data.customer.name,
-        lastName: lastParts.join(' ') || 'Customer',
-        email: data.customer.email ?? `${order.id}@souqna.qa`,
-        phone: data.customer.phone,
-        transactionId: skipCashTransactionId,
-        custom1: order.id,
-      });
+      const credentials = await getStorefrontSkipCashCredentials(data.slug);
+      if (!credentials) {
+        return {
+          status: 'error',
+          message:
+            'SkipCash credentials are not configured for this store. Please choose another method or contact the store.',
+          field: 'paymentMethod',
+        };
+      }
+      const payment = await createSkipCashPaymentForMerchant(
+        {
+          amountQar: totalQar,
+          firstName: firstName || data.customer.name,
+          lastName: lastParts.join(' ') || 'Customer',
+          email: data.customer.email ?? `${order.id}@souqna.qa`,
+          phone: data.customer.phone,
+          transactionId: skipCashTransactionId,
+          custom1: order.id,
+        },
+        credentials,
+      );
       redirectUrl = payment.payUrl;
     } catch (err) {
       Sentry.captureException(err, {
@@ -673,72 +708,14 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
   const instructions = buildPaymentInstructions(data.paymentMethod, settings);
 
-  if (data.paymentMethod !== 'skipcash' && data.paymentMethod !== 'sadad') {
-    // Fire-and-forget mailer. Order is already persisted — failures here
-    // surface in Sentry but never roll back the buyer's checkout.
-    void (async () => {
-      try {
-        const ownerEmail = storefront.contactEmail;
-        if (ownerEmail) {
-          const owner = await sendNewOrderToOwner({
-            ownerEmail,
-            slug: data.slug,
-            order,
-            paymentInstructions: instructions,
-          });
-          if (!owner.ok) {
-            Sentry.captureMessage('checkout owner email failed', {
-              level: 'warning',
-              tags: { area: 'checkout', slug: data.slug, provider: owner.provider },
-            });
-          }
-        }
-        await notifyMobileNewOrder({
-          storefrontSlug: data.slug,
-          businessName: storefront.businessName,
-          order,
-        });
-        await pushOrderCreatedNotification({
-          userId: storefront.clerkUserId,
-          founderName: storefront.founderName,
-          businessName: storefront.businessName,
-          slug: data.slug,
-          order,
-        });
-        const whatsapp = await sendWhatsAppOrderConfirmation({
-          storefrontSlug: data.slug,
-          businessName: storefront.businessName,
-          order,
-        });
-        if (whatsapp.status === 'error') {
-          Sentry.captureMessage('checkout WhatsApp order confirmation failed', {
-            level: 'warning',
-            tags: { area: 'checkout', slug: data.slug, channel: 'whatsapp' },
-            extra: { reason: whatsapp.reason },
-          });
-        }
-        const buyerEmail = data.customer.email ?? null;
-        if (buyerEmail) {
-          const buyer = await sendOrderConfirmationToBuyer({
-            buyerEmail,
-            slug: data.slug,
-            order,
-            paymentInstructions: instructions,
-          });
-          if (!buyer.ok) {
-            Sentry.captureMessage('checkout buyer email failed', {
-              level: 'warning',
-              tags: { area: 'checkout', slug: data.slug, provider: buyer.provider },
-            });
-          }
-        }
-      } catch (err) {
-        Sentry.captureException(err, {
-          tags: { area: 'checkout-mailer', slug: data.slug },
-        });
-      }
-    })();
-  }
+  // Keep transactional notifications inside the action. Serverless runtimes
+  // do not guarantee unawaited work after the response is returned.
+  await notifyCheckoutOrderCreated({
+    slug: data.slug,
+    storefront,
+    order,
+    paymentInstructions: instructions,
+  });
 
   await recordAudit({
     storefrontSlug: data.slug,
@@ -750,6 +727,8 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       orderId: order.id,
       paymentMethod: data.paymentMethod,
       totalQar,
+      discountCode: discountApplication?.code ?? null,
+      discountQar: discountApplication?.discountQar ?? 0,
       itemCount: itemRows.length,
     },
   });
@@ -852,7 +831,7 @@ export async function updateOrderStatus(
     meta: { orderId: data.orderId, status: data.status },
   });
   if (before?.orderStatus !== data.status && isBuyerFacingStatus(data.status)) {
-    void sendBuyerStatusMessage(data.slug, updated, data.status);
+    await sendBuyerStatusMessage(data.slug, updated, data.status);
   }
   revalidatePath('/account/orders');
   revalidatePath(`/account/orders/${data.orderId}`);
@@ -874,9 +853,9 @@ export async function markOrderPaid(
       ? await markOnlinePaymentSucceeded(data.orderId, data.slug)
       : await setOrderPaymentStatusRow(data.orderId, data.slug, 'marked_paid');
   if (!updated) return { status: 'error', message: 'Order not found' };
-  await recordPlatformFeeForPaidOrder(updated);
+  await recordPlatformPayoutForPaidOrder(updated);
   if (order?.paymentStatus !== 'marked_paid') {
-    void sendBuyerPaymentMessage(data.slug, updated, 'paid');
+    await sendBuyerPaymentMessage(data.slug, updated, 'paid');
   }
 
   await recordAudit({
@@ -918,10 +897,10 @@ async function sendBuyerStatusMessage(
       message: statusMessage(status),
       idempotencyKey: `order-status-${status}-${order.id}`,
     });
-    if (result.status === 'error') {
+    if (result.status !== 'sent') {
       Sentry.captureMessage('order status Sent notification failed', {
         level: 'warning',
-        tags: { area: 'checkout-status', slug, status },
+        tags: { area: 'checkout-status', slug, status, sentStatus: result.status },
         extra: { reason: result.reason },
       });
     }
@@ -945,10 +924,10 @@ async function sendBuyerPaymentMessage(
       status,
       idempotencyKey: `payment-${status}-${order.id}`,
     });
-    if (result.status === 'error') {
+    if (result.status !== 'sent') {
       Sentry.captureMessage('order payment Sent notification failed', {
         level: 'warning',
-        tags: { area: 'checkout-payment', slug, status },
+        tags: { area: 'checkout-payment', slug, status, sentStatus: result.status },
         extra: { reason: result.reason },
       });
     }
@@ -1006,6 +985,8 @@ function labelMethod(method: PaymentMethod): string {
       return 'cash on delivery';
     case 'bank_transfer':
       return 'bank transfer';
+    case 'fawran':
+      return 'Fawran';
     case 'skipcash':
       return 'SkipCash';
     case 'sadad':
@@ -1015,136 +996,129 @@ function labelMethod(method: PaymentMethod): string {
   }
 }
 
-async function buildCheckoutDiscountLines(
+async function buildDiscountPreviewLines(
   slug: string,
-  items: Array<{ productId: string; quantity: number }>,
-): Promise<{ subtotalQar: number; lines: CheckoutDiscountLine[] }> {
-  const productIds = items.map((item) => item.productId);
-  if (productIds.length === 0) return { subtotalQar: 0, lines: [] };
-
-  const rows = (await db()`
-    select
-      id,
-      price_qar,
-      pricing_mode,
-      monthly_price_qar,
-      (
-        select coalesce(array_agg(pc.category_id::text), '{}'::text[])
-        from product_categories pc
-        where pc.product_id = products.id
-      ) as category_ids
-    from products
-    where storefront_slug = ${slug}
-      and status = 'active'
-      and id = any(${productIds as unknown as string}::uuid[])
-  `) as unknown as Array<{
+  items: z.infer<typeof ItemSchema>[],
+): Promise<
+  | { subtotalQar: number; lines: CheckoutDiscountLine[] }
+  | { error: Extract<ApplyDiscountCodeResult, { status: 'error' }> }
+> {
+  const productIds = items.map((it) => it.productId);
+  type DiscountProductRow = {
     id: string;
+    title: string;
     price_qar: string | null;
     pricing_mode: 'one_time' | 'monthly_payment';
     monthly_price_qar: string | null;
-    category_ids: string[] | null;
-  }>;
-
-  const byId = new Map(rows.map((row) => [row.id, row]));
+    category: string | null;
+    status: 'active' | 'draft' | 'sold_out';
+  };
+  const productRows = (await db()`
+    select id, title, price_qar, pricing_mode, monthly_price_qar, category, status
+    from products
+    where storefront_slug = ${slug}
+      and id = any(${productIds as unknown as string}::uuid[])
+  `) as unknown as DiscountProductRow[];
+  const byId = new Map(productRows.map((p) => [p.id, p]));
   let subtotalQar = 0;
   const lines: CheckoutDiscountLine[] = [];
+
   for (const item of items) {
     const product = byId.get(item.productId);
-    if (!product) continue;
+    if (!product || product.status !== 'active') {
+      return {
+        error: {
+          status: 'error',
+          message: 'One of the items in your cart is no longer available.',
+          field: 'items',
+        },
+      };
+    }
     const rawUnit =
       product.pricing_mode === 'monthly_payment' ? product.monthly_price_qar : product.price_qar;
-    if (rawUnit === null) continue;
-    const lineTotalQar = Math.max(0, Math.round(Number(rawUnit))) * item.quantity;
+    if (rawUnit === null) {
+      return {
+        error: {
+          status: 'error',
+          message: `"${product.title}" has no price set.`,
+          field: 'items',
+        },
+      };
+    }
+    const lineTotalQar = Math.round(Number(rawUnit)) * item.quantity;
     subtotalQar += lineTotalQar;
     lines.push({
       productId: product.id,
+      category: product.category ?? null,
       lineTotalQar,
-      categoryIds: product.category_ids ?? [],
     });
   }
 
   return { subtotalQar, lines };
 }
 
-async function countCustomerDiscountUses({
-  slug,
-  discountId,
-  phone,
-  email,
-}: {
-  slug: string;
-  discountId: number;
-  phone: string;
-  email: string | null;
-}): Promise<number> {
-  const rows = (await db()`
-    select count(*)::int as n
-    from checkout_orders
-    where storefront_slug = ${slug}
-      and order_status <> 'cancelled'
-      and metadata->'discount'->>'id' = ${String(discountId)}
-      and (
-        customer_phone = ${phone}
-        or (${email}::text is not null and customer_email = ${email})
-      )
-  `) as unknown as { n: number }[];
-  return Number(rows[0]?.n ?? 0);
-}
-
-async function calculateCheckoutTotals({
+async function calculateShippingQar({
   slug,
   subtotalQar,
   fallbackShippingQar,
-  overrideShippingQar,
   address,
 }: {
   slug: string;
   subtotalQar: number;
   fallbackShippingQar: number;
-  overrideShippingQar?: number;
-  address: z.infer<typeof AddressSchema>;
-}): Promise<{ shippingQar: number; taxQar: number; totalQar: number }> {
-  let shippingQar = overrideShippingQar ?? fallbackShippingQar;
+  address?: { city?: string | null; country?: string | null } | null;
+}): Promise<number> {
+  let shippingQar = fallbackShippingQar;
 
-  if (overrideShippingQar === undefined) {
-    try {
-      const shipping = await getShippingSettings(slug);
-      if (shipping.profile?.enabled) {
-        const country = normalizeCountryCode(address.country);
-        const city = address.city.trim().toLowerCase();
-        const matchingRate =
-          shipping.rates.find(
-            (rate) =>
-              rate.enabled &&
-              rate.countryCode.toUpperCase() === country &&
-              (!rate.city || rate.city.trim().toLowerCase() === city) &&
-              (rate.minSubtotalQar === null || subtotalQar >= rate.minSubtotalQar) &&
-              (rate.maxSubtotalQar === null || subtotalQar <= rate.maxSubtotalQar),
-          ) ??
-          shipping.rates.find(
-            (rate) =>
-              rate.enabled &&
-              rate.countryCode.toUpperCase() === country &&
-              (rate.minSubtotalQar === null || subtotalQar >= rate.minSubtotalQar) &&
-              (rate.maxSubtotalQar === null || subtotalQar <= rate.maxSubtotalQar),
-          ) ??
-          shipping.rates.find((rate) => rate.enabled);
+  try {
+    const shipping = await getShippingSettings(slug);
+    if (shipping.profile?.enabled) {
+      const country = normalizeCountryCode(address?.country || 'Qatar');
+      const city = (address?.city ?? '').trim().toLowerCase();
+      const matchingRate =
+        shipping.rates.find(
+          (rate) =>
+            rate.enabled &&
+            rate.countryCode.toUpperCase() === country &&
+            (!rate.city || rate.city.trim().toLowerCase() === city) &&
+            (rate.minSubtotalQar === null || subtotalQar >= rate.minSubtotalQar) &&
+            (rate.maxSubtotalQar === null || subtotalQar <= rate.maxSubtotalQar),
+        ) ??
+        shipping.rates.find(
+          (rate) =>
+            rate.enabled &&
+            rate.countryCode.toUpperCase() === country &&
+            (rate.minSubtotalQar === null || subtotalQar >= rate.minSubtotalQar) &&
+            (rate.maxSubtotalQar === null || subtotalQar <= rate.maxSubtotalQar),
+        ) ??
+        shipping.rates.find((rate) => rate.enabled);
 
-        if (matchingRate) {
-          shippingQar = matchingRate.amountQar;
-        }
-        if (
-          shipping.profile.freeShippingMinQar !== null &&
-          subtotalQar >= shipping.profile.freeShippingMinQar
-        ) {
-          shippingQar = 0;
-        }
+      if (matchingRate) {
+        shippingQar = matchingRate.amountQar;
       }
-    } catch (err) {
-      Sentry.captureException(err, { tags: { area: 'checkout-shipping', slug } });
+      if (
+        shipping.profile.freeShippingMinQar !== null &&
+        subtotalQar >= shipping.profile.freeShippingMinQar
+      ) {
+        shippingQar = 0;
+      }
     }
+  } catch (err) {
+    Sentry.captureException(err, { tags: { area: 'checkout-shipping', slug } });
   }
 
+  return shippingQar;
+}
+
+async function calculateTaxAndTotal({
+  slug,
+  subtotalQar,
+  shippingQar,
+}: {
+  slug: string;
+  subtotalQar: number;
+  shippingQar: number;
+}): Promise<{ taxQar: number; totalQar: number }> {
   let taxQar = 0;
   let totalQar = subtotalQar + shippingQar;
   try {
@@ -1160,7 +1134,7 @@ async function calculateCheckoutTotals({
     Sentry.captureException(err, { tags: { area: 'checkout-tax', slug } });
   }
 
-  return { shippingQar, taxQar, totalQar };
+  return { taxQar, totalQar };
 }
 
 function normalizeCountryCode(country: string): string {
@@ -1196,6 +1170,12 @@ function buildPaymentInstructions(
     return {
       heading: 'Bank transfer details',
       body: lines.join('\n'),
+    };
+  }
+  if (method === 'fawran') {
+    return {
+      heading: 'Fawran payment',
+      body: settings.bankDetails?.notes ?? 'Pay with Fawran using the merchant details on file.',
     };
   }
   if (method === 'pay_link' && settings.payLink) {

@@ -19,6 +19,12 @@ export function AdminLanguageBridge() {
 
     if (locale !== 'ar') return undefined;
 
+    let scheduled = false;
+    let disposed = false;
+    let frame: number | null = null;
+    const pending = new Set<Node>();
+    let observer: MutationObserver | null = null;
+
     const translateTree = (node: Node) => {
       translateTextNodes(node);
       if (node instanceof Element) translateElementAttrs(node);
@@ -27,19 +33,46 @@ export function AdminLanguageBridge() {
       }
     };
 
+    const observe = () => {
+      observer?.observe(document.body, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
+    };
+
+    const flush = () => {
+      if (disposed) return;
+      scheduled = false;
+      frame = null;
+      observer?.disconnect();
+      const nodes = Array.from(pending);
+      pending.clear();
+      for (const node of nodes) translateTree(node);
+      observe();
+    };
+
+    const scheduleFlush = () => {
+      if (scheduled) return;
+      scheduled = true;
+      frame = window.requestAnimationFrame(flush);
+    };
+
     translateTree(document.body);
-    const observer = new MutationObserver((mutations) => {
+    observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
-        if (mutation.type === 'characterData') translateTextNode(mutation.target);
-        for (const node of mutation.addedNodes) translateTree(node);
+        if (mutation.type === 'characterData') pending.add(mutation.target);
+        for (const node of mutation.addedNodes) pending.add(node);
       }
+      if (pending.size > 0) scheduleFlush();
     });
-    observer.observe(document.body, {
-      childList: true,
-      characterData: true,
-      subtree: true,
-    });
-    return () => observer.disconnect();
+    observe();
+    return () => {
+      disposed = true;
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      pending.clear();
+    };
   }, [locale]);
 
   return null;

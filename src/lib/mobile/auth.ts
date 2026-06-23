@@ -3,14 +3,17 @@ import 'server-only';
 import { auth, clerkClient, currentUser, verifyToken } from '@clerk/nextjs/server';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { getPlan, getPlanMeta, listPlanHistory } from '@/lib/billing';
+import {
+  getPlan,
+  getPlanMeta,
+  listPlanHistory,
+  planUnlocksOnlinePayments,
+} from '@/lib/billing';
 import { db } from '@/lib/db';
 import { env } from '@/lib/env';
-import {
-  assertStorefrontAccess,
-  type StorefrontAccess,
-} from '@/lib/products';
+import { assertStorefrontAccess, type StorefrontAccess } from '@/lib/products';
 import { PLAN_LIMITS, priceFor, type BillingCycle, type Plan } from '@/lib/plans';
+import { getSouqyMonthlyCount } from '@/lib/souqy/db';
 import { storefrontBaseUrl } from '@/lib/storefrontUrl';
 import {
   CAPABILITIES,
@@ -25,6 +28,7 @@ export type MobileUser = {
   userId: string;
   name: string | null;
   email: string | null;
+  username: string | null;
 };
 
 export type MobileStoreSummary = {
@@ -47,18 +51,40 @@ export type MobileBillingSummary = {
   plan: Plan;
   label: string;
   labelAr: string;
-  status: 'free' | 'active' | 'pending' | 'cancelled' | 'suspended' | 'expired' | 'failed' | 'manual';
-  provider: 'skipcash' | 'stripe' | 'manual' | null;
+  status:
+    | 'free'
+    | 'active'
+    | 'pending'
+    | 'cancelled'
+    | 'suspended'
+    | 'expired'
+    | 'failed'
+    | 'manual';
+  provider: 'skipcash' | 'manual' | null;
   cycle: BillingCycle | null;
   monthlyPriceQar: number;
   effectivePriceQar: number;
   storefrontLimit: number | null;
   templateCount: number;
+  canAcceptOnlinePayments: boolean;
   currentPeriodEnd: string | null;
   nextBillingTime: string | null;
   subscriptionId: string | null;
   cardBrand: string | null;
   cardLast4: string | null;
+  credits: {
+    monthlyIncluded: number | null;
+    monthlyIncludedLabel: string;
+    balanceAvailable: boolean;
+    currentBalance: number | null;
+    usedThisMonth: number | null;
+    remainingThisMonth: number | null;
+    resetDate: string | null;
+    topUpsAvailable: boolean;
+    addCreditsUrl: string | null;
+    trackedSouqyGenerationsThisMonth: number;
+    note: string;
+  };
   history: Array<{
     id: string;
     fromPlan: string | null;
@@ -121,11 +147,7 @@ export function mobileOptions(): NextResponse {
   });
 }
 
-export function mobileError(
-  status: number,
-  code: string,
-  message: string,
-): NextResponse {
+export function mobileError(status: number, code: string, message: string): NextResponse {
   return mobileJson({ error: code, message }, { status });
 }
 
@@ -144,6 +166,9 @@ export async function requireMobileUser(): Promise<
 }
 
 async function resolveMobileUser(): Promise<MobileUser | null> {
+  const devUser = await resolveDevMobileUser();
+  if (devUser) return devUser;
+
   const { userId } = await auth();
   if (userId) {
     const user = await currentUser().catch(() => null);
@@ -176,6 +201,25 @@ async function resolveMobileUser(): Promise<MobileUser | null> {
   });
 }
 
+async function resolveDevMobileUser(): Promise<MobileUser | null> {
+  if (process.env.NODE_ENV === 'production') return null;
+  if (process.env.SOUQNA_MOBILE_DEV_AUTH !== '1') return null;
+
+  const expectedToken = process.env.SOUQNA_MOBILE_DEV_TOKEN?.trim();
+  const userId = process.env.SOUQNA_MOBILE_DEV_USER_ID?.trim();
+  if (!expectedToken || !userId) return null;
+
+  const actualToken = (await headers()).get('x-souqna-mobile-dev-token')?.trim();
+  if (actualToken !== expectedToken) return null;
+
+  return toMobileUser(userId, {
+    email: process.env.SOUQNA_MOBILE_DEV_EMAIL?.trim() || null,
+    firstName: process.env.SOUQNA_MOBILE_DEV_NAME?.trim() || 'Souqna',
+    lastName: null,
+    username: 'mobile-dev',
+  });
+}
+
 async function readBearerToken(): Promise<string | null> {
   const authorization = (await headers()).get('authorization') ?? '';
   const token = authorization.replace(/^Bearer\s+/i, '').trim();
@@ -192,11 +236,9 @@ function toMobileUser(
   },
 ): MobileUser {
   const name =
-    [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
-    user.username ||
-    null;
+    [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || user.username || null;
 
-  return { userId, email: user.email, name };
+  return { userId, email: user.email, name, username: user.username };
 }
 
 function primaryEmail(user: ClerkUserProfile | null | undefined): string | null {
@@ -206,15 +248,19 @@ function primaryEmail(user: ClerkUserProfile | null | undefined): string | null 
     return primary.emailAddress;
   }
 
-  return primary?.emailAddress ?? emails.find((email) => email.verification?.status === 'verified')?.emailAddress ?? emails[0]?.emailAddress ?? null;
+  return (
+    primary?.emailAddress ??
+    emails.find((email) => email.verification?.status === 'verified')?.emailAddress ??
+    emails[0]?.emailAddress ??
+    null
+  );
 }
 
 export async function requireMobileStoreAccess(
   slug: string | null,
   capability: Capability,
 ): Promise<
-  | { ok: true; user: MobileUser; access: StorefrontAccess }
-  | { ok: false; response: NextResponse }
+  { ok: true; user: MobileUser; access: StorefrontAccess } | { ok: false; response: NextResponse }
 > {
   const user = await requireMobileUser();
   if (!user.ok) return user;
@@ -253,9 +299,7 @@ async function resolveMobileStoreAccess(
   return { storefront, role: 'owner', capabilities: {} } as StorefrontAccess;
 }
 
-export async function listMobileStores(
-  user: MobileUser,
-): Promise<MobileStoreSummary[]> {
+export async function listMobileStores(user: MobileUser): Promise<MobileStoreSummary[]> {
   const userEmail = user.email?.toLowerCase() ?? null;
   const ownerRows = (await db()`
     select slug, business_name, contact_email, logo_url, locale, is_published,
@@ -338,13 +382,12 @@ export async function listMobileStores(
   }));
 }
 
-export async function getMobileBilling(
-  userId: string,
-): Promise<MobileBillingSummary> {
-  const [plan, meta, history] = await Promise.all([
+export async function getMobileBilling(userId: string): Promise<MobileBillingSummary> {
+  const [plan, meta, history, trackedSouqyGenerationsThisMonth] = await Promise.all([
     getPlan(userId),
     getPlanMeta(userId),
     listPlanHistory(userId, 5),
+    getSouqyMonthlyCount(userId),
   ]);
   const limits = PLAN_LIMITS[plan];
   const cycle =
@@ -354,11 +397,9 @@ export async function getMobileBilling(
   const provider =
     typeof meta.skipcashPaymentId === 'string'
       ? 'skipcash'
-      : typeof meta.stripeSubscriptionId === 'string'
-        ? 'stripe'
-        : plan === 'free'
-          ? null
-          : 'manual';
+      : plan === 'free'
+        ? null
+        : 'manual';
   const rawStatus =
     typeof meta.subscriptionStatus === 'string'
       ? meta.subscriptionStatus.toLowerCase()
@@ -378,18 +419,19 @@ export async function getMobileBilling(
     effectivePriceQar: priceFor(plan, cycle ?? 'monthly'),
     storefrontLimit: Number.isFinite(limits.storefronts) ? limits.storefronts : null,
     templateCount: limits.templateCount,
-    currentPeriodEnd:
-      typeof meta.currentPeriodEnd === 'string' ? meta.currentPeriodEnd : null,
-    nextBillingTime:
-      typeof meta.nextBillingTime === 'string' ? meta.nextBillingTime : null,
+    canAcceptOnlinePayments: planUnlocksOnlinePayments(plan),
+    currentPeriodEnd: typeof meta.currentPeriodEnd === 'string' ? meta.currentPeriodEnd : null,
+    nextBillingTime: typeof meta.nextBillingTime === 'string' ? meta.nextBillingTime : null,
     subscriptionId:
       typeof meta.skipcashPaymentId === 'string'
         ? meta.skipcashPaymentId
-        : typeof meta.stripeSubscriptionId === 'string'
-          ? meta.stripeSubscriptionId
-          : null,
+        : null,
     cardBrand: null,
     cardLast4: null,
+    credits: mobileCreditsSummary({
+      monthlyCredits: limits.aiCreditsMonthly,
+      trackedSouqyGenerationsThisMonth,
+    }),
     history: history.map((entry) => ({
       id: entry.id,
       fromPlan: entry.fromPlan,
@@ -399,6 +441,30 @@ export async function getMobileBilling(
       createdAt: entry.createdAt,
     })),
   };
+}
+
+function mobileCreditsSummary(args: {
+  monthlyCredits: number;
+  trackedSouqyGenerationsThisMonth: number;
+}): MobileBillingSummary['credits'] {
+  const monthlyIncluded = Number.isFinite(args.monthlyCredits) ? args.monthlyCredits : null;
+  return {
+    monthlyIncluded,
+    monthlyIncludedLabel: monthlyIncluded == null ? 'Unlimited' : `${monthlyIncluded} / month`,
+    balanceAvailable: false,
+    currentBalance: null,
+    usedThisMonth: null,
+    remainingThisMonth: null,
+    resetDate: monthlyIncluded == null ? null : nextMonthlyResetDate(),
+    topUpsAvailable: false,
+    addCreditsUrl: null,
+    trackedSouqyGenerationsThisMonth: args.trackedSouqyGenerationsThisMonth,
+    note: 'Credit wallet balance and top-ups are not available yet. This payload exposes the plan allowance and tracked Souqy generations for iOS display.',
+  };
+}
+
+function nextMonthlyResetDate(now = new Date()): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
 }
 
 function mobilePublicUrl(slug: string, customDomain: string | null): string {

@@ -156,11 +156,16 @@ export function AdminTopBar({ initialSouqyOpen = false }: { initialSouqyOpen?: b
               className="souqy-portal-link hidden sm:inline-flex"
               aria-label={`${t.viewStore}: ${active?.businessName ?? active?.slug}`}
             >
-              <span className="souqy-portal-link-orb" aria-hidden>
-                <span />
+              <span className="souqy-portal-link-mark" aria-hidden>
+                <SouqyLogo size={30} className="souqy-portal-link-logo" />
               </span>
-              <span className="souqy-portal-link-label">{t.viewStore}</span>
-              <ExternalGlyph size={14} />
+              <span className="souqy-portal-link-copy">
+                <span className="souqy-portal-link-kicker">Souqy</span>
+                <span className="souqy-portal-link-label">{t.viewStore}</span>
+              </span>
+              <span className="souqy-portal-link-arrow" aria-hidden>
+                <ExternalGlyph size={13} />
+              </span>
             </Link>
           ) : null}
 
@@ -248,24 +253,24 @@ const topBarPortalStyles = `
   position: relative;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  min-height: 38px;
-  padding: 0 16px;
+  gap: 10px;
+  min-height: 42px;
+  padding: 5px 8px 5px 9px;
   overflow: hidden;
   isolation: isolate;
-  border: 1px solid rgba(216, 202, 139, 0.58);
-  border-radius: 18px;
-  color: rgba(255, 252, 240, 0.96);
+  border: 1px solid rgba(255, 237, 167, 0.38);
+  border-radius: 999px;
+  color: rgba(255, 249, 225, 0.96);
   background:
-    radial-gradient(circle at 13% 48%, rgba(255, 227, 93, 0.24), transparent 16%),
-    linear-gradient(110deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.08) 34%, rgba(255, 250, 226, 0.14) 68%, rgba(255, 255, 255, 0.09)),
-    rgba(46, 45, 34, 0.68);
+    radial-gradient(circle at 19px 50%, rgba(255, 222, 82, 0.28), transparent 34px),
+    linear-gradient(105deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.045) 42%, rgba(255, 236, 156, 0.1)),
+    rgba(10, 10, 9, 0.78);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.34),
-    inset 0 -1px 0 rgba(255, 225, 135, 0.13),
-    0 0 0 1px rgba(68, 56, 28, 0.2),
-    0 10px 24px rgba(31, 26, 13, 0.12);
-  font-size: 14px;
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(255, 228, 126, 0.08),
+    0 0 0 1px rgba(255, 226, 118, 0.05),
+    0 14px 30px rgba(0, 0, 0, 0.2);
+  font-size: 12px;
   font-weight: 750;
   line-height: 1;
   white-space: nowrap;
@@ -283,12 +288,12 @@ const topBarPortalStyles = `
 .souqy-portal-link::before {
   content: '';
   position: absolute;
-  inset: 2px;
+  inset: 1px;
   z-index: -1;
-  border-radius: 15px;
+  border-radius: inherit;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04) 48%, rgba(0, 0, 0, 0.08)),
-    radial-gradient(circle at 12% 50%, rgba(255, 225, 102, 0.14), transparent 28%);
+    radial-gradient(circle at 29px 50%, rgba(255, 241, 184, 0.2), transparent 38px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), transparent 54%, rgba(0, 0, 0, 0.12));
   opacity: 1;
   pointer-events: none;
 }
@@ -307,47 +312,109 @@ const topBarPortalStyles = `
   pointer-events: none;
 }
 
-.souqy-portal-link-orb {
+.souqy-portal-link-mark {
   position: relative;
-  width: 18px;
-  height: 18px;
+  display: grid;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
+  place-items: center;
   border-radius: 999px;
-  background:
-    radial-gradient(circle at 42% 38%, #ffe985 0 22%, #f7cf48 23% 42%, rgba(117, 92, 28, 0.98) 74%),
-    #f5d35e;
-  box-shadow:
-    inset 0 1px 2px rgba(255, 255, 255, 0.72),
-    0 0 0 5px rgba(255, 219, 78, 0.12),
-    0 0 18px rgba(255, 223, 88, 0.48);
-  animation: souqy-portal-pulse 3.4s ease-in-out infinite;
+  box-shadow: 0 0 18px rgba(255, 223, 88, 0.32);
 }
 
-.souqy-portal-link-orb span {
+.souqy-portal-link-mark::after {
+  content: '';
   position: absolute;
-  inset: 0;
+  inset: -4px;
+  z-index: -1;
   border-radius: inherit;
-  background:
-    repeating-linear-gradient(164deg, transparent 0 4px, rgba(18, 17, 12, 0.32) 5px 7px, rgba(255, 255, 255, 0.18) 8px 9px);
-  mix-blend-mode: soft-light;
-  opacity: 0.78;
+  border: 1px solid rgba(255, 237, 167, 0.2);
+  animation: souqy-portal-ripple 3.8s ease-in-out infinite;
+}
+
+.souqy-portal-link-logo {
+  width: 30px;
+  height: 30px;
+}
+
+.souqy-portal-link-logo.souqy-logo::before {
+  inset: -1px;
+}
+
+.souqy-portal-link-logo.souqy-logo::after {
+  inset: -8px;
+  opacity: 0.42;
+}
+
+.souqy-portal-link-logo .souqy-logo-core {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 245, 198, 0.13),
+    inset 0 0 15px rgba(0, 0, 0, 0.68),
+    0 8px 20px rgba(0, 0, 0, 0.22);
+}
+
+.souqy-portal-link-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.souqy-portal-link-kicker {
+  color: rgba(245, 211, 94, 0.72);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .souqy-portal-link-label,
-.souqy-portal-link svg {
+.souqy-portal-link-arrow {
   position: relative;
   z-index: 1;
 }
 
+.souqy-portal-link-label {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.souqy-portal-link-arrow {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(255, 237, 167, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 248, 223, 0.72);
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
 .souqy-portal-link:hover {
   transform: translateY(-1px);
-  border-color: rgba(255, 231, 129, 0.72);
+  border-color: rgba(255, 231, 129, 0.64);
   color: #fff9df;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
     inset 0 -1px 0 rgba(255, 225, 135, 0.18),
-    0 0 0 1px rgba(255, 226, 118, 0.1),
-    0 14px 30px rgba(31, 26, 13, 0.16);
+    0 0 0 1px rgba(255, 226, 118, 0.12),
+    0 16px 34px rgba(0, 0, 0, 0.24);
+}
+
+.souqy-portal-link:hover .souqy-portal-link-arrow {
+  border-color: rgba(255, 237, 167, 0.34);
+  background: rgba(255, 237, 167, 0.11);
+  color: #fff6cd;
+  transform: translateX(1px);
 }
 
 .souqy-portal-link:active {
@@ -363,9 +430,9 @@ const topBarPortalStyles = `
   border-color: rgba(255, 235, 142, 0.36);
   color: rgba(255, 248, 223, 0.96);
   background:
-    radial-gradient(circle at 13% 48%, rgba(255, 227, 93, 0.2), transparent 16%),
-    linear-gradient(110deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06) 38%, rgba(255, 250, 226, 0.1) 68%, rgba(255, 255, 255, 0.05)),
-    rgba(32, 31, 24, 0.72);
+    radial-gradient(circle at 19px 50%, rgba(255, 227, 93, 0.24), transparent 34px),
+    linear-gradient(105deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04) 42%, rgba(255, 236, 156, 0.1)),
+    rgba(8, 8, 7, 0.8);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     inset 0 -1px 0 rgba(255, 242, 168, 0.1),
@@ -378,15 +445,15 @@ const topBarPortalStyles = `
   70%, 100% { transform: translateX(48%) rotate(8deg); opacity: 0; }
 }
 
-@keyframes souqy-portal-pulse {
-  0%, 100% { transform: scale(1); opacity: 0.78; }
-  50% { transform: scale(1.18); opacity: 1; }
+@keyframes souqy-portal-ripple {
+  0%, 100% { transform: scale(0.95); opacity: 0.28; }
+  50% { transform: scale(1.12); opacity: 0.72; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .souqy-portal-link,
   .souqy-portal-link::after,
-  .souqy-portal-link-orb {
+  .souqy-portal-link-mark::after {
     animation: none !important;
   }
 }

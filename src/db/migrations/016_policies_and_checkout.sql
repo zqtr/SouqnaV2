@@ -15,7 +15,7 @@
 -- Checkout columns (`checkout_*`)
 --   * `payment_methods`     — which methods are offered. COD + bank
 --                             transfer enabled by default; founders
---                             opt in to `pay_link` (Tap / Stripe / etc).
+--                             opt in to `pay_link` (Tap / bank / gateway links).
 --   * `bank_details`        — opaque jsonb because the shape may grow
 --                             (extra fields for QPay, BIC, etc.). The
 --                             v1 schema is { accountName, iban,

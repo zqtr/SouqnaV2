@@ -34,7 +34,7 @@ create index if not exists briefs_souqy_revision_idx
 create table if not exists user_plans (
   clerk_user_id text primary key,
   plan          text not null default 'free',
-  -- Free-form jsonb so a future Stripe / Vercel Marketplace integration
+  -- Free-form jsonb so a future billing integration
   -- can stash subscription_id, current_period_end, etc. without migration.
   meta          jsonb not null default '{}'::jsonb,
   updated_at    timestamptz not null default now()

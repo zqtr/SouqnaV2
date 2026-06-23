@@ -6,7 +6,7 @@ import {
   DEFAULT_PRODUCT_HEIGHT_OPTIONS,
   normalizeCustomSizeValue,
   normalizeHeightOptions,
-  normalizeSizeOptions,
+  normalizeVariantOptions,
 } from '@/lib/productOptions';
 
 /**
@@ -77,7 +77,7 @@ export function AddToCartButton({
 }: Props): JSX.Element | null {
   const cart = useCart();
   const [bumpKey, setBumpKey] = useState(0);
-  const sizes = normalizeSizeOptions(sizeOptions);
+  const sizes = normalizeVariantOptions(sizeOptions);
   const normalizedHeightOptions = normalizeHeightOptions(heightOptions);
   const heights =
     requiresHeightInput && normalizedHeightOptions.length === 0
@@ -100,7 +100,8 @@ export function AddToCartButton({
   const selectedSizeValue = isCustomSizeSelected ? normalizedCustomSize : activeSize;
   const activeHeight = heights.includes(selectedHeight) ? selectedHeight : (heights[0] ?? '');
   const heightLabel = heightInputLabel?.trim() || (isRtl ? 'الطول' : 'Height');
-  const customSizeLabel = isRtl ? 'مقاس مخصص' : 'Custom size';
+  const optionLabel = isRtl ? 'الخيار' : 'Option';
+  const customSizeLabel = isRtl ? 'خيار مخصص' : 'Custom option';
   const customSizeInvalid = isCustomSizeSelected && customSizeTouched && !normalizedCustomSize;
   const hasOptionControls = sizeEnabled || requiresHeightInput;
 
@@ -158,9 +159,9 @@ export function AddToCartButton({
   const sizeSelect =
     sizeEnabled ? (
       <label style={variant === 'icon' ? compactInputWrapStyle : inputWrapStyle}>
-        <span style={inputLabelStyle}>{isRtl ? 'المقاس' : 'Size'}</span>
+        <span style={inputLabelStyle}>{optionLabel}</span>
         <select
-          aria-label={isRtl ? 'المقاس' : 'Size'}
+          aria-label={optionLabel}
           value={activeSize}
           onChange={(event) => {
             setSelectedSize(event.target.value);
@@ -185,7 +186,7 @@ export function AddToCartButton({
                 if (customSizeTouched) setCustomSizeTouched(false);
               }}
               onBlur={() => setCustomSizeTouched(true)}
-              placeholder={isRtl ? 'اكتب المقاس' : 'Enter size'}
+              placeholder={isRtl ? 'اكتب الخيار' : 'Enter option'}
               style={variant === 'icon' ? compactTextInputStyle : textInputStyle}
             />
             {customSizeInvalid ? (

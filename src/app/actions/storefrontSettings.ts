@@ -16,7 +16,7 @@
  *
  *     {
  *       slug: string,
- *       paymentMethods: Array<'cod'|'bank_transfer'|'skipcash'|'sadad'>,
+ *       paymentMethods: Array<'cod'|'bank_transfer'|'skipcash'|'sadad'|'pay_link'>,
  *       bankDetails: { accountName, iban, bankName, swift?, notes? } | null,
  *       skipCash: { clientId, keyId, keySecret, webhookKey?, confirmCr? } | null,
  *       sadad: { merchantId, website, secretKey } | null,
@@ -24,6 +24,7 @@
  *       currency: string,
  *       minOrderQar: number | null,
  *       shippingFlatQar: number | null,
+ *       thankYou: { title?, message?, ctaLabel?, ctaUrl?, showOrderSummary }
  *     }
  *
  *     Returns `{ status: 'success' | 'error', message?, field? }` so
@@ -38,16 +39,14 @@
 import { z } from 'zod';
 import { auth } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
-import {
-  getStorefront,
-  updateStorefront,
-  type UpdateStorefrontInput,
-} from '@/lib/brief';
+import { getStorefront, updateStorefront, type UpdateStorefrontInput } from '@/lib/brief';
 import { assertStorefrontOwner } from '@/lib/products';
 import { recordAudit } from '@/lib/audit';
 import { PALETTE_IDS } from '@/lib/palettes';
 import {
   CONFIGURABLE_PAYMENT_METHODS,
+  checkoutPaymentMethodsForPlan,
+  isOnlinePaymentMethod,
   POLICY_KEYS,
   writeStorefrontCheckoutSettings,
   writeStorefrontSadadSetup,
@@ -60,6 +59,7 @@ import {
 } from '@/lib/storefrontSettings';
 import { encryptToken } from '@/lib/apps/crypto';
 import { verifySadadCredentials } from '@/lib/sadad';
+import { getPlan, planUnlocksOnlinePayments } from '@/lib/billing';
 
 /**
  * Settings actions — the dashboard's update-anything write path. The
@@ -199,13 +199,14 @@ export async function saveStorefrontSettings(
     phone: 'phone' in validated ? (validated.phone as string | null) : current.phone,
     area: 'area' in validated ? (validated.area as string | null) : current.area,
     hours: 'hours' in validated ? (validated.hours as string | null) : current.hours,
-    instagram: 'instagram' in validated ? (validated.instagram as string | null) : current.instagram,
+    instagram:
+      'instagram' in validated ? (validated.instagram as string | null) : current.instagram,
     logoUrl: 'logoUrl' in validated ? (validated.logoUrl as string | null) : current.logoUrl,
-    faviconUrl: 'faviconUrl' in validated ? (validated.faviconUrl as string | null) : current.faviconUrl,
+    faviconUrl:
+      'faviconUrl' in validated ? (validated.faviconUrl as string | null) : current.faviconUrl,
     design: current.design,
-    palette: ('palette' in validated
-      ? (validated.palette as typeof current.palette)
-      : current.palette),
+    palette:
+      'palette' in validated ? (validated.palette as typeof current.palette) : current.palette,
     templateId: current.templateId,
     crNumber: 'crNumber' in validated ? (validated.crNumber as string | null) : current.crNumber,
   };
@@ -326,6 +327,37 @@ const SadadSetupSchema = z.object({
   secretKey: z.string().trim().max(2000).optional().default(''),
 });
 
+const nullableTrimmedText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .transform((value) => (value && value.length > 0 ? value : null));
+
+function isValidThankYouCtaUrl(value: string | null | undefined): boolean {
+  if (!value) return true;
+  if (value.startsWith('/') && !value.startsWith('//')) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+const ThankYouSchema = z.object({
+  title: nullableTrimmedText(120).optional(),
+  message: nullableTrimmedText(600).optional(),
+  ctaLabel: nullableTrimmedText(80).optional(),
+  ctaUrl: nullableTrimmedText(500)
+    .refine(isValidThankYouCtaUrl, {
+      message: 'CTA link must be a relative path or an http(s) URL.',
+    })
+    .optional(),
+  showOrderSummary: z.boolean().optional(),
+});
+
 const CheckoutInputSchema = z.object({
   slug: z.string().trim().min(1).max(64),
   paymentMethods: z
@@ -349,6 +381,7 @@ const CheckoutInputSchema = z.object({
     .default('QAR'),
   minOrderQar: z.number().int().min(0).max(1_000_000).nullable(),
   shippingFlatQar: z.number().int().min(0).max(1_000_000).nullable(),
+  thankYou: ThankYouSchema.optional(),
 });
 
 export type UpdateCheckoutSettingsInput = z.input<typeof CheckoutInputSchema>;
@@ -379,7 +412,30 @@ export async function updateCheckoutSettings(
   const owner = await assertStorefrontOwner(data.slug, userId);
   if (!owner) return { status: 'error', message: 'Forbidden' };
 
-  if (data.paymentMethods.includes('bank_transfer')) {
+  const ownerPlan = await getPlan(userId);
+  const canAcceptOnlinePayments = planUnlocksOnlinePayments(ownerPlan);
+  const requestedOnlinePayments = Boolean(
+    data.paymentMethods.some(isOnlinePaymentMethod) ||
+      data.bankDetails ||
+      data.payLink ||
+      data.skipCash ||
+      data.sadad,
+  );
+  if (!canAcceptOnlinePayments && requestedOnlinePayments) {
+    return {
+      status: 'error',
+      message:
+        'Online payments require Pro+ or Max+. Pro can receive orders and WhatsApp notifications with cash on delivery.',
+      field: 'paymentMethods',
+    };
+  }
+
+  const paymentMethods = checkoutPaymentMethodsForPlan(
+    data.paymentMethods,
+    canAcceptOnlinePayments,
+  );
+
+  if (paymentMethods.includes('bank_transfer')) {
     if (!data.bankDetails) {
       return {
         status: 'error',
@@ -396,7 +452,15 @@ export async function updateCheckoutSettings(
     }
   }
 
-  const skipCashSelected = data.paymentMethods.includes('skipcash');
+  if (paymentMethods.includes('pay_link') && !data.payLink) {
+    return {
+      status: 'error',
+      message: 'Payment link label and URL are required when payment link is enabled.',
+      field: 'payLink',
+    };
+  }
+
+  const skipCashSelected = paymentMethods.includes('skipcash');
   const skipCashFields = data.skipCash ?? null;
   const providedSkipCashCredentials = Boolean(
     skipCashFields?.clientId ||
@@ -421,9 +485,20 @@ export async function updateCheckoutSettings(
         field: 'skipCash',
       };
     }
+    const hasExistingCredentials = Boolean(owner.checkout.skipCash?.hasCredentials);
+    const hasNewCredentials = Boolean(
+      skipCashFields?.clientId && skipCashFields.keyId && skipCashFields.keySecret,
+    );
+    if (!hasExistingCredentials && !hasNewCredentials) {
+      return {
+        status: 'error',
+        message: 'Save your SkipCash client id, key id, and key secret first.',
+        field: 'skipCash',
+      };
+    }
   }
 
-  const sadadSelected = data.paymentMethods.includes('sadad');
+  const sadadSelected = paymentMethods.includes('sadad');
   const sadadFields = data.sadad ?? null;
   const providedSadadCredentials = Boolean(
     sadadFields?.merchantId || sadadFields?.website || sadadFields?.secretKey,
@@ -464,17 +539,15 @@ export async function updateCheckoutSettings(
     };
   }
 
-  let sadadCredentialsToSave:
-    | {
-        v: 1;
-        ct: string;
-        merchantIdHint: string | null;
-        websiteHint: string | null;
-        verifiedMode: 'live' | 'sandbox';
-        verifiedAt: string;
-        updatedAt: string;
-      }
-    | null = null;
+  let sadadCredentialsToSave: {
+    v: 1;
+    ct: string;
+    merchantIdHint: string | null;
+    websiteHint: string | null;
+    verifiedMode: 'live' | 'sandbox';
+    verifiedAt: string;
+    updatedAt: string;
+  } | null = null;
   if (providedSadadCredentials) {
     if (!sadadFields?.merchantId || !sadadFields.website || !sadadFields.secretKey) {
       return {
@@ -510,15 +583,18 @@ export async function updateCheckoutSettings(
   }
 
   const settings: CheckoutSettings = {
-    paymentMethods: data.paymentMethods,
-    bankDetails: data.paymentMethods.includes('bank_transfer') ? data.bankDetails : null,
-    payLink: null,
+    paymentMethods,
+    bankDetails: paymentMethods.includes('bank_transfer') ? data.bankDetails : null,
+    payLink: paymentMethods.includes('pay_link') ? data.payLink : null,
     skipCash: owner.checkout.skipCash,
     sadad: owner.checkout.sadad,
     requiredPolicies: data.requiredPolicies,
     currency: data.currency,
     minOrderQar: data.minOrderQar,
     shippingFlatQar: data.shippingFlatQar,
+    thankYou: data.thankYou
+      ? { ...owner.checkout.thankYou, ...data.thankYou }
+      : owner.checkout.thankYou,
   };
 
   try {
@@ -581,6 +657,8 @@ export async function updateCheckoutSettings(
         sadadCredentialsUpdated: providedSadadCredentials,
         minOrderQar: settings.minOrderQar,
         shippingFlatQar: settings.shippingFlatQar,
+        thankYouCustomized: Boolean(settings.thankYou.title || settings.thankYou.message),
+        thankYouCtaConfigured: Boolean(settings.thankYou.ctaLabel && settings.thankYou.ctaUrl),
       },
     });
   } catch {

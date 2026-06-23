@@ -41,6 +41,7 @@ const PAYMENT_LABEL: Record<PaymentStatus, string> = {
 const METHOD_LABEL: Record<PaymentMethod, string> = {
   cod: 'Cash on delivery',
   bank_transfer: 'Bank transfer',
+  fawran: 'Fawran',
   skipcash: 'SkipCash',
   sadad: 'SADAD',
   pay_link: 'Pay link',
@@ -208,7 +209,7 @@ export function OrderDrawer({ open, order, onClose }: Props) {
                         <div className="font-medium">{it.titleSnapshot}</div>
                         {it.variantLabel ? (
                           <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                            Size {it.variantLabel}
+                            Option {it.variantLabel}
                           </div>
                         ) : null}
                         {it.customInputs.height ? (
@@ -229,6 +230,12 @@ export function OrderDrawer({ open, order, onClose }: Props) {
 
                 <div className="mt-4 flex flex-col gap-1.5 border-t border-dashed pt-3 text-sm">
                   <Row label="Subtotal" value={`${order.currency} ${order.subtotalQar}`} />
+                  {order.discountQar > 0 ? (
+                    <Row
+                      label={order.discountCode ? `Discount (${order.discountCode})` : 'Discount'}
+                      value={`- ${order.currency} ${order.discountQar}`}
+                    />
+                  ) : null}
                   <Row
                     label="Shipping"
                     value={

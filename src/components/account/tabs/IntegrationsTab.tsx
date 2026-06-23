@@ -8,7 +8,7 @@ type Integration = {
 };
 
 const INTEGRATIONS: Integration[] = [
-  { name: 'Stripe', blurb: 'International card checkout', monogram: 'st' },
+  { name: 'SkipCash', blurb: 'Qatar hosted checkout', monogram: 'sc' },
   { name: 'Tap', blurb: 'Cards, Apple Pay, Mada (Qatar)', monogram: 'tp' },
   { name: 'Instagram', blurb: 'Catalog & DM sync', monogram: 'ig' },
   { name: 'WhatsApp Business', blurb: 'Customer messaging API', monogram: 'wa' },
@@ -31,7 +31,7 @@ export function IntegrationsTab() {
       intro={
         <>
           We're building integrations in the order founders actually need them:
-          Tap and Stripe first (so checkout works), then the messaging stack
+          SkipCash and Tap first (so checkout works), then the messaging stack
           (Instagram, WhatsApp), then everything you'd want for growth.
         </>
       }

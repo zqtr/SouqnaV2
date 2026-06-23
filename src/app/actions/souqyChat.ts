@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { auth } from '@clerk/nextjs/server';
 import { env } from '@/lib/env';
 import { hasDb } from '@/lib/db';
-import { gateAtelierPro } from '@/lib/billing';
+import { aiCreditsForPlan, gateAtelierPro, planLabel, type Plan } from '@/lib/billing';
 import { rateLimit } from '@/lib/rate-limit';
 import { recordAudit } from '@/lib/audit';
 import {
@@ -17,6 +17,7 @@ import {
   insertProduct,
   updateProductRow,
   type Product,
+  type StorefrontAccess,
 } from '@/lib/products';
 import {
   getCategories,
@@ -26,6 +27,7 @@ import {
   type Category,
 } from '@/lib/categories';
 import { getHomePage, ensureHomePage, setPageSeo } from '@/lib/storefrontPages';
+import { fanarChatCompletion, isFanarConfigured } from '@/lib/fanar/provider';
 import { countOrders as countManualOrders } from '@/lib/orders';
 import {
   ORDER_STATUSES as CHECKOUT_ORDER_STATUSES,
@@ -47,7 +49,7 @@ import {
 const SlugSchema = z.string().trim().min(3).max(64);
 const ConversationIdSchema = z.string().uuid();
 const MessageSchema = z.string().trim().min(1).max(1600);
-const ChatModeSchema = z.enum(['ask', 'agent']).default('agent');
+const ChatModeSchema = z.enum(['ask', 'agent']);
 
 const GetSchema = z.object({
   storefrontSlug: SlugSchema,
@@ -58,6 +60,7 @@ const SendSchema = z.object({
   conversationId: ConversationIdSchema.optional().nullable(),
   message: MessageSchema,
   mode: ChatModeSchema.optional(),
+  newConversation: z.boolean().optional(),
 });
 
 const ApplySchema = z.object({
@@ -79,6 +82,22 @@ type OrderSummary = {
   checkoutTotal: number;
   manualTotal: number;
   checkoutByStatus: Record<string, number>;
+};
+
+type CreditsContext = {
+  plan: Plan;
+  planLabel: string;
+  monthlyIncluded: number | null;
+  monthlyIncludedLabel: string;
+  topUpsAvailable: boolean;
+  addCreditsUrl: string | null;
+  balanceAvailable: boolean;
+};
+
+type SouqyOwner = {
+  userId: string;
+  storefront: StorefrontAccess['storefront'];
+  plan: Plan;
 };
 
 export type SouqyChatState =
@@ -115,29 +134,52 @@ function toDto(message: SouqyMessage): SouqyChatMessageDto {
   return {
     id: message.id,
     role: message.role,
-    content: message.content,
+    content: message.role === 'assistant' ? sanitizeModeCopy(message.content) : message.content,
     metadata: message.metadata,
     createdAt: message.createdAt.toISOString(),
   };
+}
+
+function sanitizeModeCopy(content: string): string {
+  return content
+    .replace(
+      /\bAsk mode only answers\.?\s*Switch to Agent(?: mode)? to stage executable changes\.?/giu,
+      'Souqy auto-detects whether to answer or stage supported changes.',
+    )
+    .replace(/\bswitch to Agent mode\b/giu, 'give me the exact change')
+    .replace(/\bswitch to Agent\b/giu, 'give me the exact change')
+    .replace(/\bswitch to Ask mode\b/giu, 'ask it directly')
+    .replace(/\bAgent mode\b/giu, 'the supported change workflow')
+    .replace(/\bAsk mode\b/giu, 'advisory chat')
+    .replace(/وضع\s*Ask/giu, 'المحادثة الإرشادية')
+    .replace(/وضع\s*Agent/giu, 'مسار التغييرات المدعومة');
 }
 
 async function gate(slug: string) {
   if (!hasDb()) return { ok: false as const, message: 'Database unavailable.' };
   const { userId } = await auth();
   if (!userId) return { ok: false as const, message: 'Sign in to use the assistant.' };
-  const plan = await gateAtelierPro(userId);
-  if (!plan.ok) {
+  const planGate = await gateAtelierPro(userId);
+  if (!planGate.ok) {
     return {
       ok: false as const,
       message:
-        plan.reason === 'paywall'
+        planGate.reason === 'paywall'
           ? 'The assistant is available on Pro + and above. Upgrade to use it.'
           : 'Sign in to use the assistant.',
     };
   }
   const storefront = await assertStorefrontOwner(slug, userId);
   if (!storefront) return { ok: false as const, message: 'Forbidden.' };
-  return { ok: true as const, userId, storefront };
+  return { ok: true as const, userId, storefront, plan: planGate.plan };
+}
+
+function authorizedMobileOwner(input: SouqyOwner): SouqyOwner {
+  return {
+    userId: input.userId,
+    storefront: input.storefront,
+    plan: input.plan,
+  };
 }
 
 async function rateGate(scope: string, limit: number): Promise<boolean> {
@@ -145,6 +187,66 @@ async function rateGate(scope: string, limit: number): Promise<boolean> {
   const ip =
     hdrs.get('x-forwarded-for')?.split(',')[0]?.trim() ?? hdrs.get('x-real-ip') ?? 'unknown';
   return rateLimit(`${scope}:${ip}`, limit, 60_000).ok;
+}
+
+function inferChatMode(message: string): 'ask' | 'agent' {
+  const trimmed = message.trim();
+  const lower = trimmed.toLowerCase();
+
+  if (
+    isUnderstandingQuestion(lower) ||
+    isModelQuestion(lower) ||
+    isSouqnaUsageQuestion(lower) ||
+    isArabicLanguageFollowup(trimmed)
+  ) {
+    return 'ask';
+  }
+
+  if (isVisualGenerationRequest(trimmed, lower)) return 'agent';
+
+  const asksQuestion =
+    /[?؟]/u.test(trimmed) ||
+    /^(what|which|why|when|where|who|how|can|could|should|do|does|is|are|tell me|explain|recommend|review|audit|analyze)\b/u.test(
+      lower,
+    );
+  const asksToAct =
+    /\b(add|create|make|update|edit|change|set|publish|unpublish|activate|deactivate|draft|stage|rewrite|improve|fix|apply|enable|disable)\b/u.test(
+      lower,
+    ) || /أضف|انشئ|اكتب|عدّل|عدل|غيّر|غير|انشر|فعّل|فعل|حسّن|حسن/u.test(trimmed);
+  const executableTarget =
+    /\b(product|products|category|categories|catalog|seo|meta|title|description|home page|copy)\b/u.test(
+      lower,
+    ) || /منتج|منتجات|تصنيف|تصنيفات|سيو|عنوان|وصف/u.test(trimmed);
+
+  if (asksToAct && executableTarget && !asksQuestion) return 'agent';
+  if (asksQuestion) return 'ask';
+  if (asksToAct && executableTarget) return 'agent';
+  return 'ask';
+}
+
+function isVisualGenerationRequest(trimmed: string, lower: string): boolean {
+  const broadEnglishGeneration =
+    /\b(generate|create|make|design|produce|render|build|draw|visualize|compose|mock up|mockup|prepare|give me|send me|i need|i want|need|want|turn this into)\b/u.test(
+      lower,
+    );
+  const broadEnglishVisual =
+    /\b(image|images|picture|pictures|photo|photos|visual|graphic|artwork|illustration|poster|posters|logo|logos|banner|banners|creative|creatives|ad creative|advert|advertisement|flyer|story|stories|instagram post|social post|thumbnail|cover|menu visual|packaging|package|box|bag|mockup|product card|brand asset|brand kit)\b/u.test(
+      lower,
+    );
+  const strongEnglishVisual =
+    /\b(poster|posters|logo|logos|banner|banners|ad creative|advert|advertisement|flyer|story|stories|thumbnail|cover|packaging|package|mockup|product card|brand kit)\b/u.test(
+      lower,
+    );
+  if ((broadEnglishGeneration || strongEnglishVisual) && broadEnglishVisual) return true;
+
+  const generationVerb =
+    /\b(generate|create|make|design|produce|render|build)\b/u.test(lower) ||
+    /أنشئ|انشئ|صمم|اصنع|اعمل|سوّ|سو /u.test(trimmed);
+  const visualTarget =
+    /\b(image|images|poster|posters|logo|logos|banner|banners|creative|creatives|ad creative|advert|flyer|story|instagram post|social post|menu visual|packaging|mockup|product card|brand asset|brand kit)\b/u.test(
+      lower,
+    ) || /صورة|صور|بوستر|ملصق|شعار|بنر|بانر|إعلان|اعلان|منشور|ستوري|قائمة|منيو|تغليف|موك.?أب|هوية/u.test(trimmed);
+  return generationVerb && visualTarget;
 }
 
 async function ownConversation(
@@ -167,7 +269,11 @@ async function resolveConversation(
   storefrontSlug: string,
   clerkUserId: string,
   conversationId?: string | null,
+  newConversation = false,
 ) {
+  if (newConversation) {
+    return createConversation({ storefrontSlug, clerkUserId, title: 'Assistant chat' });
+  }
   if (conversationId) {
     const owned = await ownConversation(conversationId, storefrontSlug, clerkUserId);
     if (owned) return owned;
@@ -183,7 +289,27 @@ export async function getOrCreateSouqyConversation(
   if (!parsed.success) return { status: 'error', message: 'Invalid storefront.' };
   const owner = await gate(parsed.data.storefrontSlug);
   if (!owner.ok) return { status: 'error', message: owner.message };
-  const conversation = await resolveConversation(parsed.data.storefrontSlug, owner.userId);
+  return getOrCreateSouqyConversationForOwner(parsed.data.storefrontSlug, owner);
+}
+
+export async function getOrCreateSouqyConversationForMobile(
+  input: z.input<typeof GetSchema>,
+  ownerInput: SouqyOwner,
+): Promise<SouqyChatState> {
+  const parsed = GetSchema.safeParse(input);
+  if (!parsed.success) return { status: 'error', message: 'Invalid storefront.' };
+  const owner = authorizedMobileOwner(ownerInput);
+  if (owner.storefront.slug !== parsed.data.storefrontSlug) {
+    return { status: 'error', message: 'Forbidden.' };
+  }
+  return getOrCreateSouqyConversationForOwner(parsed.data.storefrontSlug, owner);
+}
+
+async function getOrCreateSouqyConversationForOwner(
+  storefrontSlug: string,
+  owner: SouqyOwner,
+): Promise<SouqyChatState> {
+  const conversation = await resolveConversation(storefrontSlug, owner.userId);
   const messages = await listMessages(conversation.id);
   return {
     status: 'success',
@@ -198,6 +324,27 @@ export async function sendSouqyMessage(input: z.input<typeof SendSchema>): Promi
   const data = parsed.data;
   const owner = await gate(data.storefrontSlug);
   if (!owner.ok) return { status: 'error', message: owner.message };
+  return sendSouqyMessageForOwner(data, owner);
+}
+
+export async function sendSouqyMessageForMobile(
+  input: z.input<typeof SendSchema>,
+  ownerInput: SouqyOwner,
+): Promise<SouqySendState> {
+  const parsed = SendSchema.safeParse(input);
+  if (!parsed.success) return { status: 'error', message: 'Ask with a shorter message.' };
+  const data = parsed.data;
+  const owner = authorizedMobileOwner(ownerInput);
+  if (owner.storefront.slug !== data.storefrontSlug) {
+    return { status: 'error', message: 'Forbidden.' };
+  }
+  return sendSouqyMessageForOwner(data, owner);
+}
+
+async function sendSouqyMessageForOwner(
+  data: z.infer<typeof SendSchema>,
+  owner: SouqyOwner,
+): Promise<SouqySendState> {
   if (!(await rateGate('souqy-chat-send', 20))) {
     return { status: 'error', message: 'Too many assistant messages — try again shortly.' };
   }
@@ -206,12 +353,14 @@ export async function sendSouqyMessage(input: z.input<typeof SendSchema>): Promi
     data.storefrontSlug,
     owner.userId,
     data.conversationId,
+    data.newConversation ?? false,
   );
+  const mode = data.mode ?? inferChatMode(data.message);
   await addMessage({
     conversationId: conversation.id,
     role: 'user',
     content: data.message,
-    metadata: { mode: data.mode ?? 'agent' },
+    metadata: { mode, inferredMode: !data.mode },
   });
 
   const [products, categories, homePage, orderSummary] = await Promise.all([
@@ -230,13 +379,14 @@ export async function sendSouqyMessage(input: z.input<typeof SendSchema>): Promi
       businessType: owner.storefront.businessType,
       tagline: owner.storefront.tagline,
     },
+    credits: creditsContextForPlan(owner.plan),
     products: products.slice(0, 40),
     categories,
     seo: homePage?.seo ?? { title: null, description: null, image: null },
     orders: orderSummary,
   };
 
-  if ((data.mode ?? 'agent') === 'ask') {
+  if (mode === 'ask') {
     const content = await askSouqy(context);
     await addMessage({
       conversationId: conversation.id,
@@ -519,42 +669,168 @@ async function askSouqy(input: {
   categories: Category[];
   seo: { title: string | null; description: string | null; image: string | null };
   orders: OrderSummary;
+  credits: CreditsContext;
 }): Promise<string> {
-  try {
-    const result = await generateText({
-      model: env.SOUQY_CHAT_MODEL,
-      system: buildAskSystem(),
-      messages: [{ role: 'user', content: buildPlannerUser(input) }],
-      temperature: 0.45,
-      maxOutputTokens: 1200,
-      providerOptions: {
-        gateway: {
-          tags: ['feature:souqy-chat', 'surface:admin', 'mode:ask'],
+  const userPrompt = buildPlannerUser(input);
+  const fanarConfigured = isFanarConfigured();
+  if (fanarConfigured) {
+    try {
+      const result = await fanarChatCompletion({
+        useCase: 'arabic-founder-questions',
+        messages: [
+          { role: 'system', content: buildAskSystem() },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.45,
+        maxOutputTokens: 1200,
+      });
+      const text = clampAssistantText(result.text, 1800);
+      if (text) return text;
+    } catch (err) {
+      console.warn('[souqy-chat] Fanar Ask failed', summarizeAiError(err));
+    }
+  }
+
+  if (!fanarConfigured) {
+    try {
+      const result = await generateText({
+        model: env.SOUQY_CHAT_MODEL,
+        system: buildAskSystem(),
+        messages: [{ role: 'user', content: userPrompt }],
+        temperature: 0.45,
+        maxOutputTokens: 1200,
+        providerOptions: {
+          gateway: {
+            tags: ['feature:souqy-chat', 'surface:admin', 'mode:ask'],
+          },
         },
-      },
-    });
-    const text = result.text.trim();
-    if (text) return text.length <= 1800 ? text : `${text.slice(0, 1797).trim()}...`;
-  } catch {
-    // Keep Ask mode useful during local dev or short Gateway outages.
+      });
+      const text = clampAssistantText(result.text, 1800);
+      if (text) return text;
+    } catch {
+      // Keep advisory chat useful during local dev or short Gateway outages.
+    }
   }
   return localAskFallback(input);
 }
 
+function clampAssistantText(text: string, maxLength: number): string {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  return trimmed.length <= maxLength ? trimmed : `${trimmed.slice(0, maxLength - 3).trim()}...`;
+}
+
+function summarizeAiError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 function buildAskSystem(): string {
   return [
-    'You are in Ask mode: an advisory store strategist for a Souqna founder.',
-    'Ask mode is read-only. Give information, recommendations, ideas, checklists, and tradeoffs only.',
+    'You are the read-only advisory store strategist for a Souqna founder.',
+    'Souqna is a bilingual commerce platform for founders: dashboard, visual Builder, products and categories, orders and checkout, analytics, Apps/integrations, domains/settings, billing, and public storefronts.',
+    'When founders ask how to use Souqna, map their request to the right Souqna workflow and screen. Sound like you understand the product, not like a generic chatbot.',
+    'Give information, recommendations, ideas, checklists, and tradeoffs only.',
     'Do not produce JSON. Do not stage product/category/SEO mutations. Do not say a change has been made.',
-    'If the founder asks you to execute, create, update, publish, rewrite in-place, apply a design, or run a command, tell them to switch to Agent mode and briefly explain what Agent will do.',
+    'If the founder asks to generate an image, poster, logo, banner, menu visual, packaging mockup, product card, or brand asset, route them to Souqy Studio. Do not mention internal chat modes.',
+    'If the founder asks you to execute, create, update, publish, rewrite in-place, apply a design, or run a command, explain the closest supported Souqna workflow without mentioning modes.',
     'You may discuss storefront design direction, copy ideas, app suggestions, product strategy, SEO ideas, and customer-experience recommendations.',
     'You may answer order-count and order-status summary questions from the supplied order summary. Do not expose customer PII, order notes, addresses, phone numbers, or individual order details.',
-    'Use only the supplied storefront, products, categories, SEO, and order-summary context. If context is missing, say what to check next.',
+    'Use only the supplied storefront, credits, products, categories, SEO, and order-summary context. If context is missing, say what to check next.',
+    'Credit guidance: Free includes 0 AI credits, Pro includes 100 AI credits per month, Pro+ and Max+ include unlimited AI credits. Use the supplied credits context for the current plan and allowance.',
+    'Do not invent credit balances, credit prices, reset dates, or purchases. Never claim credits were added, purchased, or changed.',
+    'Top-ups are unavailable unless the supplied credits context says topUpsAvailable=true. If unavailable, say: "Your plan includes monthly AI credits. Top-ups are not available in this surface yet."',
+    'If the founder asks whether you understand them, answer naturally and explain what Souqna context you can use.',
+    'If the founder asks about your model, explain that Souqy Chat is designed to use Fanar for Arabic-first founder support, while GPT stays reserved for Builder, coding, storefront generation, architecture, and design-system reasoning.',
+    'If the founder asks for Arabic, answer in Arabic and keep the same Souqna context.',
     'Keep answers concise and practical. Match Arabic if the founder writes Arabic.',
   ].join('\n');
 }
 
 function localAskFallback(input: Parameters<typeof askSouqy>[0]): string {
+  const rawMessage = input.message.trim();
+  const message = rawMessage.toLowerCase();
+
+  if (isArabicLanguageFollowup(rawMessage)) {
+    return arabicStoreAnswer(input);
+  }
+
+  if (isModelQuestion(message)) {
+    const modelLine = isFanarConfigured()
+      ? `In this environment Souqy Chat is routed to Fanar (${env.FANAR_MODEL}) through Souqna's private Fanar endpoint.`
+      : `This local environment has not configured FANAR_API_URL and FANAR_API_KEY yet, so Souqy Chat can use the development Gateway fallback ${env.SOUQY_CHAT_MODEL}.`;
+    return [
+      "I'm Souqy, Souqna's store assistant, not a standalone generic chatbot.",
+      `${modelLine} The important part is the Souqna context I receive: your storefront, products, categories, SEO, and order summary.`,
+    ].join('\n\n');
+  }
+
+  if (isUnderstandingQuestion(message)) {
+    return [
+      'Yes. I understand plain-language questions about your Souqna store, and I answer using the store context I can see here.',
+      storeSnapshot(input),
+      'I can explain what to do in Souqna, suggest product and SEO improvements, review order totals, and point you to the right workflow. When your request is specific enough, I can stage product, category, or home SEO changes for your approval before anything is applied.',
+    ].join('\n\n');
+  }
+
+  if (isSouqnaUsageQuestion(message)) {
+    return [
+      'Yes. Think of Souqy as your Souqna operating assistant.',
+      'Use Builder for storefront pages, sections, layout, and visual edits. Use Products for catalog, pricing, descriptions, images, and status. Use Orders for fulfillment and payment follow-up. Use Settings for store identity, domain, checkout, and publishing. Use Apps when you want integrations like marketing or commerce tools.',
+      storeSnapshot(input),
+      'Tell me the outcome you want, and I will translate it into the right Souqna steps.',
+    ].join('\n\n');
+  }
+
+  if (isCreditsQuestion(message)) {
+    return creditAnswer(input.credits);
+  }
+
+  if (/\bseo\b|search|google|meta|title|description|share preview|home page/u.test(message)) {
+    const hasSeo = Boolean(input.seo.title || input.seo.description);
+    return [
+      hasSeo
+        ? `Your home page already has SEO metadata: ${formatSeo(input.seo)}.`
+        : 'Your home page does not have a focused SEO title and description yet.',
+      `${input.storefront.businessName} should use SEO copy that names the store, the main product category, and the Qatar/customer promise in one clear sentence.`,
+      'In Souqna, home SEO belongs to the Builder home page settings. Ask me for a draft, or give me the exact SEO update and I can stage it for approval.',
+    ].join('\n\n');
+  }
+
+  if (
+    /\bproduct|products|catalog|category|categories|price|pricing|description|copy|stock|draft|publish/u.test(
+      message,
+    )
+  ) {
+    return [
+      productSnapshot(input.products, input.categories),
+      'For Souqna usage: keep unfinished items as drafts, publish only products with a clear image, price, category, and short bilingual description, then use categories to make the storefront easier to browse.',
+      'If you want changes, say exactly what to add or update. I will stage supported edits first so you can review them.',
+    ].join('\n\n');
+  }
+
+  if (
+    /\bbuilder|design|layout|section|theme|page|homepage|storefront|banner|hero|brand/u.test(
+      message,
+    )
+  ) {
+    return [
+      'For storefront design in Souqna, use Builder. That is where you adjust pages, sections, hero content, product sections, visual order, and publishing.',
+      storeSnapshot(input),
+      'A good next move is to align the home hero with your strongest product category, then make sure the first product section contains items that are ready to buy. I can help write the copy and checklist here, while Builder handles the visual edit.',
+    ].join('\n\n');
+  }
+
+  if (
+    /\bapp|apps|integration|plugin|oauth|marketing|mailchimp|klaviyo|whatsapp|instagram/u.test(
+      message,
+    )
+  ) {
+    return [
+      'Souqna Apps are for connecting store workflows to external tools, such as marketing, messaging, analytics, or commerce services.',
+      'Choose apps based on the bottleneck: marketing apps for repeat sales, messaging apps for customer follow-up, analytics for understanding traffic, and commerce tools for operations.',
+      'I can recommend what to connect once you tell me your goal, such as more abandoned-cart recovery, better broadcasts, or cleaner order follow-up.',
+    ].join('\n\n');
+  }
   if (/\border(s)?\b|طلبات|طلب/u.test(input.message.toLowerCase())) {
     const lines = [
       `${input.storefront.businessName} has ${input.orders.total} total order${input.orders.total === 1 ? '' : 's'}.`,
@@ -567,16 +843,141 @@ function localAskFallback(input: Parameters<typeof askSouqy>[0]): string {
     return lines.join('\n');
   }
 
+  return [
+    'I hear you. To make this useful, ask me what you want to do in Souqna.',
+    storeSnapshot(input),
+    'For example: improve the home page in Builder, clean up product copy, review order status, choose an app integration, prepare SEO, or publish the storefront. For supported product/category/SEO changes, give me the exact change and I will stage it for approval.',
+  ].join('\n\n');
+}
+
+function isUnderstandingQuestion(message: string): boolean {
+  return /\b(can you understand|do you understand|understand me|what do you understand|are you ai|who are you)\b/u.test(
+    message,
+  );
+}
+
+function isModelQuestion(message: string): boolean {
+  return /\b(what model|which model|model are you using|what ai|which ai|powered by|underlying model)\b/u.test(
+    message,
+  );
+}
+
+function isArabicLanguageFollowup(message: string): boolean {
+  const normalized = message.trim();
+  return (
+    /^(و\s*)?(ب)?العربي[؟?!.]*$/u.test(normalized) ||
+    /^تتكلم عربي[؟?!.]*$/u.test(normalized) ||
+    /^باللغة العربية[؟?!.]*$/u.test(normalized)
+  );
+}
+
+function isSouqnaUsageQuestion(message: string): boolean {
+  return /\bhow (do|should|can) i use\b|\bhow does souqna work\b|\bwhat can you do\b|\bhelp me use\b|\bsouqna usage\b|\bhow to use souqna\b/u.test(
+    message,
+  );
+}
+
+function isCreditsQuestion(message: string): boolean {
+  return /\b(ai credits?|credits?|credit balance|balance|quota|top-?up|add credits?|buy credits?|purchase credits?)\b/u.test(
+    message,
+  );
+}
+
+function creditsContextForPlan(plan: Plan): CreditsContext {
+  const monthlyCredits = aiCreditsForPlan(plan);
+  return {
+    plan,
+    planLabel: planLabel(plan),
+    monthlyIncluded: Number.isFinite(monthlyCredits) ? monthlyCredits : null,
+    monthlyIncludedLabel: Number.isFinite(monthlyCredits)
+      ? `${monthlyCredits} / month`
+      : 'Unlimited',
+    topUpsAvailable: false,
+    addCreditsUrl: null,
+    balanceAvailable: false,
+  };
+}
+
+function creditAnswer(credits: CreditsContext): string {
+  const balanceLine = credits.balanceAvailable
+    ? 'I can use the supplied credit balance for decisions in this chat.'
+    : 'I cannot see a separate credit wallet balance here yet.';
+  const topUpLine = credits.topUpsAvailable
+    ? 'Use the + add-credits action in the billing or credits surface to add more.'
+    : 'Your plan includes monthly AI credits. Top-ups are not available in this surface yet.';
+
+  return [
+    `Your current plan is ${credits.planLabel}. Included AI credits: ${credits.monthlyIncludedLabel}.`,
+    balanceLine,
+    topUpLine,
+    'Credits may apply to Souqy storefront generation, reprompts, Builder block edits, Souqy Studio creative generation, and other AI workflows when those surfaces support tracking.',
+  ].join('\n\n');
+}
+
+function storeSnapshot(input: Parameters<typeof askSouqy>[0]): string {
   const productCount = input.products.length;
   const categoryCount = input.categories.length;
-  const hasSeo = Boolean(input.seo.title || input.seo.description);
+  const activeProducts = input.products.filter((product) => product.status === 'active').length;
+  const draftProducts = input.products.filter((product) => product.status === 'draft').length;
+  const seoState =
+    input.seo.title || input.seo.description ? 'home SEO is present' : 'home SEO still needs setup';
+  const type = input.storefront.businessType ? ` (${input.storefront.businessType})` : '';
+
   return [
-    `${input.storefront.businessName} has ${productCount} product${productCount === 1 ? '' : 's'} across ${categoryCount} categor${categoryCount === 1 ? 'y' : 'ies'}.`,
-    hasSeo
-      ? 'Home SEO exists; review whether it still matches your best-selling products and current campaign.'
-      : 'Add a focused home SEO title and description so shared links and search previews read clearly.',
-    'For execution, switch to Agent mode so it can stage an approval plan instead of only advising.',
-  ].join('\n');
+    `Store context: ${input.storefront.businessName}${type}.`,
+    `${productCount} product${productCount === 1 ? '' : 's'} (${activeProducts} active, ${draftProducts} draft), ${categoryCount} categor${categoryCount === 1 ? 'y' : 'ies'}, ${input.orders.total} order${input.orders.total === 1 ? '' : 's'}, and ${seoState}.`,
+  ].join(' ');
+}
+
+function arabicStoreAnswer(input: Parameters<typeof askSouqy>[0]): string {
+  const productCount = input.products.length;
+  const categoryCount = input.categories.length;
+  const activeProducts = input.products.filter((product) => product.status === 'active').length;
+  const draftProducts = input.products.filter((product) => product.status === 'draft').length;
+  const seoState =
+    input.seo.title || input.seo.description
+      ? 'وسيو الصفحة الرئيسية موجود'
+      : 'وسيو الصفحة الرئيسية يحتاج إعداد';
+
+  return [
+    'نعم، أقدر أتكلم عربي وأجاوبك بناء على سياق متجرك في سوقنا.',
+    `سياق المتجر: ${input.storefront.businessName}. عندك ${productCount} منتجات (${activeProducts} منشورة، ${draftProducts} مسودة)، ${categoryCount} تصنيفات، ${input.orders.total} طلبات، ${seoState}.`,
+    'أقدر أشرح لك الخطوات، أقترح تحسينات للمنتجات والسيو والواجهة والطلبات، وأجهز التغييرات المدعومة للمنتجات أو التصنيفات أو سيو الصفحة الرئيسية للمراجعة قبل التطبيق.',
+  ].join('\n\n');
+}
+
+function productSnapshot(products: Product[], categories: Category[]): string {
+  if (!products.length) {
+    return categories.length
+      ? `You have ${categories.length} categor${categories.length === 1 ? 'y' : 'ies'} but no products yet.`
+      : 'You do not have products or categories yet.';
+  }
+
+  const statusCounts = products.reduce<Record<string, number>>((acc, product) => {
+    acc[product.status] = (acc[product.status] ?? 0) + 1;
+    return acc;
+  }, {});
+  const examples = products
+    .slice(0, 4)
+    .map((product) => product.title)
+    .join(', ');
+  const statuses = Object.entries(statusCounts)
+    .map(([status, count]) => `${status}: ${count}`)
+    .join(', ');
+
+  return `Your catalog has ${products.length} product${products.length === 1 ? '' : 's'} across ${categories.length} categor${categories.length === 1 ? 'y' : 'ies'} (${statuses}). Examples: ${examples}.`;
+}
+
+function formatSeo(seo: {
+  title: string | null;
+  description: string | null;
+  image: string | null;
+}): string {
+  const parts = [];
+  if (seo.title) parts.push(`title "${seo.title}"`);
+  if (seo.description) parts.push(`description "${seo.description}"`);
+  if (seo.image) parts.push('image set');
+  return parts.length ? parts.join(', ') : 'not set';
 }
 
 async function planWithSouqy(input: {
@@ -588,29 +989,52 @@ async function planWithSouqy(input: {
     businessType: string;
     tagline: string | null;
   };
+  credits: CreditsContext;
   products: Product[];
   categories: Category[];
   seo: { title: string | null; description: string | null; image: string | null };
   orders: OrderSummary;
 }): Promise<SouqyPlan> {
-  try {
-    const result = await generateText({
-      model: env.SOUQY_CHAT_MODEL,
-      system: buildPlannerSystem(),
-      messages: [{ role: 'user', content: buildPlannerUser(input) }],
-      temperature: 0.2,
-      maxOutputTokens: 1600,
-      providerOptions: {
-        gateway: {
-          tags: ['feature:souqy-chat', 'surface:admin'],
+  const userPrompt = buildPlannerUser(input);
+  const fanarConfigured = isFanarConfigured();
+  if (fanarConfigured) {
+    try {
+      const result = await fanarChatCompletion({
+        useCase: 'chat-completions',
+        messages: [
+          { role: 'system', content: buildPlannerSystem() },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.2,
+        maxOutputTokens: 1600,
+      });
+      const parsed = parsePlannerJson(result.text);
+      if (parsed) return parsed;
+    } catch (err) {
+      console.warn('[souqy-chat] Fanar Agent failed', summarizeAiError(err));
+    }
+  }
+
+  if (!fanarConfigured) {
+    try {
+      const result = await generateText({
+        model: env.SOUQY_CHAT_MODEL,
+        system: buildPlannerSystem(),
+        messages: [{ role: 'user', content: userPrompt }],
+        temperature: 0.2,
+        maxOutputTokens: 1600,
+        providerOptions: {
+          gateway: {
+            tags: ['feature:souqy-chat', 'surface:admin'],
+          },
         },
-      },
-    });
-    const parsed = parsePlannerJson(result.text);
-    if (parsed) return parsed;
-  } catch {
-    // Local fallback keeps the review flow usable in dev when Gateway
-    // credentials are not present; the founder still has to approve.
+      });
+      const parsed = parsePlannerJson(result.text);
+      if (parsed) return parsed;
+    } catch {
+      // Local fallback keeps the review flow usable in dev when Gateway
+      // credentials are not present; the founder still has to approve.
+    }
   }
   return localPlanFallback(
     input.message,
@@ -622,13 +1046,16 @@ async function planWithSouqy(input: {
 
 function buildPlannerSystem(): string {
   return [
-    'You are in Agent mode: the AI store manager for Souqna.',
+    'You are the AI store manager for Souqna.',
     'Return only JSON matching this TypeScript shape:',
     '{"summary":string,"checklist":[{"title":string,"detail":string}],"questions":[{"id":string,"label":string,"detail":string,"options":[{"label":string,"prompt":string}]}],"categoryCreates":[{"name":string,"description":string|null,"imageUrl":string|null}],"productCreates":[],"productUpdates":[],"seo":null}',
-    'Agent mode executes founder prompts by staging a concrete approval plan. The founder must still click Apply before database changes happen.',
+    'When a founder asks for a supported change, stage a concrete approval plan. The founder must still click Apply before database changes happen.',
     'Allowed executable work in this drawer: create/update products, create categories, and draft home page SEO only.',
     'For design, page layout, theme, or builder commands, return a checklist and questions with no mutations, and tell the founder to use the Builder page editor for the final design execution.',
-    'Never delete products. Never install apps. Never change orders, checkout, billing, drops, or page layout.',
+    'For image, poster, logo, banner, menu visual, packaging mockup, product card, or brand asset generation, return a short checklist that points the founder to Souqy Studio. Do not claim Chat generated an asset.',
+    'Do not generate code, TypeScript, Builder architecture, storefront source, or design-system reasoning. Those belong to GPT-backed Souqna surfaces, not Souqy Chat.',
+    'Never delete products. Never install apps. Never change orders, checkout, billing, credits, drops, or page layout.',
+    'Never stage or claim credit purchases, credit top-ups, credit balance changes, plan changes, or billing changes.',
     'Default new products to status "draft" unless the founder explicitly asks to publish or activate.',
     'For new products, ask for product image URL and category if missing. Offer existing categories and a create-new category option in questions.',
     'Batch add is allowed: return multiple productCreates when the founder names multiple products.',
@@ -657,6 +1084,7 @@ function buildPlannerUser(input: Parameters<typeof planWithSouqy>[0]): string {
   return JSON.stringify({
     founderRequest: input.message,
     storefront: input.storefront,
+    credits: input.credits,
     homeSeo: input.seo,
     orderSummary: input.orders,
     categories,
@@ -687,6 +1115,22 @@ function localPlanFallback(
   categories: Category[] = [],
 ): SouqyPlan {
   const lower = message.toLowerCase();
+  if (isModelQuestion(lower) || isArabicLanguageFollowup(message)) {
+    return SouqyPlanSchema.parse({
+      id: crypto.randomUUID(),
+      summary:
+        'That is a conversation question, not a store change. Ask it directly and I will answer with Souqna context.',
+      checklist: [
+        {
+          title: 'No store changes staged',
+          detail: 'Souqy only stages product, category, and home SEO changes for approval in this chat',
+        },
+      ],
+      productCreates: [],
+      productUpdates: [],
+      seo: null,
+    });
+  }
   const wantsSeo = /\bseo\b|meta|title|description|وصف|عنوان/.test(lower);
   const wantsAbaya = /abaya|abayas|عباي/.test(lower);
   const wantsProductCreate =
@@ -848,9 +1292,12 @@ function localPlanFallback(
   return SouqyPlanSchema.parse({
     id: crypto.randomUUID(),
     summary:
-      'I can help with products and home page SEO first. Try asking me to add products, rewrite product copy, or improve SEO.',
+      'I understand you. Tell me the product, category, or home SEO update you want and I will prepare a review plan.',
     checklist: [
-      { title: 'No store changes staged', detail: 'Assistant currently supports Products and SEO only' },
+      {
+        title: 'No store changes staged',
+        detail: 'Tell me the exact Souqna change you want before I prepare an approval plan',
+      },
     ],
     productCreates: [],
     productUpdates: [],

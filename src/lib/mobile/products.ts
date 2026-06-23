@@ -5,10 +5,11 @@ import { z } from 'zod';
 import type { ProductWriteInput } from '@/lib/products';
 import {
   DEFAULT_PRODUCT_HEIGHT_OPTIONS,
+  MAX_PRODUCT_VARIANT_OPTIONS,
   MAX_PRODUCT_SIZE_OPTIONS,
   normalizeHeightInputLabel,
   normalizeHeightOptions,
-  normalizeSizeOptions,
+  normalizeVariantOptions,
 } from '@/lib/productOptions';
 
 export const MobileProductFieldsSchema = z.object({
@@ -16,11 +17,13 @@ export const MobileProductFieldsSchema = z.object({
   title: z.string().trim().min(1).max(160),
   description: z.string().trim().max(800).optional().nullable(),
   priceQar: z.number().nonnegative().max(99_999_999).optional().nullable(),
+  stock: z.number().int().min(0).max(999_999).optional().default(0),
   imageUrl: z.string().trim().url().optional().nullable().or(z.literal('')),
+  category: z.string().trim().max(120).optional().nullable(),
   categoryIds: z.array(z.string().uuid()).max(20).optional().default([]),
   sizeOptions: z
     .array(z.string().trim().max(40))
-    .max(MAX_PRODUCT_SIZE_OPTIONS)
+    .max(MAX_PRODUCT_VARIANT_OPTIONS)
     .optional()
     .default([]),
   allowCustomSize: z.boolean().optional().default(false),
@@ -48,11 +51,12 @@ export function mobileProductPayload(
     title: data.title,
     description: data.description?.trim() || null,
     priceQar: typeof data.priceQar === 'number' ? data.priceQar : null,
+    stock: data.stock,
     imageUrl: data.imageUrl ? data.imageUrl : null,
-    category: null,
-    sizeOptions: normalizeSizeOptions(data.sizeOptions),
+    category: data.category?.trim() || null,
+    sizeOptions: normalizeVariantOptions(data.sizeOptions),
     allowCustomSize:
-      data.allowCustomSize === true && normalizeSizeOptions(data.sizeOptions).length > 0,
+      data.allowCustomSize === true && normalizeVariantOptions(data.sizeOptions).length > 0,
     requiresHeightInput: data.requiresHeightInput === true,
     heightInputLabel:
       data.requiresHeightInput === true ? normalizeHeightInputLabel(data.heightInputLabel) : null,

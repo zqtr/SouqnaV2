@@ -30,7 +30,6 @@ import { AppScripts as RawAppScripts } from './AppScripts';
 import { MawidBanner as RawMawidBanner } from './MawidBanner';
 import { StorefrontChrome, type ChromeLegalPolicy, type ChromeNavPage } from './StorefrontChrome';
 import { storefrontBaseUrl } from '@/lib/storefrontUrl';
-import { storefrontThemeForBackground } from '@/lib/storefrontCheckoutTheme';
 import type { BlockContext } from './blocks/BlockContext';
 import { BlockBackgroundFrame } from './blocks/BlockBackgroundFrame';
 import { PremiumCursor } from './PremiumCursor';
@@ -153,13 +152,8 @@ export function Storefront({
 
   // Owner theme-lock wins over visitor preference. Default = follow visitor.
   const behaviour = data.themeOverrides.themeBehaviour ?? 'auto';
-  const requestedTheme: Theme =
+  const effectiveTheme: Theme =
     behaviour === 'light' ? 'light' : behaviour === 'dark' ? 'dark' : visitorTheme;
-  const pageBackground = data.themeOverrides.pageBg ?? 'var(--sf-ground)';
-  const effectiveTheme = storefrontThemeForBackground(
-    data.themeOverrides.pageBg,
-    requestedTheme,
-  );
 
   const savedBlocks = overrideBlocks ?? data.publishedBlocks;
   const blocks = savedBlocks.length > 0 ? savedBlocks : bootBlocksFromStorefront(data);
@@ -180,7 +174,7 @@ export function Storefront({
     ...paletteCssVars(palette, effectiveTheme),
     ['--sf-section-y' as string]: sectionSpacing,
     ...(headingWeight ? { ['--sf-heading-weight' as string]: String(headingWeight) } : {}),
-    background: pageBackground,
+    background: data.themeOverrides.pageBg ?? 'var(--sf-ground)',
     color: 'var(--sf-ink)',
     minHeight: '100dvh',
     colorScheme: effectiveTheme,

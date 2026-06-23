@@ -4,17 +4,15 @@ import {
   PLANS,
   aiCreditsForPlan,
   monthlyOrderCapForPlan,
-  platformFeeBpsForPlan,
-  platformFeeForTotal,
   planLabel,
   planUnlocksAnalytics,
   planUnlocksCustomDomain,
   planUnlocksDiscounts,
   planUnlocksIntegrations,
+  planUnlocksOnlinePayments,
   planUnlocksPremiumBlocks,
   planUnlocksSouqy,
   productCapForPlan,
-  sellerNetForTotal,
   storefrontCapForPlan,
 } from '@/lib/plans';
 
@@ -30,23 +28,13 @@ describe('Souqna plan catalog', () => {
     expect(PLAN_LIMITS.atelier.monthlyPriceQar).toBe(235);
   });
 
-  it('exposes storefront, product, order, fee, and AI limits', () => {
+  it('exposes storefront, product, order, and AI limits', () => {
     expect(storefrontCapForPlan('free')).toBe(1);
     expect(productCapForPlan('free')).toBe(10);
     expect(monthlyOrderCapForPlan('free')).toBe(25);
-    expect(platformFeeBpsForPlan('free')).toBe(500);
     expect(aiCreditsForPlan('starter')).toBe(100);
     expect(Number.isFinite(productCapForPlan('starter'))).toBe(false);
     expect(Number.isFinite(monthlyOrderCapForPlan('pro'))).toBe(false);
-  });
-
-  it('calculates platform fee snapshots in whole QAR', () => {
-    expect(platformFeeForTotal(100, 'free')).toBe(5);
-    expect(sellerNetForTotal(100, 'free')).toBe(95);
-    expect(platformFeeForTotal(100, 'starter')).toBe(3);
-    expect(sellerNetForTotal(100, 'pro')).toBe(99);
-    expect(platformFeeForTotal(100, 'atelier')).toBe(0);
-    expect(sellerNetForTotal(100, 'atelier')).toBe(100);
   });
 
   it('gates features at the intended tiers', () => {
@@ -57,6 +45,9 @@ describe('Souqna plan catalog', () => {
     expect(planUnlocksDiscounts('starter')).toBe(true);
     expect(planUnlocksSouqy('starter')).toBe(false);
     expect(planUnlocksSouqy('pro')).toBe(true);
+    expect(planUnlocksOnlinePayments('starter')).toBe(false);
+    expect(planUnlocksOnlinePayments('pro')).toBe(true);
+    expect(planUnlocksOnlinePayments('atelier')).toBe(true);
     expect(planUnlocksPremiumBlocks('pro')).toBe(true);
   });
 });

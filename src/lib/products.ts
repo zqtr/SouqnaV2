@@ -14,7 +14,7 @@ import {
   DEFAULT_PRODUCT_HEIGHT_OPTIONS,
   normalizeHeightInputLabel,
   normalizeHeightOptions,
-  normalizeSizeOptions,
+  normalizeVariantOptions,
 } from './productOptions';
 
 /**
@@ -41,6 +41,7 @@ export type Product = {
   category: string | null;
   eventAt: Date | null;
   status: ProductStatus;
+  stock: number;
   isCustomizable: boolean;
   customizationLabel: string | null;
   sizeOptions: string[];
@@ -71,6 +72,7 @@ type ProductRow = {
   category: string | null;
   event_at: string | null;
   status: ProductStatus;
+  stock?: number | string | null;
   is_customizable?: boolean | null;
   customization_label?: string | null;
   size_options?: unknown;
@@ -87,11 +89,11 @@ type ProductRow = {
 };
 
 function parseSizeOptions(value: unknown): string[] {
-  if (typeof value !== 'string') return normalizeSizeOptions(value);
+  if (typeof value !== 'string') return normalizeVariantOptions(value);
   try {
-    return normalizeSizeOptions(JSON.parse(value));
+    return normalizeVariantOptions(JSON.parse(value));
   } catch {
-    return normalizeSizeOptions([]);
+    return normalizeVariantOptions([]);
   }
 }
 
@@ -122,6 +124,7 @@ function fromRow(row: ProductRow): Product {
     category: row.category,
     eventAt: row.event_at ? new Date(row.event_at) : null,
     status: row.status,
+    stock: row.stock !== null && row.stock !== undefined ? Number(row.stock) : 0,
     isCustomizable: row.is_customizable === true,
     customizationLabel: row.customization_label ?? null,
     sizeOptions,
@@ -148,6 +151,7 @@ export type ProductWriteInput = {
   category: string | null;
   eventAt: Date | null;
   status: ProductStatus;
+  stock?: number;
   isCustomizable?: boolean;
   customizationLabel?: string | null;
   sizeOptions?: string[];
@@ -251,11 +255,14 @@ export async function insertProduct(slug: string, p: ProductWriteInput): Promise
   // Append new products to the end of the list by default.
   const isCustomizable = p.isCustomizable === true;
   const customizationLabel = isCustomizable ? (p.customizationLabel ?? null) : null;
-  const sizeOptions = JSON.stringify(normalizeSizeOptions(p.sizeOptions ?? []));
+  const normalizedVariantOptions = normalizeVariantOptions(p.sizeOptions ?? []);
+  const sizeOptions = JSON.stringify(normalizedVariantOptions);
   const allowCustomSize =
-    p.allowCustomSize === true && normalizeSizeOptions(p.sizeOptions ?? []).length > 0;
+    p.allowCustomSize === true && normalizedVariantOptions.length > 0;
   const requiresHeightInput = p.requiresHeightInput === true;
-  const heightInputLabel = requiresHeightInput ? normalizeHeightInputLabel(p.heightInputLabel) : null;
+  const heightInputLabel = requiresHeightInput
+    ? normalizeHeightInputLabel(p.heightInputLabel)
+    : null;
   const normalizedHeightOptions = normalizeHeightOptions(p.heightOptions ?? []);
   const heightOptions = JSON.stringify(
     requiresHeightInput
@@ -272,13 +279,13 @@ export async function insertProduct(slug: string, p: ProductWriteInput): Promise
     insert into products (
       storefront_slug, title, description, price_qar, image_url,
       pricing_mode, monthly_price_qar,
-      category, event_at, status, is_customizable, customization_label, size_options, allow_custom_size,
+      category, event_at, status, stock, is_customizable, customization_label, size_options, allow_custom_size,
       requires_height_input, height_input_label, height_options,
       position, is_demo, source, source_url
     ) values (
       ${slug}, ${p.title}, ${p.description}, ${p.priceQar}, ${p.imageUrl},
       ${p.pricingMode ?? 'one_time'}, ${p.monthlyPriceQar ?? null},
-      ${p.category}, ${p.eventAt}, ${p.status}, ${isCustomizable}, ${customizationLabel}, ${sizeOptions}::jsonb, ${allowCustomSize},
+      ${p.category}, ${p.eventAt}, ${p.status}, ${p.stock ?? 0}, ${isCustomizable}, ${customizationLabel}, ${sizeOptions}::jsonb, ${allowCustomSize},
       ${requiresHeightInput}, ${heightInputLabel}, ${heightOptions}::jsonb,
       ${next}, ${p.isDemo === true}, ${p.source ?? 'manual'}, ${p.sourceUrl ?? null}
     )
@@ -304,11 +311,14 @@ export async function updateProductRow(
 ): Promise<Product | null> {
   const isCustomizable = p.isCustomizable === true;
   const customizationLabel = isCustomizable ? (p.customizationLabel ?? null) : null;
-  const sizeOptions = JSON.stringify(normalizeSizeOptions(p.sizeOptions ?? []));
+  const normalizedVariantOptions = normalizeVariantOptions(p.sizeOptions ?? []);
+  const sizeOptions = JSON.stringify(normalizedVariantOptions);
   const allowCustomSize =
-    p.allowCustomSize === true && normalizeSizeOptions(p.sizeOptions ?? []).length > 0;
+    p.allowCustomSize === true && normalizedVariantOptions.length > 0;
   const requiresHeightInput = p.requiresHeightInput === true;
-  const heightInputLabel = requiresHeightInput ? normalizeHeightInputLabel(p.heightInputLabel) : null;
+  const heightInputLabel = requiresHeightInput
+    ? normalizeHeightInputLabel(p.heightInputLabel)
+    : null;
   const normalizedHeightOptions = normalizeHeightOptions(p.heightOptions ?? []);
   const heightOptions = JSON.stringify(
     requiresHeightInput
@@ -328,6 +338,7 @@ export async function updateProductRow(
       category    = ${p.category},
       event_at    = ${p.eventAt},
       status      = ${p.status},
+      stock       = coalesce(${p.stock ?? null}, stock),
       is_customizable = ${isCustomizable},
       customization_label = ${customizationLabel},
       size_options = ${sizeOptions}::jsonb,

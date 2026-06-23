@@ -8,6 +8,7 @@ import {
   type SentOrderTemplateStatus,
   type SentTemplateKind,
 } from './sentTemplateCatalog';
+import { storefrontBaseUrl, storefrontPageUrl } from './storefrontUrl';
 
 export type { SentTemplateKind } from './sentTemplateCatalog';
 
@@ -29,11 +30,8 @@ export const SENT_TEMPLATE_ENV_KEYS = {
   account_notification: 'SENT_TEMPLATE_ACCOUNT_NOTIFICATION_ID',
 } as const satisfies Record<SentTemplateKind, keyof SentEnvSource>;
 
-export {
-  APPROVED_SENT_ORDER_TEMPLATE_IDS,
-  SENT_ORDER_TEMPLATE_IDS,
-  SENT_TEMPLATE_IDS,
-} from './sentTemplateCatalog';
+export { SENT_TEMPLATE_IDS } from './sentTemplateCatalog';
+export { APPROVED_SENT_ORDER_TEMPLATE_IDS, SENT_ORDER_TEMPLATE_IDS } from './sentTemplateCatalog';
 
 export type SentSendResult =
   | {
@@ -278,6 +276,7 @@ export async function sendSentAccountNotification(input: {
   return sendSentTemplate({
     kind: 'account_notification',
     to: [input.phone],
+    channel: ['whatsapp'],
     idempotencyKey: input.idempotencyKey,
     parameters: {
       founderName: input.founderName?.trim() || 'Founder',
@@ -312,6 +311,7 @@ export async function sendSentDeliveryNotification(input: {
   return sendSentTemplate({
     kind: 'delivery_notification',
     to: [input.phone],
+    channel: ['whatsapp'],
     idempotencyKey: input.idempotencyKey,
     parameters: deliveryParameters({
       order: input.order,
@@ -359,6 +359,7 @@ export async function sendSentPaymentStatusNotification(input: {
   return sendSentTemplate({
     kind: isFailed ? 'fraud_alert' : 'delivery_notification',
     to: [input.order.customerPhone],
+    channel: ['whatsapp'],
     idempotencyKey: input.idempotencyKey,
     parameters: isFailed
       ? {
@@ -383,6 +384,8 @@ export function deliveryParameters(input: {
   storeName: string;
   message?: string;
 }): SentTemplateParameters {
+  const orderUrl = buyerOrderUrl(input.order);
+  const storeUrl = buyerStoreUrl(input.order);
   return {
     customerName: input.order.customerName,
     storeName: input.storeName,
@@ -391,7 +394,14 @@ export function deliveryParameters(input: {
     paymentStatus: input.order.paymentStatus,
     total: formatOrderTotal(input.order),
     message: input.message ?? orderStatusMessage(input.order.orderStatus),
-    actionUrl: buyerOrderUrl(input.order),
+    actionUrl: orderUrl,
+    orderUrl,
+    storeUrl,
+    store_url: storeUrl,
+    visitStoreUrl: storeUrl,
+    visit_store_url: storeUrl,
+    buttonUrl: storeUrl,
+    button_url: storeUrl,
   };
 }
 
@@ -404,8 +414,11 @@ function formatOrderTotal(order: Order): string {
 }
 
 function buyerOrderUrl(order: Order): string {
-  const root = env.BRIEF_ROOT_DOMAIN || 'souqna.qa';
-  return `https://${order.storefrontSlug}.${root}/checkout/thank-you/${order.id}`;
+  return storefrontPageUrl(order.storefrontSlug, `/checkout/thank-you/${order.id}`);
+}
+
+function buyerStoreUrl(order: Order): string {
+  return storefrontBaseUrl(order.storefrontSlug);
 }
 
 function orderStatusMessage(status: Order['orderStatus']): string {
@@ -455,6 +468,12 @@ export function sentTemplateParameters(
   );
   const message = firstParam(out, ['message', 'paymentStatus'], subject);
   const actionUrl = firstParam(out, ['actionUrl'], env.NEXT_PUBLIC_SITE_URL || 'https://souqna.qa');
+  const orderUrl = firstParam(out, ['orderUrl', 'order_url'], actionUrl);
+  const storeUrl = firstParam(
+    out,
+    ['storeUrl', 'store_url', 'visitStoreUrl', 'visit_store_url', 'buttonUrl', 'button_url'],
+    actionUrl,
+  );
   const orderNumber = firstParam(out, ['orderNumber', 'subject'], subject);
   const total = firstParam(out, ['total'], 'QAR 0');
 
@@ -478,14 +497,31 @@ export function sentTemplateParameters(
       setMissingParam(out, 'var_4', message);
       break;
     case 'delivery_notification':
+      setMissingParam(out, 'customer_name', customerName);
+      setMissingParam(out, 'store_name', storeName);
+      setMissingParam(out, 'order_number', orderNumber);
+      setMissingParam(out, 'order_total', total);
+      setMissingParam(out, 'order_url', orderUrl);
+      setMissingParam(out, 'orderUrl', orderUrl);
+      setMissingParam(out, 'store_url', storeUrl);
+      setMissingParam(out, 'storeUrl', storeUrl);
+      setMissingParam(out, 'visit_store_url', storeUrl);
+      setMissingParam(out, 'visitStoreUrl', storeUrl);
+      setMissingParam(out, 'button_url', storeUrl);
+      setMissingParam(out, 'buttonUrl', storeUrl);
       setMissingParam(out, 'var_1', customerName);
       setMissingParam(out, 'var_2', storeName);
       setMissingParam(out, 'var_3', orderNumber);
       setMissingParam(out, 'var_4', firstParam(out, ['orderStatus'], 'updated'));
       setMissingParam(out, 'var_5', total);
-      setMissingParam(out, 'var_6', actionUrl);
+      setMissingParam(out, 'var_6', storeUrl);
       break;
     case 'account_notification':
+      setMissingParam(out, 'foundername', customerName);
+      setMissingParam(out, 'dashboardURL', actionUrl);
+      setMissingParam(out, 'founder_name', customerName);
+      setMissingParam(out, 'store_name', storeName);
+      setMissingParam(out, 'dashboard_url', actionUrl);
       setMissingParam(out, 'var_1', customerName);
       setMissingParam(out, 'var_2', storeName);
       setMissingParam(out, 'var_3', subject);

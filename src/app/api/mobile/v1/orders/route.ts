@@ -16,8 +16,9 @@ import {
   type PaymentStatus,
 } from '@/lib/checkout-orders';
 import { getPlan } from '@/lib/billing';
-import { orderFeeSnapshot } from '@/lib/planEnforcement';
-import { recordPlatformFeeForPaidOrder } from '@/lib/platformFees';
+import { orderFinancialSnapshot } from '@/lib/planEnforcement';
+import { recordPlatformPayoutForPaidOrder } from '@/lib/platformPayouts';
+import { notifyCheckoutOrderCreated } from '@/lib/checkout-notifications';
 import {
   mobileError,
   mobileJson,
@@ -53,18 +54,29 @@ const CreateSchema = z.object({
     email: z.string().trim().email().max(180).optional().nullable(),
   }),
   address: AddressSchema.optional().nullable(),
-  paymentMethod: z.enum(PAYMENT_METHODS as unknown as [PaymentMethod, ...PaymentMethod[]]).default('cod'),
-  paymentStatus: z.enum(PAYMENT_STATUSES as unknown as [PaymentStatus, ...PaymentStatus[]]).default('unpaid'),
-  orderStatus: z.enum(ORDER_STATUSES as unknown as [OrderStatus, ...OrderStatus[]]).default('pending'),
+  paymentMethod: z
+    .enum(PAYMENT_METHODS as unknown as [PaymentMethod, ...PaymentMethod[]])
+    .default('cod'),
+  paymentStatus: z
+    .enum(PAYMENT_STATUSES as unknown as [PaymentStatus, ...PaymentStatus[]])
+    .default('unpaid'),
+  orderStatus: z
+    .enum(ORDER_STATUSES as unknown as [OrderStatus, ...OrderStatus[]])
+    .default('pending'),
   currency: z.string().trim().min(1).max(8).default('QAR'),
   shippingQar: z.number().int().nonnegative().max(999_999).default(0),
   notes: z.string().trim().max(2000).optional().nullable(),
-  items: z.array(z.object({
-    productId: z.string().uuid().optional().nullable(),
-    title: z.string().trim().min(1).max(280),
-    priceQar: z.number().int().nonnegative().max(99_999_999),
-    quantity: z.number().int().positive().max(999),
-  })).min(1).max(40),
+  items: z
+    .array(
+      z.object({
+        productId: z.string().uuid().optional().nullable(),
+        title: z.string().trim().min(1).max(280),
+        priceQar: z.number().int().nonnegative().max(99_999_999),
+        quantity: z.number().int().positive().max(999),
+      }),
+    )
+    .min(1)
+    .max(40),
 });
 
 export async function GET(req: Request): Promise<Response> {
@@ -73,14 +85,12 @@ export async function GET(req: Request): Promise<Response> {
   if (!gate.ok) return gate.response;
 
   const url = new URL(req.url);
-  const status = parseOne(
-    url.searchParams.get('status'),
-    ORDER_STATUSES,
-  ) as OrderStatus | undefined;
-  const paymentStatus = parseOne(
-    url.searchParams.get('paymentStatus'),
-    PAYMENT_STATUSES,
-  ) as PaymentStatus | undefined;
+  const status = parseOne(url.searchParams.get('status'), ORDER_STATUSES) as
+    | OrderStatus
+    | undefined;
+  const paymentStatus = parseOne(url.searchParams.get('paymentStatus'), PAYMENT_STATUSES) as
+    | PaymentStatus
+    | undefined;
   const page = Math.max(0, Number(url.searchParams.get('page') ?? 0) | 0);
 
   const data = await listOrdersForStorefront(gate.access.storefront.slug, {
@@ -103,17 +113,14 @@ export async function POST(req: Request): Promise<Response> {
   if (!gate.ok) return gate.response;
 
   const data = parsed.data;
-  const subtotalQar = data.items.reduce(
-    (sum, item) => sum + item.priceQar * item.quantity,
-    0,
-  );
+  const subtotalQar = data.items.reduce((sum, item) => sum + item.priceQar * item.quantity, 0);
   const totalQar = subtotalQar + data.shippingQar;
   const ownerPlan = await getPlan(gate.access.storefront.clerkUserId);
-  const feeSnapshot = orderFeeSnapshot(ownerPlan, totalQar, data.paymentMethod, {
+  const financialSnapshot = orderFinancialSnapshot(ownerPlan, totalQar, data.paymentMethod, {
     platformSkipCash: false,
   });
 
-  const order = await createOrderRow({
+  let order = await createOrderRow({
     slug: gate.access.storefront.slug,
     customer: {
       name: data.customer.name,
@@ -126,7 +133,7 @@ export async function POST(req: Request): Promise<Response> {
     subtotalQar,
     shippingQar: data.shippingQar,
     totalQar,
-    ...feeSnapshot,
+    ...financialSnapshot,
     acceptedPolicies: [],
     notes: data.notes ?? null,
     metadata: { source: 'mobile' },
@@ -144,16 +151,19 @@ export async function POST(req: Request): Promise<Response> {
       set order_status = ${data.orderStatus}, payment_status = ${data.paymentStatus}, updated_at = now()
       where id = ${order.id}
     `;
+    const updated = await getOrderById(order.id, gate.access.storefront.slug);
+    if (updated) order = updated;
   } else if (data.paymentStatus !== 'unpaid') {
     await db()`
       update checkout_orders
       set payment_status = ${data.paymentStatus}, updated_at = now()
       where id = ${order.id}
     `;
+    const updated = await getOrderById(order.id, gate.access.storefront.slug);
+    if (updated) order = updated;
   }
   if (data.paymentStatus === 'marked_paid') {
-    const updated = await getOrderById(order.id, gate.access.storefront.slug);
-    if (updated) await recordPlatformFeeForPaidOrder(updated);
+    await recordPlatformPayoutForPaidOrder(order);
   }
 
   await recordAudit({
@@ -169,9 +179,15 @@ export async function POST(req: Request): Promise<Response> {
     kind: 'order_placed',
     meta: { orderId: order.id, total: totalQar, source: 'mobile' },
   });
+  await notifyCheckoutOrderCreated({
+    slug: gate.access.storefront.slug,
+    storefront: gate.access.storefront,
+    order,
+    paymentInstructions: null,
+  });
   revalidatePath('/account/orders');
 
-  return mobileJson({ order: { ...order, orderStatus: data.orderStatus, paymentStatus: data.paymentStatus } }, { status: 201 });
+  return mobileJson({ order }, { status: 201 });
 }
 
 function parseOne<T extends readonly string[]>(

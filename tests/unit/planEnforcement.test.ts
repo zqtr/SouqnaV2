@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  checkoutOrderFeeSnapshot,
+  checkoutOrderFinancialSnapshot,
   monthlyOrderCapFailure,
-  orderFeeSnapshot,
+  orderFinancialSnapshot,
   productCapFailure,
 } from '@/lib/planEnforcement';
 
@@ -27,53 +27,42 @@ describe('plan enforcement helpers', () => {
     expect(monthlyOrderCapFailure('pro', 500)).toBeNull();
   });
 
-  it('snapshots fees and collection mode for public and manual checkout paths', () => {
-    expect(orderFeeSnapshot('free', 200, 'skipcash')).toMatchObject({
+  it('snapshots collection mode and seller totals for public and manual checkout paths', () => {
+    expect(orderFinancialSnapshot('free', 200, 'skipcash')).toMatchObject({
       planSnapshot: 'free',
-      platformFeeBps: 500,
-      platformFeeQar: 10,
-      sellerNetQar: 190,
+      sellerNetQar: 200,
       collectionMode: 'platform_skipcash',
       platformProvider: 'skipcash',
     });
-    expect(orderFeeSnapshot('starter', 200, 'cod')).toMatchObject({
+    expect(orderFinancialSnapshot('starter', 200, 'cod')).toMatchObject({
       planSnapshot: 'starter',
-      platformFeeBps: 0,
-      platformFeeQar: 0,
       sellerNetQar: 200,
       collectionMode: 'offline',
       platformProvider: null,
     });
-    expect(orderFeeSnapshot('pro', 200, 'skipcash', { platformSkipCash: false })).toMatchObject({
-      platformFeeBps: 100,
-      platformFeeQar: 2,
-      sellerNetQar: 198,
+    expect(
+      orderFinancialSnapshot('pro', 200, 'skipcash', { platformSkipCash: false }),
+    ).toMatchObject({
+      sellerNetQar: 200,
       collectionMode: 'seller_direct',
       platformProvider: 'skipcash',
     });
-    expect(orderFeeSnapshot('atelier', 200, 'sadad')).toMatchObject({
-      platformFeeBps: 0,
-      platformFeeQar: 0,
+    expect(orderFinancialSnapshot('atelier', 200, 'sadad')).toMatchObject({
       sellerNetQar: 200,
       collectionMode: 'seller_direct',
       platformProvider: 'sadad',
     });
   });
 
-  it('waives public checkout fees so the buyer total stays at order base', () => {
-    expect(checkoutOrderFeeSnapshot('free', 200, 'skipcash')).toMatchObject({
+  it('keeps checkout totals unchanged for every payment method', () => {
+    expect(checkoutOrderFinancialSnapshot('free', 200, 'skipcash')).toMatchObject({
       planSnapshot: 'free',
-      platformFeeBps: 0,
-      platformFeeQar: 0,
       sellerNetQar: 200,
       buyerTotalQar: 200,
-      feeBaseQar: 200,
       collectionMode: 'platform_skipcash',
       platformProvider: 'skipcash',
     });
-    expect(checkoutOrderFeeSnapshot('starter', 200, 'cod')).toMatchObject({
-      platformFeeBps: 0,
-      platformFeeQar: 0,
+    expect(checkoutOrderFinancialSnapshot('starter', 200, 'cod')).toMatchObject({
       sellerNetQar: 200,
       buyerTotalQar: 200,
       collectionMode: 'offline',

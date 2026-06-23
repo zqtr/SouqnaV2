@@ -10,7 +10,6 @@ const FEATURES: Record<Plan, string[]> = {
     '10 products',
     '1 template',
     '25 orders / month',
-    '5% transaction fee',
     'Souqna branding locked',
     'No custom domain, analytics, integrations, or AI',
   ],
@@ -25,7 +24,6 @@ const FEATURES: Record<Plan, string[]> = {
     'Discount codes',
     'SEO settings',
     '100 AI credits / month',
-    '3% transaction fee',
   ],
   pro: [
     '8 storefronts',
@@ -39,7 +37,6 @@ const FEATURES: Record<Plan, string[]> = {
     'Premium templates and blocks',
     'Advanced analytics',
     'Priority support',
-    '1% transaction fee',
   ],
   atelier: [
     'Unlimited storefronts',
@@ -52,7 +49,6 @@ const FEATURES: Record<Plan, string[]> = {
     'Advanced SEO AI',
     'Early access features',
     'Dedicated support',
-    '0% transaction fee',
   ],
 };
 

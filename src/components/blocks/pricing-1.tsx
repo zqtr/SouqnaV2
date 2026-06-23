@@ -1,68 +1,63 @@
-"use client";
+'use client';
 
-import { Check } from "lucide-react";
+import { Check } from 'lucide-react';
 import {
   motion,
   useAnimationFrame,
   useMotionTemplate,
   useMotionValue,
   useTransform,
-} from "motion/react";
-import { useRef } from "react";
-import { HomeStaggeredText } from "@/components/sections/home/HomeStaggeredText";
+} from 'motion/react';
+import { useRef } from 'react';
+import { HomeStaggeredText } from '@/components/sections/home/HomeStaggeredText';
 
 const plans = [
   {
-    name: "Free",
-    price: "0",
-    description: "Start with one branded storefront and clear launch limits.",
-    cta: "Start free",
+    name: 'Free',
+    price: '0',
+    description: 'Start with one branded storefront and clear launch limits.',
+    cta: 'Start free',
+    features: ['1 storefront', '10 products', '25 orders/month', 'Hosted checkout'],
+  },
+  {
+    name: 'Pro',
+    price: '49',
+    description: 'The conversion plan for merchants ready to grow.',
+    cta: 'Choose Pro',
     features: [
-      "1 storefront",
-      "10 products",
-      "25 orders/month",
-      "5% transaction fee",
+      '2 storefronts',
+      'Unlimited products',
+      'Custom domain',
+      'Remove branding',
+      'Basic analytics',
+      'Discounts and SEO',
     ],
   },
   {
-    name: "Pro",
-    price: "49",
-    description: "The conversion plan for merchants ready to grow.",
-    cta: "Choose Pro",
-    features: [
-      "2 storefronts",
-      "Unlimited products",
-      "Custom domain",
-      "Remove branding",
-      "Basic analytics",
-      "3% transaction fee",
-    ],
-  },
-  {
-    name: "Pro+",
-    price: "145",
-    description: "Grow with Souqy, automation, and marketing integrations.",
-    cta: "Choose Pro+",
+    name: 'Pro+',
+    price: '145',
+    description: 'Grow with Souqy, automation, and marketing integrations.',
+    cta: 'Choose Pro+',
     highlighted: true,
     features: [
-      "Everything in Pro",
-      "8 storefronts",
-      "Souqy AI operator",
-      "Meta/TikTok integrations",
-      "1% transaction fee",
+      'Everything in Pro',
+      '8 storefronts',
+      'Souqy AI operator',
+      'Meta/TikTok integrations',
+      'Team automation',
     ],
   },
   {
-    name: "Max+",
-    price: "235",
-    description: "For agencies, operators, and multi-brand sellers.",
-    cta: "Choose Max+",
+    name: 'Max+',
+    price: '235',
+    description: 'For agencies, operators, and multi-brand sellers.',
+    cta: 'Choose Max+',
     features: [
-      "Everything in Pro+",
-      "Unlimited storefronts",
-      "White-label tools",
-      "API access",
-      "0% transaction fee",
+      'Everything in Pro+',
+      'Unlimited storefronts',
+      'White-label tools',
+      'API access',
+      'Dedicated support',
     ],
   },
 ];
@@ -89,14 +84,8 @@ const MovingBorder = ({
     }
   });
 
-  const x = useTransform(
-    progress,
-    (val) => pathRef.current?.getPointAtLength(val).x,
-  );
-  const y = useTransform(
-    progress,
-    (val) => pathRef.current?.getPointAtLength(val).y,
-  );
+  const x = useTransform(progress, (val) => pathRef.current?.getPointAtLength(val).x);
+  const y = useTransform(progress, (val) => pathRef.current?.getPointAtLength(val).y);
 
   const transform = useMotionTemplate`translateX(${x}px) translateY(${y}px) translateX(-50%) translateY(-50%)`;
 
@@ -109,21 +98,14 @@ const MovingBorder = ({
         width="100%"
         height="100%"
       >
-        <rect
-          fill="none"
-          width="100%"
-          height="100%"
-          rx={rx}
-          ry={ry}
-          ref={pathRef}
-        />
+        <rect fill="none" width="100%" height="100%" rx={rx} ry={ry} ref={pathRef} />
       </svg>
       <motion.div
         style={{
-          position: "absolute",
+          position: 'absolute',
           top: 0,
           left: 0,
-          display: "inline-block",
+          display: 'inline-block',
           transform,
         }}
       >
@@ -135,14 +117,17 @@ const MovingBorder = ({
 
 export default function Pricing1() {
   return (
-    <section id="pricing" className="relative w-full bg-transparent px-[var(--gutter-tight)] py-16 sm:py-20 lg:px-[var(--gutter)]">
+    <section
+      id="pricing"
+      className="relative w-full bg-transparent px-[var(--gutter-tight)] py-16 sm:py-20 lg:px-[var(--gutter)]"
+    >
       <div className="mx-auto max-w-[1400px] w-full">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-            className="mb-8 text-center sm:mb-12"
-          >
+          className="mb-8 text-center sm:mb-12"
+        >
           <HomeStaggeredText
             as="h1"
             className="mb-2 text-3xl font-medium leading-tight tracking-tight text-black dark:text-white"
@@ -164,10 +149,7 @@ export default function Pricing1() {
           className="max-w-xl mx-auto mb-10 sm:mb-12"
         >
           <div className="relative overflow-hidden p-0.5 rounded-3xl">
-            <div
-              className="absolute inset-0"
-              style={{ borderRadius: "1.5rem" }}
-            >
+            <div className="absolute inset-0" style={{ borderRadius: '1.5rem' }}>
               <MovingBorder duration={5000} rx="30%" ry="30%">
                 <div className="h-48 w-48 bg-[radial-gradient(#10b981_15%,transparent_80%)] opacity-[0.5]" />
               </MovingBorder>
@@ -208,11 +190,10 @@ export default function Pricing1() {
               transition={{ duration: 0.6, delay: 0.2 + index * 0.08 }}
               className={
                 plan.highlighted
-                  ? "relative flex flex-col overflow-hidden rounded-3xl border-2 border-black/30 bg-white/65 p-5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.35)] backdrop-blur-md ring-2 ring-black/20 dark:border-white/40 dark:bg-white/15 dark:shadow-[0_24px_60px_-20px_rgba(255,255,255,0.18)] dark:ring-white/25"
-                  : "flex flex-col rounded-3xl border border-black/10 bg-white/55 p-5 backdrop-blur-md dark:border-white/15 dark:bg-white/10"
+                  ? 'relative flex flex-col overflow-hidden rounded-3xl border-2 border-black/30 bg-white/65 p-5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.35)] backdrop-blur-md ring-2 ring-black/20 dark:border-white/40 dark:bg-white/15 dark:shadow-[0_24px_60px_-20px_rgba(255,255,255,0.18)] dark:ring-white/25'
+                  : 'flex flex-col rounded-3xl border border-black/10 bg-white/55 p-5 backdrop-blur-md dark:border-white/15 dark:bg-white/10'
               }
             >
-
               <div className="relative z-10 flex flex-1 flex-col">
                 <div className="mb-6">
                   <div className="flex items-center justify-between gap-3">

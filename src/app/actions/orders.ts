@@ -4,28 +4,19 @@ import { z } from 'zod';
 import { auth } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
 import { assertStorefrontOwner } from '@/lib/products';
-import {
-  getOrder,
-  updateOrderStatus,
-  type OrderStatus,
-  type PaymentStatus,
-} from '@/lib/orders';
+import { getOrder, updateOrderStatus, type OrderStatus, type PaymentStatus } from '@/lib/orders';
 import {
   createOrderRow,
   type OrderStatus as CheckoutOrderStatus,
   type PaymentStatus as CheckoutPaymentStatus,
 } from '@/lib/checkout-orders';
-import {
-  getCustomer,
-  upsertCustomer,
-  bumpCustomerOrder,
-} from '@/lib/customers';
+import { getCustomer, upsertCustomer, bumpCustomerOrder } from '@/lib/customers';
 import { recordAudit } from '@/lib/audit';
 import { recordEvent } from '@/lib/analytics';
 import { sendWhatsAppAdminOrderConfirmation } from '@/lib/apps/whatsapp';
-import { sendSentDeliveryNotification } from '@/lib/sent';
+import { notifyCheckoutOrderCreated } from '@/lib/checkout-notifications';
 import { getPlan } from '@/lib/billing';
-import { orderFeeSnapshot } from '@/lib/planEnforcement';
+import { orderFinancialSnapshot } from '@/lib/planEnforcement';
 
 /**
  * Manual order entry from the dashboard. Maps the form's flat shape to
@@ -107,9 +98,7 @@ export type ResendWhatsAppState =
   | { status: 'success'; message: string; arMessage: string; messageId: string | null }
   | { status: 'error'; message: string; arMessage: string };
 
-export async function createOrderFromForm(
-  input: CreateOrderInput,
-): Promise<OrderActionState> {
+export async function createOrderFromForm(input: CreateOrderInput): Promise<OrderActionState> {
   const parsed = CreateSchema.safeParse(input);
   if (!parsed.success) {
     return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Invalid order' };
@@ -120,11 +109,7 @@ export async function createOrderFromForm(
   const owner = await assertStorefrontOwner(data.storefrontSlug, userId);
   if (!owner) return { status: 'error', message: 'Forbidden' };
 
-  if (
-    !data.customer.email &&
-    !data.customer.phone &&
-    !data.customer.firstName
-  ) {
+  if (!data.customer.email && !data.customer.phone && !data.customer.firstName) {
     return {
       status: 'error',
       message: 'Add a customer email, phone, or name before logging the order.',
@@ -151,7 +136,7 @@ export async function createOrderFromForm(
     const totalQar = Math.max(adjustedSubtotalQar + shippingQar + taxQar, 0);
     const checkoutStatus = manualCheckoutStatuses(data.status, data.paymentStatus);
     const plan = await getPlan(userId);
-    const feeSnapshot = orderFeeSnapshot(plan, totalQar, 'cod');
+    const financialSnapshot = orderFinancialSnapshot(plan, totalQar, 'cod');
     const customerName = manualCustomerName(data.customer);
 
     const items = data.items.map((it) => ({
@@ -179,7 +164,7 @@ export async function createOrderFromForm(
       shippingQar,
       taxQar,
       totalQar,
-      ...feeSnapshot,
+      ...financialSnapshot,
       acceptedPolicies: [],
       notes: data.notes ?? null,
       metadata: {
@@ -216,15 +201,12 @@ export async function createOrderFromForm(
         source: 'manual_order',
       },
     });
-    if (data.status !== 'draft' && data.status !== 'cancelled' && data.customer.phone) {
-      void sendSentDeliveryNotification({
-        phone: data.customer.phone,
-        storeName: owner.businessName,
+    if (data.status !== 'draft' && data.status !== 'cancelled') {
+      await notifyCheckoutOrderCreated({
+        slug: data.storefrontSlug,
+        storefront: owner,
         order,
-        message: 'Your order was logged by the store. Contact the store if any details need to change.',
-        idempotencyKey: `manual-order-${order.id}`,
-      }).catch((err) => {
-        console.warn('[createOrderFromForm] Sent notification failed', err);
+        paymentInstructions: null,
       });
     }
     revalidatePath('/account', 'layout');
@@ -385,9 +367,7 @@ export async function resendOrderWhatsAppConfirmation(
 
   if (whatsapp.status !== 'sent') {
     const reason =
-      whatsapp.status === 'skipped'
-        ? whatsapp.reason.replace(/_/g, ' ')
-        : whatsapp.reason;
+      whatsapp.status === 'skipped' ? whatsapp.reason.replace(/_/g, ' ') : whatsapp.reason;
     return {
       status: 'error',
       message: `WhatsApp message was not sent: ${reason}.`,

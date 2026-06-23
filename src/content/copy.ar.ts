@@ -1136,6 +1136,7 @@ export const copyAr = {
         menu: { label: 'قائمة أسعار', hint: 'أسعار' },
         serviceList: { label: 'خدمات', hint: 'بطاقات' },
         calendar: { label: 'تقويم', hint: 'تواريخ' },
+        drop: { label: 'إصدار (Drop Manager)', hint: 'إطلاق مؤقت' },
         taqim: { label: 'باقة (تقييم)', hint: 'باقة' },
         mawid: { label: 'عدّاد (موعد)', hint: 'مؤقّت' },
         contactCard: { label: 'تواصل', hint: 'بيانات' },

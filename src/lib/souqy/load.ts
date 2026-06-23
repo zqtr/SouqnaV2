@@ -18,10 +18,10 @@ import { withSouqyContext } from '@/sdk/runtime';
  *      resolves only `react` and `@souqna/sdk` against our app's module
  *      instances — no other module name resolves, so a generated artifact
  *      cannot reach Node builtins, fs, network, or env.
- *   3. Cache the bundle source by content key.
- *   4. Render it with a request-scoped SDK facade so SDK hooks and
- *      components (`useStorefront`, `ProductGrid`, etc.) read the right
- *      per-request context.
+ *   3. Cache the resulting React component by content key.
+ *   4. Render it inside `withSouqyContext(ctx, …)` so SDK hooks
+ *      (`useStorefront`, `useProducts`, …) read the right per-request
+ *      context.
  *
  * The cache is in-memory per server instance; that's fine for read
  * traffic since revisions are immutable. On revision rollover we
@@ -29,22 +29,23 @@ import { withSouqyContext } from '@/sdk/runtime';
  * next request rehydrates this LRU.
  */
 
-type LoadedBundle = {
-  source: string;
+type CompiledBundle = {
+  execute: (
+    moduleObj: { exports: Record<string, unknown> },
+    exportsObj: Record<string, unknown>,
+    requireFn: (name: string) => unknown,
+    ReactBinding: typeof React,
+  ) => void;
 };
 
 type LoadResult =
-  | { ok: true; bundle: LoadedBundle }
+  | { ok: true; Component: CompiledBundle }
   | { ok: false; reason: 'fetch_failed' | 'eval_failed' | 'no_default'; message: string };
-
-type RenderResult =
-  | { ok: true; node: React.ReactNode }
-  | { ok: false; reason: 'eval_failed' | 'no_default'; message: string };
 
 const CACHE_MAX = 128;
 const CACHE_TTL_MS = 1000 * 60 * 60; // 1h — revisions are immutable; 1h is conservative
 
-const cache = new LRUCache<string, string>({
+const cache = new LRUCache<string, CompiledBundle>({
   max: CACHE_MAX,
   ttl: CACHE_TTL_MS,
 });
@@ -56,6 +57,31 @@ const ALLOWED_MODULES: Record<string, unknown> = {
   'react/jsx-runtime': ReactJsxRuntime,
 };
 
+const SDK_COMPONENT_EXPORTS = [
+  'Hero',
+  'Banner',
+  'Text',
+  'Image',
+  'Gallery',
+  'ProductGrid',
+  'ProductList',
+  'FeaturedProduct',
+  'ServiceList',
+  'Menu',
+  'Calendar',
+  'ContactCard',
+  'InquireCta',
+  'Spacer',
+  'Divider',
+  'DepthShowcase',
+  'AuroraRibbon',
+  'Section',
+  'Stack',
+  'Grid',
+  'Quote',
+  'Marquee',
+] as const;
+
 export async function loadSouqyComponent(args: {
   slug: string;
   revision: string;
@@ -63,7 +89,7 @@ export async function loadSouqyComponent(args: {
 }): Promise<LoadResult> {
   const key = `${args.slug}:${args.revision}`;
   const cached = cache.get(key);
-  if (cached) return { ok: true, bundle: { source: cached } };
+  if (cached) return { ok: true, Component: cached };
 
   let source: string;
   try {
@@ -90,93 +116,84 @@ export async function loadSouqyComponent(args: {
     };
   }
 
-  const validation = evaluateSouqyBundle(source, SouqnaSdk);
-  if (!validation.ok) return validation;
-
-  cache.set(key, source);
-  return { ok: true, bundle: { source } };
-}
-
-/**
- * Convenience render helper. Most callers want "give me the rendered
- * tree, set up the context for me." The generated bundle is evaluated
- * against a scoped SDK facade so nested SDK components keep the same
- * per-request context even when React renders them after element creation.
- */
-export function renderSouqyComponent(
-  bundle: LoadedBundle,
-  ctx: SouqyContext,
-): RenderResult {
-  const scopedSdk = createScopedSouqySdk(ctx);
-  const evaluated = evaluateSouqyBundle(bundle.source, scopedSdk);
-  if (!evaluated.ok) return evaluated;
-  return { ok: true, node: React.createElement(evaluated.Component, {}) };
-}
-
-function evaluateSouqyBundle(
-  source: string,
-  sdkModule: unknown,
-):
-  | { ok: true; Component: React.ComponentType<Record<string, never>> }
-  | { ok: false; reason: 'eval_failed' | 'no_default'; message: string } {
-  let exportedDefault: unknown;
+  let execute: CompiledBundle['execute'];
   try {
-    // Build a CJS-shaped scope and execute the bundle inside it. The
-    // captive require throws on any module we didn't allowlist, so
-    // generated code cannot reach `fs`, `child_process`, `process`, etc.
-    const moduleObj: { exports: Record<string, unknown> } = { exports: {} };
-    const captiveRequire = (name: string): unknown => {
-      if (name === '@souqna/sdk') return sdkModule;
-      const allowed = ALLOWED_MODULES[name];
-      if (!allowed) {
-        throw new Error(`Souqy bundle attempted to require disallowed module: '${name}'`);
-      }
-      return allowed;
-    };
-    const fn = new Function('module', 'exports', 'require', 'React', source);
-    fn(moduleObj, moduleObj.exports, captiveRequire, React);
-    exportedDefault =
-      moduleObj.exports.default ??
-      moduleObj.exports.Storefront ??
-      // tsup's CJS interop sometimes flattens default to module.exports.
-      (moduleObj.exports as { __esModule?: boolean; default?: unknown }).default ??
-      moduleObj.exports;
+    execute = new Function(
+      'module',
+      'exports',
+      'require',
+      'React',
+      source,
+    ) as CompiledBundle['execute'];
   } catch (err) {
     return {
       ok: false,
       reason: 'eval_failed',
-      message: `Souqy bundle eval failed: ${(err as Error).message}`,
+      message: `Souqy bundle compile failed: ${(err as Error).message}`,
     };
   }
 
-  if (typeof exportedDefault !== 'function') {
-    return {
-      ok: false,
-      reason: 'no_default',
-      message: 'Souqy bundle does not default-export a React component.',
-    };
-  }
-  return { ok: true, Component: exportedDefault as React.ComponentType<Record<string, never>> };
+  const Component = { execute };
+  cache.set(key, Component);
+  return { ok: true, Component };
 }
 
-function createScopedSouqySdk(ctx: SouqyContext): Record<string, unknown> {
-  const scoped: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(SouqnaSdk)) {
-    scoped[key] =
-      typeof value === 'function'
-        ? (...args: unknown[]) =>
-            withSouqyContext(ctx, () =>
-              (value as (...innerArgs: unknown[]) => unknown)(...args),
-            )
-        : value;
+/**
+ * Convenience render helper. Most callers want "give me the rendered
+ * tree, set up the context for me." Bundles the AsyncLocalStorage entry
+ * + JSX creation so the page handler stays a one-liner.
+ */
+export function renderSouqyComponent(
+  Component: CompiledBundle,
+  ctx: SouqyContext,
+): React.ReactNode {
+  const moduleObj: { exports: Record<string, unknown> } = { exports: {} };
+  const sdk = createContextBoundSdk(ctx);
+  const captiveRequire = (name: string): unknown => {
+    if (name === '@souqna/sdk') return sdk;
+    const allowed = ALLOWED_MODULES[name];
+    if (!allowed) {
+      throw new Error(`Souqy bundle attempted to require disallowed module: '${name}'`);
+    }
+    return allowed;
+  };
+
+  Component.execute(moduleObj, moduleObj.exports, captiveRequire, React);
+  const exportedDefault =
+    moduleObj.exports.default ??
+    moduleObj.exports.Storefront ??
+    // tsup's CJS interop sometimes flattens default to module.exports.
+    (moduleObj.exports as { __esModule?: boolean; default?: unknown }).default ??
+    moduleObj.exports;
+
+  if (typeof exportedDefault !== 'function') {
+    throw new Error('Souqy bundle does not default-export a React component.');
   }
-  scoped.useSouqyContext = () => ctx;
-  scoped.useStorefront = () => ctx.storefront;
-  scoped.useProducts = () => ctx.products;
-  scoped.useTheme = () => ctx.theme;
-  scoped.useLocale = () => ctx.storefront.locale;
-  scoped.useIsRtl = () => ctx.isRtl;
-  return scoped;
+  return withSouqyContext(ctx, () =>
+    (exportedDefault as (props?: Record<string, never>) => React.ReactNode)({}),
+  );
+}
+
+function createContextBoundSdk(ctx: SouqyContext): typeof SouqnaSdk {
+  const sdk = {
+    ...SouqnaSdk,
+    useSouqyContext: () => ctx,
+    useStorefront: () => ctx.storefront,
+    useProducts: () => ctx.products,
+    useTheme: () => ctx.theme,
+    useLocale: () => ctx.storefront.locale,
+    useIsRtl: () => ctx.isRtl,
+  } as typeof SouqnaSdk;
+
+  for (const name of SDK_COMPONENT_EXPORTS) {
+    const component = SouqnaSdk[name];
+    if (typeof component === 'function') {
+      (sdk as unknown as Record<string, unknown>)[name] = (props: unknown) =>
+        withSouqyContext(ctx, () => (component as (props: unknown) => React.ReactNode)(props));
+    }
+  }
+
+  return sdk;
 }
 
 /**

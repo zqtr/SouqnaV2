@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { BlockRenderProps } from './BlockContext';
 import type { TaqimBlockProps } from '@/lib/blocks/types';
+import { COMPONENT_SHOWCASE_BUNDLE_ID } from '@/lib/blocks/componentShowcase';
 import { getInstalledApp } from '@/lib/apps/installed';
 import {
   getTaqimSettings,
@@ -28,6 +29,10 @@ import type { Product } from '@/lib/products';
  */
 export async function TaqimBlock({ block, ctx }: BlockRenderProps<TaqimBlockProps>) {
   const slug = ctx.storefront.slug;
+  if (block.props.bundleId === COMPONENT_SHOWCASE_BUNDLE_ID) {
+    return <TaqimShowcaseCard block={block} ctx={ctx} />;
+  }
+
   const installed = await getInstalledApp(slug, 'taqim').catch(() => null);
   if (!installed || !installed.enabled) {
     return ctx.isPreview ? (
@@ -41,7 +46,10 @@ export async function TaqimBlock({ block, ctx }: BlockRenderProps<TaqimBlockProp
   const settings = await getTaqimSettings(slug);
   if (!settings.enabled) {
     return ctx.isPreview ? (
-      <TaqimSetupCard title="Taqim is disabled" body="Enable Taqim in Apps to show bundles publicly." />
+      <TaqimSetupCard
+        title="Taqim is disabled"
+        body="Enable Taqim in Apps to show bundles publicly."
+      />
     ) : null;
   }
 
@@ -73,14 +81,16 @@ export async function TaqimBlock({ block, ctx }: BlockRenderProps<TaqimBlockProp
   const { subtotal, total, savings } = computeBundleTotals(bundle, prices);
 
   const isAr = ctx.isRtl;
-  const heading = block.props.heading?.trim() || (isAr ? bundle.titleAr : bundle.titleEn) || bundle.name;
+  const heading =
+    block.props.heading?.trim() || (isAr ? bundle.titleAr : bundle.titleEn) || bundle.name;
   const subtitle = isAr ? bundle.subtitleAr : bundle.subtitleEn;
   const cta = isAr ? bundle.ctaAr : bundle.ctaEn;
   const accentCss = settings.appearance.accent.startsWith('--')
     ? `var(${settings.appearance.accent})`
     : settings.appearance.accent;
   const layout = block.props.variant ?? settings.appearance.layout;
-  const radiusPx = settings.appearance.radius === 'sm' ? 8 : settings.appearance.radius === 'lg' ? 18 : 12;
+  const radiusPx =
+    settings.appearance.radius === 'sm' ? 8 : settings.appearance.radius === 'lg' ? 18 : 12;
   const savingsTpl = isAr
     ? settings.appearance.savingsTemplateAr
     : settings.appearance.savingsTemplateEn;
@@ -206,6 +216,155 @@ export async function TaqimBlock({ block, ctx }: BlockRenderProps<TaqimBlockProp
   );
 }
 
+function TaqimShowcaseCard({ block, ctx }: BlockRenderProps<TaqimBlockProps>) {
+  const isAr = ctx.isRtl;
+  const products = ctx.products.slice(0, 2);
+  const items =
+    products.length > 0
+      ? products
+      : ([
+          {
+            id: 'showcase-a',
+            title: isAr ? 'منتج أساسي' : 'Core product',
+            description: isAr ? 'العنصر الأول في الباقة' : 'The first item in the bundle',
+            priceQar: 180,
+            imageUrl: null,
+          },
+          {
+            id: 'showcase-b',
+            title: isAr ? 'إضافة مكملة' : 'Matching add-on',
+            description: isAr
+              ? 'عنصر مكمل يزيد قيمة العرض'
+              : 'A companion item that raises order value',
+            priceQar: 95,
+            imageUrl: null,
+          },
+        ] as Array<Pick<Product, 'id' | 'title' | 'description' | 'priceQar' | 'imageUrl'>>);
+  const total = items.reduce((sum, item) => sum + (item.priceQar ?? 0), 0);
+  const bundleTotal = Math.max(0, total - 35);
+  return (
+    <section
+      style={{
+        display: 'grid',
+        gap: 18,
+        padding: 'clamp(22px, 3vw, 32px)',
+        borderRadius: 18,
+        border: '1px solid color-mix(in srgb, var(--sf-accent) 30%, transparent)',
+        background: 'color-mix(in srgb, var(--sf-accent) 8%, transparent)',
+      }}
+    >
+      <header style={{ display: 'grid', gap: 6 }}>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            color: 'var(--sf-accent)',
+          }}
+        >
+          {isAr ? 'باقة مقترحة' : 'Bundle offer'}
+        </span>
+        <h2
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-serif, var(--font-sans))',
+            fontWeight: 'var(--sf-heading-weight, 400)' as unknown as number,
+            fontSize: 'clamp(26px, 3.4vw, 40px)',
+            lineHeight: 1.12,
+            color: 'var(--sf-ink)',
+          }}
+        >
+          {block.props.heading ||
+            (isAr ? 'اجمع المنتجات في عرض واحد' : 'Pair products into one offer')}
+        </h2>
+      </header>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: 14,
+        }}
+      >
+        {items.map((item) => (
+          <article
+            key={item.id}
+            style={{
+              display: 'grid',
+              gap: 8,
+              padding: 14,
+              borderRadius: 14,
+              border: '1px solid color-mix(in srgb, var(--sf-ink) 10%, transparent)',
+              background: 'color-mix(in srgb, var(--sf-ground) 86%, var(--sf-ink) 6%)',
+            }}
+          >
+            {item.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={item.imageUrl}
+                alt={item.title}
+                style={{
+                  width: '100%',
+                  aspectRatio: '4 / 3',
+                  objectFit: 'cover',
+                  borderRadius: 10,
+                  display: 'block',
+                }}
+              />
+            ) : (
+              <div
+                aria-hidden
+                style={{
+                  width: '100%',
+                  aspectRatio: '4 / 3',
+                  borderRadius: 10,
+                  background: 'color-mix(in srgb, var(--sf-accent) 16%, transparent)',
+                }}
+              />
+            )}
+            <strong style={{ color: 'var(--sf-ink)', fontSize: 15 }}>{item.title}</strong>
+            {item.description ? (
+              <span
+                style={{
+                  color: 'color-mix(in srgb, var(--sf-ink) 66%, transparent)',
+                  fontSize: 13,
+                  lineHeight: 1.45,
+                }}
+              >
+                {item.description}
+              </span>
+            ) : null}
+          </article>
+        ))}
+      </div>
+      <footer
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 10,
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderTop: '1px solid color-mix(in srgb, var(--sf-ink) 12%, transparent)',
+          paddingTop: 14,
+        }}
+      >
+        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--sf-accent)' }}>
+          QAR {bundleTotal.toFixed(0)}
+        </span>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'color-mix(in srgb, var(--sf-ink) 64%, transparent)',
+          }}
+        >
+          {isAr ? 'وفر عند شراء الباقة' : 'Save when bought together'}
+        </span>
+      </footer>
+    </section>
+  );
+}
+
 function TaqimSetupCard({ title, body }: { title: string; body: string }) {
   return (
     <section
@@ -222,17 +381,20 @@ function TaqimSetupCard({ title, body }: { title: string; body: string }) {
       <strong style={{ fontFamily: 'var(--font-serif, var(--font-sans))', fontSize: 22 }}>
         ◫ {title}
       </strong>
-      <p style={{ margin: 0, fontSize: 14, color: 'color-mix(in srgb, var(--sf-ink) 68%, transparent)' }}>
+      <p
+        style={{
+          margin: 0,
+          fontSize: 14,
+          color: 'color-mix(in srgb, var(--sf-ink) 68%, transparent)',
+        }}
+      >
         {body}
       </p>
     </section>
   );
 }
 
-function resolveBundle(
-  settings: TaqimSettings,
-  props: TaqimBlockProps,
-): TaqimBundle | null {
+function resolveBundle(settings: TaqimSettings, props: TaqimBlockProps): TaqimBundle | null {
   if (props.bundleId) {
     const explicit = getBundleById(settings, props.bundleId);
     if (explicit) return explicit;
@@ -259,7 +421,16 @@ function BundleItems({
 }) {
   if (layout === 'stack') {
     return (
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <ul
+        style={{
+          listStyle: 'none',
+          padding: 0,
+          margin: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
+      >
         {items.map((p) => (
           <li
             key={p.id}
@@ -281,12 +452,25 @@ function BundleItems({
                 style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: radiusPx / 2 }}
               />
             ) : (
-              <div style={{ width: 56, height: 56, background: 'color-mix(in srgb, var(--sf-ink) 6%, transparent)', borderRadius: radiusPx / 2 }} />
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  background: 'color-mix(in srgb, var(--sf-ink) 6%, transparent)',
+                  borderRadius: radiusPx / 2,
+                }}
+              />
             )}
-            <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--sf-ink)' }}>{p.title}</div>
+            <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--sf-ink)' }}>
+              {p.title}
+            </div>
             {p.priceQar !== null ? (
               <span
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'color-mix(in srgb, var(--sf-ink) 60%, transparent)' }}
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  color: 'color-mix(in srgb, var(--sf-ink) 60%, transparent)',
+                }}
                 data-souqna-price={p.priceQar}
               >
                 {p.priceQar.toFixed(2)}
@@ -349,15 +533,36 @@ function BundleItems({
             ) : null}
             {p.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={p.imageUrl} alt={p.title} style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover' }} />
+              <img
+                src={p.imageUrl}
+                alt={p.title}
+                style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover' }}
+              />
             ) : (
-              <div style={{ width: '100%', aspectRatio: '4 / 5', background: 'color-mix(in srgb, var(--sf-ink) 6%, transparent)' }} />
+              <div
+                style={{
+                  width: '100%',
+                  aspectRatio: '4 / 5',
+                  background: 'color-mix(in srgb, var(--sf-ink) 6%, transparent)',
+                }}
+              />
             )}
-            <div style={{ padding: '10px 12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div
+              style={{
+                padding: '10px 12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+              }}
+            >
               <div style={{ fontSize: 13.5, color: 'var(--sf-ink)' }}>{p.title}</div>
               {p.priceQar !== null ? (
                 <div
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'color-mix(in srgb, var(--sf-ink) 60%, transparent)' }}
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11.5,
+                    color: 'color-mix(in srgb, var(--sf-ink) 60%, transparent)',
+                  }}
                   data-souqna-price={p.priceQar}
                 >
                   {p.priceQar.toFixed(2)} QAR
@@ -397,16 +602,32 @@ function BundleItems({
               <img
                 src={p.imageUrl}
                 alt={p.title}
-                style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover', display: 'block' }}
+                style={{
+                  width: '100%',
+                  aspectRatio: '4 / 5',
+                  objectFit: 'cover',
+                  display: 'block',
+                }}
               />
             ) : (
               <div style={{ width: '100%', aspectRatio: '4 / 5' }} />
             )}
-            <div style={{ padding: '10px 12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div
+              style={{
+                padding: '10px 12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+              }}
+            >
               <div style={{ fontSize: 13.5, color: 'var(--sf-ink)' }}>{p.title}</div>
               {p.priceQar !== null ? (
                 <div
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'color-mix(in srgb, var(--sf-ink) 60%, transparent)' }}
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11.5,
+                    color: 'color-mix(in srgb, var(--sf-ink) 60%, transparent)',
+                  }}
                   data-souqna-price={p.priceQar}
                 >
                   {p.priceQar.toFixed(2)} QAR

@@ -12,10 +12,11 @@ import { db } from './db';
  * All money values are integer whole QAR. All ids are uuid strings.
  */
 
-export type PaymentMethod = 'cod' | 'bank_transfer' | 'skipcash' | 'sadad' | 'pay_link';
+export type PaymentMethod = 'cod' | 'bank_transfer' | 'fawran' | 'skipcash' | 'sadad' | 'pay_link';
 export const PAYMENT_METHODS: readonly PaymentMethod[] = [
   'cod',
   'bank_transfer',
+  'fawran',
   'skipcash',
   'sadad',
   'pay_link',
@@ -46,7 +47,6 @@ export const ORDER_STATUSES: readonly OrderStatus[] = [
 ] as const;
 
 export type CollectionMode = 'platform_skipcash' | 'seller_direct' | 'offline';
-export type PlatformFeeStatus = 'not_due' | 'collected' | 'receivable' | 'waived';
 export type PayoutStatus = 'not_applicable' | 'pending' | 'paid' | 'cancelled';
 
 export type OrderAddress = {
@@ -81,16 +81,16 @@ export type Order = {
   orderStatus: OrderStatus;
   currency: string;
   subtotalQar: number;
+  discountQar: number;
+  discountCode: string | null;
+  discountId: number | null;
   shippingQar: number;
   taxQar: number;
   totalQar: number;
   planSnapshot: string;
-  platformFeeBps: number;
-  platformFeeQar: number;
   sellerNetQar: number;
   collectionMode: CollectionMode;
   platformProvider: string | null;
-  platformFeeStatus: PlatformFeeStatus;
   payoutStatus: PayoutStatus;
   acceptedPolicies: string[];
   notes: string | null;
@@ -112,16 +112,16 @@ type OrderRow = {
   order_status: OrderStatus;
   currency: string;
   subtotal_qar: number | string;
+  discount_qar?: number | string | null;
+  discount_code?: string | null;
+  discount_id?: number | string | null;
   shipping_qar: number | string;
   tax_qar: number | string;
   total_qar: number | string;
   plan_snapshot?: string | null;
-  platform_fee_bps?: number | string | null;
-  platform_fee_qar?: number | string | null;
   seller_net_qar?: number | string | null;
   collection_mode?: CollectionMode | null;
   platform_provider?: string | null;
-  platform_fee_status?: PlatformFeeStatus | null;
   payout_status?: PayoutStatus | null;
   accepted_policies: string[] | null;
   notes: string | null;
@@ -191,19 +191,20 @@ function fromRow(row: OrderRow, items: OrderItem[]): Order {
     orderStatus: row.order_status,
     currency: row.currency,
     subtotalQar: Number(row.subtotal_qar),
+    discountQar: Number(row.discount_qar ?? 0),
+    discountCode: row.discount_code ?? null,
+    discountId:
+      row.discount_id !== null && row.discount_id !== undefined ? Number(row.discount_id) : null,
     shippingQar: Number(row.shipping_qar),
     taxQar: Number(row.tax_qar ?? 0),
     totalQar: Number(row.total_qar),
     planSnapshot: row.plan_snapshot ?? 'free',
-    platformFeeBps: Number(row.platform_fee_bps ?? 0),
-    platformFeeQar: Number(row.platform_fee_qar ?? 0),
     sellerNetQar:
       row.seller_net_qar !== null && row.seller_net_qar !== undefined
         ? Number(row.seller_net_qar)
         : Number(row.total_qar),
     collectionMode: row.collection_mode ?? 'seller_direct',
     platformProvider: row.platform_provider ?? null,
-    platformFeeStatus: row.platform_fee_status ?? 'not_due',
     payoutStatus: row.payout_status ?? 'not_applicable',
     acceptedPolicies: row.accepted_policies ?? [],
     notes: row.notes,
@@ -247,16 +248,16 @@ export type CreateOrderRowInput = {
   orderStatus?: OrderStatus;
   currency: string;
   subtotalQar: number;
+  discountQar?: number;
+  discountCode?: string | null;
+  discountId?: number | null;
   shippingQar: number;
   taxQar?: number;
   totalQar: number;
   planSnapshot: string;
-  platformFeeBps: number;
-  platformFeeQar: number;
   sellerNetQar: number;
   collectionMode: CollectionMode;
   platformProvider: string | null;
-  platformFeeStatus?: PlatformFeeStatus;
   payoutStatus?: PayoutStatus;
   acceptedPolicies: string[];
   notes: string | null;
@@ -288,7 +289,6 @@ export async function createOrderRow(input: CreateOrderRowInput): Promise<Order>
   const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
   const paymentStatus = input.paymentStatus ?? 'unpaid';
   const orderStatus = input.orderStatus ?? 'pending';
-  const platformFeeStatus = input.platformFeeStatus ?? 'not_due';
   const payoutStatus = input.payoutStatus ?? 'not_applicable';
 
   const orderRows = (await db()`
@@ -297,18 +297,20 @@ export async function createOrderRow(input: CreateOrderRowInput): Promise<Order>
       customer_name, customer_phone, customer_email,
       address,
       payment_method, payment_status, order_status,
-      currency, subtotal_qar, shipping_qar, tax_qar, total_qar,
-      plan_snapshot, platform_fee_bps, platform_fee_qar, seller_net_qar,
-      collection_mode, platform_provider, platform_fee_status, payout_status,
+      currency, subtotal_qar, discount_qar, discount_code, discount_id,
+      shipping_qar, tax_qar, total_qar,
+      plan_snapshot, seller_net_qar,
+      collection_mode, platform_provider, payout_status,
       accepted_policies, notes, metadata
     ) values (
       ${input.slug},
       ${input.customer.name}, ${input.customer.phone}, ${input.customer.email},
       ${addressJson}::jsonb,
       ${input.paymentMethod}, ${paymentStatus}, ${orderStatus},
-      ${input.currency}, ${input.subtotalQar}, ${input.shippingQar}, ${input.taxQar ?? 0}, ${input.totalQar},
-      ${input.planSnapshot}, ${input.platformFeeBps}, ${input.platformFeeQar}, ${input.sellerNetQar},
-      ${input.collectionMode}, ${input.platformProvider}, ${platformFeeStatus}, ${payoutStatus},
+      ${input.currency}, ${input.subtotalQar}, ${input.discountQar ?? 0}, ${input.discountCode ?? null}, ${input.discountId ?? null},
+      ${input.shippingQar}, ${input.taxQar ?? 0}, ${input.totalQar},
+      ${input.planSnapshot}, ${input.sellerNetQar},
+      ${input.collectionMode}, ${input.platformProvider}, ${payoutStatus},
       ${input.acceptedPolicies as unknown as string}, ${input.notes}, ${metadataJson}::jsonb
     )
     returning *

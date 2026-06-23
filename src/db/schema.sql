@@ -13,6 +13,19 @@
 
 create extension if not exists pgcrypto;
 
+create table if not exists account_profiles (
+  clerk_user_id text primary key,
+  username text,
+  display_name text,
+  primary_email text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists account_profiles_username_unique
+  on account_profiles (lower(username))
+  where username is not null;
+
 create table if not exists briefs (
   slug text primary key,
   locale text not null check (locale in ('en','ar')),
@@ -119,3 +132,12 @@ alter table if exists checkout_order_items
 
 alter table if exists checkout_order_items
   add column if not exists custom_inputs jsonb not null default '{}'::jsonb;
+
+alter table if exists checkout_orders
+  add column if not exists discount_qar integer not null default 0;
+
+alter table if exists checkout_orders
+  add column if not exists discount_code text;
+
+alter table if exists checkout_orders
+  add column if not exists discount_id bigint;

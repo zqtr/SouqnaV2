@@ -1,10 +1,7 @@
 import {
   UPGRADE_GROWTH_TOOLS_COPY,
   monthlyOrderCapForPlan,
-  platformFeeBpsForPlan,
-  platformFeeForTotal,
   productCapForPlan,
-  sellerNetForTotal,
   type Plan,
 } from './plans';
 import type { CollectionMode } from './checkout-orders';
@@ -15,18 +12,15 @@ export type PlanGateFailure = {
   field?: string;
 };
 
-export type OrderFeeSnapshot = {
+export type OrderFinancialSnapshot = {
   planSnapshot: Plan;
-  platformFeeBps: number;
-  platformFeeQar: number;
   sellerNetQar: number;
   collectionMode: CollectionMode;
   platformProvider: string | null;
 };
 
-export type CheckoutOrderFeeSnapshot = OrderFeeSnapshot & {
+export type CheckoutOrderFinancialSnapshot = OrderFinancialSnapshot & {
   buyerTotalQar: number;
-  feeBaseQar: number;
 };
 
 export function productCapFailure(
@@ -61,7 +55,7 @@ export function monthlyOrderCapFailure(
 export function checkoutCollectionSnapshot(
   paymentMethod: string,
   options: { platformSkipCash?: boolean } = {},
-): Pick<OrderFeeSnapshot, 'collectionMode' | 'platformProvider'> {
+): Pick<OrderFinancialSnapshot, 'collectionMode' | 'platformProvider'> {
   if (paymentMethod === 'skipcash') {
     return {
       collectionMode: options.platformSkipCash === false ? 'seller_direct' : 'platform_skipcash',
@@ -77,42 +71,34 @@ export function checkoutCollectionSnapshot(
   return { collectionMode: 'offline', platformProvider: null };
 }
 
-export function orderFeeSnapshot(
+export function orderFinancialSnapshot(
   plan: Plan,
   totalQar: number,
   paymentMethod: string,
   options: { platformSkipCash?: boolean } = {},
-): OrderFeeSnapshot {
+): OrderFinancialSnapshot {
   const collection = checkoutCollectionSnapshot(paymentMethod, options);
-  const codFeeWaived = paymentMethod === 'cod';
   const safeTotal = Math.max(0, Math.round(totalQar));
-  const platformFeeBps = codFeeWaived ? 0 : platformFeeBpsForPlan(plan);
-  const platformFeeQar = codFeeWaived ? 0 : platformFeeForTotal(safeTotal, plan);
   return {
     planSnapshot: plan,
-    platformFeeBps,
-    platformFeeQar,
-    sellerNetQar: codFeeWaived ? safeTotal : sellerNetForTotal(safeTotal, plan),
+    sellerNetQar: safeTotal,
     ...collection,
   };
 }
 
-export function checkoutOrderFeeSnapshot(
-  _plan: Plan,
-  feeBaseQar: number,
+export function checkoutOrderFinancialSnapshot(
+  plan: Plan,
+  baseQar: number,
   paymentMethod: string,
   options: { platformSkipCash?: boolean } = {},
-): CheckoutOrderFeeSnapshot {
+): CheckoutOrderFinancialSnapshot {
   const collection = checkoutCollectionSnapshot(paymentMethod, options);
-  const safeBase = Math.max(0, Math.round(feeBaseQar));
+  const safeBase = Math.max(0, Math.round(baseQar));
   return {
-    planSnapshot: _plan,
-    platformFeeBps: 0,
-    platformFeeQar: 0,
+    planSnapshot: plan,
     sellerNetQar: safeBase,
     collectionMode: collection.collectionMode,
     platformProvider: collection.platformProvider,
     buyerTotalQar: safeBase,
-    feeBaseQar: safeBase,
   };
 }

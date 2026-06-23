@@ -14,10 +14,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { MetalFrame } from '@/components/primitives/MetalFrame';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import SplitText from '@/components/react-bits/split-text';
-import {
-  checkSlugAvailability,
-  type SlugAvailability,
-} from '@/app/actions/checkSlug';
+import { checkSlugAvailability, type SlugAvailability } from '@/app/actions/checkSlug';
 import {
   createBrief,
   type CreateBriefInput,
@@ -29,11 +26,9 @@ import { getTemplateIndustrySeed } from '@/lib/blocks/templateIndustrySeed';
 import { palettes } from '@/lib/palettes';
 import { sortedTemplateIdsForPicker, templatePresets } from '@/lib/templates';
 
-type StepKey = 'identity' | 'activity' | 'template' | 'confirmation';
-type LocalSlugStatus =
-  | SlugAvailability
-  | { status: 'idle' }
-  | { status: 'offline'; slug: string };
+type StepKey = 'identity' | 'activity' | 'template' | 'payment' | 'confirmation';
+type FawranMode = 'fawran_number' | 'commercial_registration';
+type LocalSlugStatus = SlugAvailability | { status: 'idle' } | { status: 'offline'; slug: string };
 type PreviewProduct = {
   title: string;
   priceQar: number | null;
@@ -51,7 +46,7 @@ const FALLBACK_PREVIEW_PRODUCT: PreviewProduct = {
 
 const StarSwipe = dynamic(() => import('@/components/star-swipe'), { ssr: false });
 
-const STEP_KEYS: StepKey[] = ['identity', 'activity', 'template', 'confirmation'];
+const STEP_KEYS: StepKey[] = ['identity', 'activity', 'template', 'payment', 'confirmation'];
 
 const ACTIVITIES: Array<{ id: BusinessType; en: string; ar: string }> = [
   { id: 'graphic_design', en: 'Graphic design', ar: 'تصميم جرافيكي' },
@@ -122,7 +117,7 @@ const COPY = {
     pill: 'Start a store',
     intro: 'Four small questions, then your workspace opens.',
     body: 'Pick a name, point your subdomain, choose what you sell, and select a storefront direction. We open a workplace for you on the other side.',
-    stepCount: (n: number) => `Step ${n} of 4 · About a minute`,
+    stepCount: (n: number) => `Step ${n} of 5 · About a minute`,
     back: 'Back',
     next: 'Continue',
     create: 'Create account',
@@ -152,6 +147,19 @@ const COPY = {
         side: 'Preview the whole shop.',
         body: 'Each template is a complete ecommerce direction with hero sections, product surfaces, editorial blocks, and conversion-ready calls to action. The sample products change to match what you sell.',
       },
+      payment: {
+        title: 'Set up Fawran checkout.',
+        side: 'Payment is ready first.',
+        body: 'Add a Fawran number or use Commercial Registration. Souqna will automatically use Fawran at checkout.',
+        fawran: 'Fawran Number',
+        cr: 'Commercial Registration',
+        numberLabel: 'Fawran number',
+        crLabel: 'Commercial Registration',
+        numberPlaceholder: '5500 0000',
+        crPlaceholder: '123456',
+        ready: 'Auto checkout: Fawran',
+        hint: 'This keeps checkout minimal for the customer.',
+      },
       confirmation: {
         title: 'Confirm your setup.',
         side: 'Last look.',
@@ -160,6 +168,7 @@ const COPY = {
           activity: 'Activity',
           template: 'Template',
           subdomain: 'Subdomain',
+          checkout: 'Checkout',
         },
       },
     },
@@ -184,7 +193,7 @@ const COPY = {
     pill: 'افتح متجرك',
     intro: 'أربعة أسئلة قصيرة ثم يفتح مكان عملك.',
     body: 'اختر اسماً، حدد دومين متجرك، اختر إيش تبيع، وحدد اتجاه الواجهة. الجهة الثانية يفتح لك مكان عمل كامل.',
-    stepCount: (n: number) => `خطوة ${n} من 4 · حوالي دقيقة`,
+    stepCount: (n: number) => `Step ${n} of 5 · About a minute`,
     back: 'رجوع',
     next: 'تابع',
     create: 'افتح الحساب',
@@ -214,6 +223,19 @@ const COPY = {
         side: 'عاين المتجر بالكامل.',
         body: 'كل قالب اتجاه تجارة كامل: هيرو، أسطح منتجات، كتل تحريرية، وأزرار تحويل جاهزة. المنتجات التجريبية تتغير حسب نشاطك.',
       },
+      payment: {
+        title: 'Set up Fawran checkout.',
+        side: 'Payment is ready first.',
+        body: 'Add a Fawran number or use Commercial Registration. Souqna will automatically use Fawran at checkout.',
+        fawran: 'Fawran Number',
+        cr: 'Commercial Registration',
+        numberLabel: 'Fawran number',
+        crLabel: 'Commercial Registration',
+        numberPlaceholder: '5500 0000',
+        crPlaceholder: '123456',
+        ready: 'Auto checkout: Fawran',
+        hint: 'This keeps checkout minimal for the customer.',
+      },
       confirmation: {
         title: 'راجع إعداد المتجر.',
         side: 'آخر نظرة.',
@@ -222,6 +244,7 @@ const COPY = {
           activity: 'النشاط',
           template: 'القالب',
           subdomain: 'الدومين',
+          checkout: 'Checkout',
         },
       },
     },
@@ -310,7 +333,10 @@ function TemplateVisual({
   if (templateId === 'kiosk') {
     return (
       <div className="tpl-visual tpl-kiosk">
-        <div className="tpl-kiosk-product" style={{ backgroundImage: `url("${first.imageUrl}")` }} />
+        <div
+          className="tpl-kiosk-product"
+          style={{ backgroundImage: `url("${first.imageUrl}")` }}
+        />
         <div className="tpl-kiosk-copy">
           <small>{seed.eyebrow}</small>
           <b>{first.title}</b>
@@ -388,7 +414,10 @@ function TemplateVisual({
   if (templateId === 'vitrine') {
     return (
       <div className="tpl-visual tpl-vitrine">
-        <div className="tpl-vitrine-cover" style={{ backgroundImage: `url("${first.imageUrl}")` }} />
+        <div
+          className="tpl-vitrine-cover"
+          style={{ backgroundImage: `url("${first.imageUrl}")` }}
+        />
         <div className="tpl-vitrine-copy">
           <small>{seed.eyebrow}</small>
           <b>{brand}</b>
@@ -406,7 +435,7 @@ function TemplateVisual({
         <small>{seed.eyebrow}</small>
         <b>{brand}</b>
         <div />
-          {[first, second, third].filter(Boolean).map((product) => (
+        {[first, second, third].filter(Boolean).map((product) => (
           <p key={product.title}>
             <span>{product.title}</span>
             <em>{product.priceQar}</em>
@@ -562,6 +591,9 @@ export function SouqnaBeginExperience({
   const [logoPreview, setLogoPreview] = useState('');
   const [activity, setActivity] = useState<BusinessType>('graphic_design');
   const [templateId, setTemplateId] = useState<TemplateId>('atrium');
+  const [fawranMode, setFawranMode] = useState<FawranMode>('fawran_number');
+  const [fawranNumber, setFawranNumber] = useState('');
+  const [crNumber, setCrNumber] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [createState, setCreateState] = useState<CreateBriefState>({ status: 'idle' });
   const [launchSplash, setLaunchSplash] = useState<{ slug: string; templateId: TemplateId } | null>(
@@ -597,8 +629,13 @@ export function SouqnaBeginExperience({
     }
     if (activeKey === 'activity') return activity.length > 0;
     if (activeKey === 'template') return templateId.length > 0;
+    if (activeKey === 'payment') {
+      return fawranMode === 'commercial_registration'
+        ? crNumber.trim().length > 0
+        : fawranNumber.trim().length > 0;
+    }
     return true;
-  }, [activeKey, activity, brandName, templateId, slug]);
+  }, [activeKey, activity, brandName, crNumber, fawranMode, fawranNumber, templateId, slug]);
 
   async function checkAvailability() {
     const candidate = slugify(slug);
@@ -635,7 +672,7 @@ export function SouqnaBeginExperience({
   }
 
   function beginDraft() {
-    return { brandName, slug, logoName, activity, templateId };
+    return { brandName, slug, logoName, activity, templateId, fawranMode, fawranNumber, crNumber };
   }
 
   function goNext() {
@@ -658,7 +695,9 @@ export function SouqnaBeginExperience({
       ownership: 'want_to_start',
       businessType: activity,
       templateId,
-      crNumber: '',
+      crNumber: crNumber.trim(),
+      fawranMode,
+      fawranNumber: fawranNumber.trim(),
       logoUrl: '',
       slug,
       website: '',
@@ -693,6 +732,14 @@ export function SouqnaBeginExperience({
   };
   const selectedActivity = ACTIVITIES.find((a) => a.id === activity) ?? FALLBACK_ACTIVITY;
   const selectedTemplate = templatePresets[templateId];
+  const checkoutLabel =
+    fawranMode === 'commercial_registration'
+      ? crNumber.trim()
+        ? 'Fawran via CR'
+        : 'Fawran'
+      : fawranNumber.trim()
+        ? `Fawran ${fawranNumber.trim().slice(-4).padStart(fawranNumber.trim().length, '*')}`
+        : 'Fawran';
   const splashTemplate = launchSplash ? templatePresets[launchSplash.templateId] : selectedTemplate;
   const splashPalette = palettes[splashTemplate.palette][isDark ? 'dark' : 'light'];
 
@@ -822,7 +869,11 @@ export function SouqnaBeginExperience({
 
     if (activeKey === 'template') {
       return (
-        <div className="begin-template-picker" role="radiogroup" aria-label={t.steps.template.title}>
+        <div
+          className="begin-template-picker"
+          role="radiogroup"
+          aria-label={t.steps.template.title}
+        >
           {TEMPLATE_PICKER_IDS.map((id) => (
             <TemplateChoice
               key={id}
@@ -834,6 +885,70 @@ export function SouqnaBeginExperience({
               onSelect={() => setTemplateId(id)}
             />
           ))}
+        </div>
+      );
+    }
+
+    if (activeKey === 'payment') {
+      const c = t.steps.payment;
+      const isCr = fawranMode === 'commercial_registration';
+      return (
+        <div className="begin-fawran">
+          <div className="begin-fawran-mode" role="radiogroup" aria-label={c.title}>
+            <button
+              type="button"
+              className={`begin-fawran-option${!isCr ? ' is-selected' : ''}`}
+              onClick={() => setFawranMode('fawran_number')}
+              role="radio"
+              aria-checked={!isCr}
+            >
+              <span>{c.fawran}</span>
+              <small>Primary</small>
+            </button>
+            <button
+              type="button"
+              className={`begin-fawran-option${isCr ? ' is-selected' : ''}`}
+              onClick={() => setFawranMode('commercial_registration')}
+              role="radio"
+              aria-checked={isCr}
+            >
+              <span>{c.cr}</span>
+              <small>CR</small>
+            </button>
+          </div>
+
+          {isCr ? (
+            <label className="begin-field">
+              <span>{c.crLabel}</span>
+              <input
+                name="crNumber"
+                value={crNumber}
+                onChange={(event) => setCrNumber(event.target.value)}
+                placeholder={c.crPlaceholder}
+                autoComplete="off"
+                dir="ltr"
+              />
+            </label>
+          ) : (
+            <label className="begin-field">
+              <span>{c.numberLabel}</span>
+              <input
+                name="fawranNumber"
+                value={fawranNumber}
+                onChange={(event) => setFawranNumber(event.target.value)}
+                placeholder={c.numberPlaceholder}
+                autoComplete="tel"
+                inputMode="tel"
+                dir="ltr"
+              />
+            </label>
+          )}
+
+          <div className="begin-fawran-status">
+            <span>$$$</span>
+            <strong>{c.ready}</strong>
+            <small>{c.hint}</small>
+          </div>
         </div>
       );
     }
@@ -866,6 +981,10 @@ export function SouqnaBeginExperience({
           <div>
             <dt>{c.labels.template}</dt>
             <dd>{selectedTemplate.label}</dd>
+          </div>
+          <div>
+            <dt>{c.labels.checkout}</dt>
+            <dd>{checkoutLabel}</dd>
           </div>
         </dl>
         {createState.status === 'error' ? (
@@ -940,6 +1059,11 @@ export function SouqnaBeginExperience({
             >
               <small>{splashTemplate.label}</small>
               <strong>{t.launch.welcome(brandName.trim() || launchSplash.slug)}</strong>
+              <div className="begin-launch-money" aria-hidden>
+                <span>$</span>
+                <span>$</span>
+                <span>$</span>
+              </div>
               <p>{t.launch.quote}</p>
               <div className="begin-launch-loader" aria-hidden>
                 <i />
@@ -979,9 +1103,7 @@ export function SouqnaBeginExperience({
                 {STEP_KEYS.map((key, idx) => (
                   <li
                     key={key}
-                    className={
-                      idx === stepIndex ? 'is-active' : idx < stepIndex ? 'is-done' : ''
-                    }
+                    className={idx === stepIndex ? 'is-active' : idx < stepIndex ? 'is-done' : ''}
                     aria-current={idx === stepIndex ? 'step' : undefined}
                   />
                 ))}
@@ -1043,11 +1165,7 @@ export function SouqnaBeginExperience({
                     onClick={goNext}
                     style={{ background: accent, color: accentInk }}
                   >
-                    {isCreating
-                      ? t.creating
-                      : isSignedIn
-                        ? t.createWebstore
-                        : t.create}{' '}
+                    {isCreating ? t.creating : isSignedIn ? t.createWebstore : t.create}{' '}
                     {isRtl ? '←' : '→'}
                   </button>
                 </MetalFrame>
@@ -1118,8 +1236,16 @@ export function SouqnaBeginExperience({
           place-items: center;
           overflow: hidden;
           background:
-            radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--launch-accent) 26%, transparent), transparent 34%),
-            linear-gradient(135deg, var(--launch-ground), color-mix(in srgb, var(--launch-ground) 76%, var(--launch-ink) 24%));
+            radial-gradient(
+              circle at 50% 42%,
+              color-mix(in srgb, var(--launch-accent) 26%, transparent),
+              transparent 34%
+            ),
+            linear-gradient(
+              135deg,
+              var(--launch-ground),
+              color-mix(in srgb, var(--launch-ground) 76%, var(--launch-ink) 24%)
+            );
           color: var(--launch-ink);
         }
 
@@ -1230,6 +1356,32 @@ export function SouqnaBeginExperience({
           animation-delay: 0.24s;
         }
 
+        .begin-launch-money {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          margin: 12px auto 4px;
+          color: var(--launch-accent);
+          font-family: var(--font-mono);
+          font-size: 20px;
+          font-weight: 800;
+          letter-spacing: 0;
+        }
+
+        .begin-launch-money span {
+          display: inline-block;
+          animation: begin-launch-money 920ms cubic-bezier(0.2, 0.82, 0.24, 1) both;
+        }
+
+        .begin-launch-money span:nth-child(2) {
+          animation-delay: 80ms;
+        }
+
+        .begin-launch-money span:nth-child(3) {
+          animation-delay: 160ms;
+        }
+
         .begin-launch-splash[data-template='souqline'] .begin-launch-orbit span {
           border-radius: 14px;
         }
@@ -1258,7 +1410,8 @@ export function SouqnaBeginExperience({
             opacity: 0.32;
           }
           50% {
-            transform: rotate(calc(var(--orbit-rotate, 0deg) + 18deg)) scale(calc(var(--orbit-scale, 1) + 0.04));
+            transform: rotate(calc(var(--orbit-rotate, 0deg) + 18deg))
+              scale(calc(var(--orbit-scale, 1) + 0.04));
             opacity: 0.86;
           }
         }
@@ -1272,6 +1425,21 @@ export function SouqnaBeginExperience({
           50% {
             transform: scaleY(1);
             opacity: 1;
+          }
+        }
+
+        @keyframes begin-launch-money {
+          0% {
+            transform: translateY(12px) scale(0.82);
+            opacity: 0;
+          }
+          42% {
+            transform: translateY(-10px) scale(1.08);
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(0) scale(1);
+            opacity: 0.9;
           }
         }
 
@@ -1319,7 +1487,9 @@ export function SouqnaBeginExperience({
           height: 3px;
           border-radius: 999px;
           background: color-mix(in srgb, var(--begin-text) 18%, transparent);
-          transition: background 240ms ease, transform 240ms ease;
+          transition:
+            background 240ms ease,
+            transform 240ms ease;
         }
 
         .begin-progress li.is-active {
@@ -1351,7 +1521,8 @@ export function SouqnaBeginExperience({
         }
 
         .begin-shell[dir='rtl'] .begin-title {
-          font-family: var(--font-arabic-serif), var(--font-arabic), system-ui, sans-serif !important;
+          font-family:
+            var(--font-arabic-serif), var(--font-arabic), system-ui, sans-serif !important;
           font-weight: 700;
           line-height: 1.18;
         }
@@ -1386,7 +1557,9 @@ export function SouqnaBeginExperience({
           color: var(--begin-text);
           font-size: 13px;
           font-family: inherit;
-          transition: border-color 160ms ease, box-shadow 160ms ease;
+          transition:
+            border-color 160ms ease,
+            box-shadow 160ms ease;
         }
 
         .begin-field input:focus {
@@ -1460,7 +1633,9 @@ export function SouqnaBeginExperience({
           letter-spacing: 0.06em;
           text-transform: uppercase;
           cursor: pointer;
-          transition: border-color 160ms ease, background 160ms ease;
+          transition:
+            border-color 160ms ease,
+            background 160ms ease;
         }
 
         .begin-check:hover:not(:disabled) {
@@ -1516,7 +1691,9 @@ export function SouqnaBeginExperience({
           border: 1px dashed var(--begin-field-border);
           background: color-mix(in srgb, var(--begin-field-bg) 70%, transparent);
           cursor: pointer;
-          transition: border-color 160ms ease, background 160ms ease;
+          transition:
+            border-color 160ms ease,
+            background 160ms ease;
         }
 
         .begin-logo:hover {
@@ -1586,7 +1763,10 @@ export function SouqnaBeginExperience({
           color: var(--begin-text);
           text-align: start;
           cursor: pointer;
-          transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+          transition:
+            transform 160ms ease,
+            border-color 160ms ease,
+            background 160ms ease;
         }
 
         .begin-chip:hover {
@@ -1627,7 +1807,10 @@ export function SouqnaBeginExperience({
           color: var(--begin-text);
           text-align: start;
           cursor: pointer;
-          transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+          transition:
+            transform 160ms ease,
+            border-color 160ms ease,
+            background 160ms ease;
         }
 
         .begin-tile:hover {
@@ -1649,6 +1832,114 @@ export function SouqnaBeginExperience({
           font-size: 12px;
           color: var(--begin-muted);
           line-height: 1.45;
+        }
+
+        .begin-fawran {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .begin-fawran-mode {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 9px;
+        }
+
+        .begin-fawran-option {
+          min-height: 74px;
+          padding: 13px;
+          border-radius: 12px;
+          border: 1px solid var(--begin-field-border);
+          background:
+            linear-gradient(
+              135deg,
+              color-mix(in srgb, var(--begin-field-bg) 96%, transparent),
+              color-mix(in srgb, var(--begin-text) 5%, transparent)
+            ),
+            var(--begin-field-bg);
+          color: var(--begin-text);
+          text-align: start;
+          cursor: pointer;
+          transition:
+            transform 160ms ease,
+            border-color 160ms ease,
+            background 160ms ease;
+        }
+
+        .begin-fawran-option:hover {
+          transform: translateY(-1px);
+          border-color: var(--begin-accent);
+        }
+
+        .begin-fawran-option.is-selected {
+          border-color: var(--begin-accent);
+          background:
+            linear-gradient(
+              135deg,
+              color-mix(in srgb, var(--begin-accent) 22%, transparent),
+              color-mix(in srgb, var(--begin-field-bg) 86%, transparent)
+            ),
+            var(--begin-field-bg);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--begin-accent) 38%, transparent);
+        }
+
+        .begin-fawran-option span,
+        .begin-fawran-option small {
+          display: block;
+        }
+
+        .begin-fawran-option span {
+          font-size: 13px;
+          font-weight: 800;
+          line-height: 1.2;
+        }
+
+        .begin-fawran-option small {
+          margin-top: 8px;
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--begin-muted);
+        }
+
+        .begin-fawran-status {
+          display: grid;
+          grid-template-columns: auto 1fr;
+          gap: 3px 10px;
+          align-items: center;
+          padding: 12px 13px;
+          border-radius: 12px;
+          border: 1px solid color-mix(in srgb, var(--begin-accent) 34%, var(--begin-field-border));
+          background: color-mix(in srgb, var(--begin-accent) 10%, var(--begin-field-bg));
+        }
+
+        .begin-fawran-status span {
+          grid-row: span 2;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 42px;
+          height: 42px;
+          border-radius: 10px;
+          background: var(--begin-accent);
+          color: var(--begin-accent-ink);
+          font-family: var(--font-mono);
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 0;
+        }
+
+        .begin-fawran-status strong {
+          font-size: 13px;
+          line-height: 1.2;
+        }
+
+        .begin-fawran-status small {
+          color: var(--begin-muted);
+          font-size: 11px;
+          line-height: 1.35;
         }
 
         .begin-workspace.is-template-step {
@@ -1689,7 +1980,10 @@ export function SouqnaBeginExperience({
           color: var(--tpl-ink);
           text-align: start;
           cursor: pointer;
-          transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+          transition:
+            transform 180ms ease,
+            border-color 180ms ease,
+            box-shadow 180ms ease;
         }
 
         .begin-template-card:hover {
@@ -1709,8 +2003,16 @@ export function SouqnaBeginExperience({
           min-height: 172px;
           overflow: hidden;
           background:
-            radial-gradient(circle at 20% 12%, color-mix(in srgb, var(--tpl-accent) 42%, transparent), transparent 28%),
-            linear-gradient(135deg, var(--tpl-ground), color-mix(in srgb, var(--tpl-ground) 58%, var(--tpl-ink) 42%));
+            radial-gradient(
+              circle at 20% 12%,
+              color-mix(in srgb, var(--tpl-accent) 42%, transparent),
+              transparent 28%
+            ),
+            linear-gradient(
+              135deg,
+              var(--tpl-ground),
+              color-mix(in srgb, var(--tpl-ground) 58%, var(--tpl-ink) 42%)
+            );
         }
 
         .begin-template-preview::after {
@@ -1718,8 +2020,17 @@ export function SouqnaBeginExperience({
           position: absolute;
           inset: 0;
           background:
-            linear-gradient(110deg, transparent 0 54%, color-mix(in srgb, var(--tpl-accent) 18%, transparent) 54% 58%, transparent 58%),
-            radial-gradient(circle at 82% 84%, color-mix(in srgb, var(--tpl-ink) 24%, transparent), transparent 32%);
+            linear-gradient(
+              110deg,
+              transparent 0 54%,
+              color-mix(in srgb, var(--tpl-accent) 18%, transparent) 54% 58%,
+              transparent 58%
+            ),
+            radial-gradient(
+              circle at 82% 84%,
+              color-mix(in srgb, var(--tpl-ink) 24%, transparent),
+              transparent 32%
+            );
           pointer-events: none;
         }
 
@@ -2517,7 +2828,10 @@ export function SouqnaBeginExperience({
           text-transform: uppercase;
           font-weight: 700;
           cursor: pointer;
-          transition: opacity 160ms ease, transform 160ms ease, background 160ms ease;
+          transition:
+            opacity 160ms ease,
+            transform 160ms ease,
+            background 160ms ease;
         }
 
         .begin-back {
@@ -2556,7 +2870,8 @@ export function SouqnaBeginExperience({
         }
 
         .begin-shell[dir='rtl'] .begin-side-title {
-          font-family: var(--font-arabic-serif), var(--font-arabic), system-ui, sans-serif !important;
+          font-family:
+            var(--font-arabic-serif), var(--font-arabic), system-ui, sans-serif !important;
         }
 
         .begin-side p {

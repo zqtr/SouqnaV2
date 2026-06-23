@@ -26,10 +26,11 @@ import { getPlan, planUnlocksMonthlyPayments } from '@/lib/billing';
 import { productCapFailure } from '@/lib/planEnforcement';
 import {
   MAX_PRODUCT_SIZE_OPTIONS,
+  MAX_PRODUCT_VARIANT_OPTIONS,
   DEFAULT_PRODUCT_HEIGHT_OPTIONS,
   normalizeHeightInputLabel,
   normalizeHeightOptions,
-  normalizeSizeOptions,
+  normalizeVariantOptions,
 } from '@/lib/productOptions';
 
 /**
@@ -80,8 +81,8 @@ const ProductFieldsSchema = z.object({
   allowCustomSize: z.boolean().optional().default(false),
   sizeOptions: z
     .preprocess(
-      (value) => normalizeSizeOptions(value),
-      z.array(z.string().trim().max(40)).max(MAX_PRODUCT_SIZE_OPTIONS),
+      (value) => normalizeVariantOptions(value),
+      z.array(z.string().trim().max(40)).max(MAX_PRODUCT_VARIANT_OPTIONS),
     )
     .optional()
     .default([]),
@@ -179,9 +180,9 @@ function buildPayload(parsed: z.infer<typeof ProductFieldsSchema>): ProductWrite
     isCustomizable: parsed.isCustomizable === true,
     customizationLabel:
       parsed.isCustomizable && parsed.customizationLabel ? parsed.customizationLabel : null,
-    sizeOptions: normalizeSizeOptions(parsed.sizeOptions),
+    sizeOptions: normalizeVariantOptions(parsed.sizeOptions),
     allowCustomSize:
-      parsed.allowCustomSize === true && normalizeSizeOptions(parsed.sizeOptions).length > 0,
+      parsed.allowCustomSize === true && normalizeVariantOptions(parsed.sizeOptions).length > 0,
     requiresHeightInput: parsed.requiresHeightInput === true,
     heightInputLabel:
       parsed.requiresHeightInput && parsed.heightInputLabel
@@ -707,7 +708,7 @@ export async function duplicateProduct(input: DuplicateProductInput): Promise<Pr
       status: 'draft',
       isCustomizable: source.isCustomizable,
       customizationLabel: source.customizationLabel,
-      sizeOptions: source.sizeOptions,
+      sizeOptions: normalizeVariantOptions(source.sizeOptions),
       allowCustomSize: source.allowCustomSize,
       requiresHeightInput: source.requiresHeightInput,
       heightInputLabel: source.heightInputLabel,

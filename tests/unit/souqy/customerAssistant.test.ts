@@ -26,6 +26,7 @@ function product(patch: Partial<Product>): Product {
     category: 'Design',
     eventAt: null,
     status: 'active',
+    stock: 0,
     isCustomizable: false,
     customizationLabel: null,
     sizeOptions: [],

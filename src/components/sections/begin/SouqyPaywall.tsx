@@ -13,9 +13,7 @@ import { MetalFrame } from '@/components/primitives/MetalFrame';
  * flow, which is unchanged for free founders.
  *
  * The "Request access" CTA goes to the existing contact channel rather
- * than a Stripe Checkout link until billing is wired (Phase 0.5).
- * Replace `mailto:support@souqna.qa` with the Stripe / Vercel
- * Marketplace upgrade URL once provisioned.
+ * than a hosted checkout link until this surface is wired to billing.
  */
 type Props = {
   locale: Locale;

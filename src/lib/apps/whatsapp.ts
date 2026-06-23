@@ -8,6 +8,7 @@ import {
   sendSentTemplate,
   type SentSendResult,
 } from '@/lib/sent';
+import { storefrontBaseUrl } from '@/lib/storefrontUrl';
 import type { Order as CheckoutOrder } from '@/lib/checkout-orders';
 import type { Customer } from '@/lib/customers';
 import type { Order as AdminOrder } from '@/lib/orders';
@@ -162,6 +163,7 @@ export async function sendWhatsAppAdminOrderConfirmation(input: {
   customer: Customer;
 }) {
   const params = adminOrderTemplateTextParams(input);
+  const storeUrl = storefrontBaseUrl(input.storefrontSlug);
   const souqnaOrder = await sendSentTemplate({
     kind: 'delivery_notification',
     to: [input.customer.phone],
@@ -177,6 +179,12 @@ export async function sendWhatsAppAdminOrderConfirmation(input: {
       actionUrl: `${env.NEXT_PUBLIC_SITE_URL.replace(/\/+$/u, '')}/account/orders/${input.order.id}?store=${encodeURIComponent(
         input.storefrontSlug,
       )}`,
+      storeUrl,
+      store_url: storeUrl,
+      visitStoreUrl: storeUrl,
+      visit_store_url: storeUrl,
+      buttonUrl: storeUrl,
+      button_url: storeUrl,
     },
   });
   if (!shouldTryMerchantWhatsAppFallback(souqnaOrder)) {

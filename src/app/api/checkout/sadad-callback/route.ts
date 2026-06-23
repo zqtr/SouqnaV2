@@ -14,7 +14,7 @@ import {
 } from '@/lib/sadad';
 import { getStorefrontSadadCredentials } from '@/lib/storefrontSadad';
 import { storefrontPageUrl } from '@/lib/storefrontUrl';
-import { recordPlatformFeeForPaidOrder } from '@/lib/platformFees';
+import { recordPlatformPayoutForPaidOrder } from '@/lib/platformPayouts';
 import { getStorefront } from '@/lib/brief';
 import { sendSentPaymentStatusNotification } from '@/lib/sent';
 
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
   if (isSadadPaid(payload)) {
     const updated = await markOnlinePaymentSucceeded(order.id, order.storefrontSlug);
     if (updated) {
-      await recordPlatformFeeForPaidOrder(updated);
+      await recordPlatformPayoutForPaidOrder(updated);
       await notifyPaymentStatus(updated, 'paid');
     }
   } else if (isSadadFailed(payload)) {
@@ -84,7 +84,7 @@ async function notifyPaymentStatus(
       status,
       idempotencyKey: `sadad-${status}-${order.id}`,
     });
-    if (sent.status === 'error') {
+    if (sent.status !== 'sent') {
       console.warn('[checkout.sadad-callback] Sent notification failed', sent.reason);
     }
   } catch (err) {

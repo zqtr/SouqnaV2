@@ -71,7 +71,6 @@ export const PLAN_LIMITS: Record<
     monthlyOrderCap: number;
     templateCount: number;
     monthlyPriceQar: number;
-    transactionFeeBps: number;
     aiCreditsMonthly: number;
     analytics: PlanAnalyticsLevel;
     integrations: PlanIntegrationLevel;
@@ -97,7 +96,6 @@ export const PLAN_LIMITS: Record<
     monthlyOrderCap: 25,
     templateCount: 1,
     monthlyPriceQar: 0,
-    transactionFeeBps: 500,
     aiCreditsMonthly: 0,
     analytics: 'none',
     integrations: 'none',
@@ -123,7 +121,6 @@ export const PLAN_LIMITS: Record<
     monthlyOrderCap: Number.POSITIVE_INFINITY,
     templateCount: 5,
     monthlyPriceQar: 49,
-    transactionFeeBps: 300,
     aiCreditsMonthly: 100,
     analytics: 'basic',
     integrations: 'basic',
@@ -150,7 +147,6 @@ export const PLAN_LIMITS: Record<
     monthlyOrderCap: Number.POSITIVE_INFINITY,
     templateCount: 8,
     monthlyPriceQar: 145,
-    transactionFeeBps: 100,
     aiCreditsMonthly: Number.POSITIVE_INFINITY,
     analytics: 'advanced',
     integrations: 'growth',
@@ -166,8 +162,7 @@ export const PLAN_LIMITS: Record<
     canUseBulkOperations: false,
     label: 'Pro+',
     labelAr: 'برو +',
-    blurb:
-      'Add Souqy, AI assets, product copy, and growth apps for serious ecommerce growth.',
+    blurb: 'Add Souqy, AI assets, product copy, and growth apps for serious ecommerce growth.',
     blurbAr: 'عشرة متاجر، أنماط مميزة، أصول هوية ذكية، سير عمل مشغّل سوقي، وتكاملات للنمو.',
   },
   atelier: {
@@ -176,7 +171,6 @@ export const PLAN_LIMITS: Record<
     monthlyOrderCap: Number.POSITIVE_INFINITY,
     templateCount: 11,
     monthlyPriceQar: 235,
-    transactionFeeBps: 0,
     aiCreditsMonthly: Number.POSITIVE_INFINITY,
     analytics: 'advanced',
     integrations: 'advanced',
@@ -194,8 +188,7 @@ export const PLAN_LIMITS: Record<
     labelAr: 'ماكس +',
     blurb:
       'Scale operations with every template, premium blocks, monthly-payment offers, integrations, and team support.',
-    blurbAr:
-      'متاجر غير محدودة، كل القوالب، ٨ مكوّنات مميزة، عروض دفع شهرية، ودعم للفريق.',
+    blurbAr: 'متاجر غير محدودة، كل القوالب، ٨ مكوّنات مميزة، عروض دفع شهرية، ودعم للفريق.',
   },
 };
 
@@ -248,6 +241,10 @@ export function planAtLeast(plan: Plan, min: Plan): boolean {
  * relaxed for launch/testing. Internal `pro` is the public "Pro +" tier.
  */
 export function planUnlocksSouqy(plan: Plan): boolean {
+  return PLAN_RANK[plan] >= PLAN_RANK.pro;
+}
+
+export function planUnlocksOnlinePayments(plan: Plan): boolean {
   return PLAN_RANK[plan] >= PLAN_RANK.pro;
 }
 
@@ -320,20 +317,6 @@ export function productCapForPlan(plan: Plan): number {
 export function monthlyOrderCapForPlan(plan: Plan): number {
   if (PLAN_GATES_DISABLED) return PLAN_LIMITS.atelier.monthlyOrderCap;
   return PLAN_LIMITS[plan].monthlyOrderCap;
-}
-
-export function platformFeeBpsForPlan(plan: Plan): number {
-  return PLAN_LIMITS[plan].transactionFeeBps;
-}
-
-export function platformFeeForTotal(totalQar: number, plan: Plan): number {
-  const safeTotal = Math.max(0, Math.round(totalQar));
-  return Math.round((safeTotal * platformFeeBpsForPlan(plan)) / 10_000);
-}
-
-export function sellerNetForTotal(totalQar: number, plan: Plan): number {
-  const safeTotal = Math.max(0, Math.round(totalQar));
-  return Math.max(0, safeTotal - platformFeeForTotal(safeTotal, plan));
 }
 
 export function aiCreditsForPlan(plan: Plan): number {

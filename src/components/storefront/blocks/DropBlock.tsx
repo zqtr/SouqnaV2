@@ -1,5 +1,6 @@
 import type { BlockRenderProps } from './BlockContext';
 import type { DropProps } from '@/lib/blocks/types';
+import { COMPONENT_SHOWCASE_DROP_ID } from '@/lib/blocks/componentShowcase';
 import { getAppState, getInstalledApp } from '@/lib/apps/installed';
 import { resolveDrop, dropPhase } from '@/lib/apps/drop-manager';
 import type { Product } from '@/lib/products';
@@ -25,15 +26,17 @@ export async function DropBlock({ block, ctx }: BlockRenderProps<DropProps>) {
   const slug = ctx.storefront.slug;
   const dropId = block.props.dropId;
 
+  if (dropId === COMPONENT_SHOWCASE_DROP_ID) {
+    return <DropShowcaseCard block={block} ctx={ctx} />;
+  }
+
   // Cheap guard: block renders nothing if the founder uninstalled or
   // disabled the Drop Manager plugin without removing the block from
   // their published page.
   const installed = await getInstalledApp(slug, 'drop-manager').catch(() => null);
   if (!installed || !installed.enabled) return null;
 
-  const stateRow = await getAppState(slug, 'drop-manager', `drop:${dropId}`).catch(
-    () => null,
-  );
+  const stateRow = await getAppState(slug, 'drop-manager', `drop:${dropId}`).catch(() => null);
   if (!stateRow) return null;
 
   const drop = resolveDrop(stateRow.value);
@@ -42,8 +45,7 @@ export async function DropBlock({ block, ctx }: BlockRenderProps<DropProps>) {
   if (phase === 'archived') return null;
 
   const heroLocale = ctx.storefront.locale === 'ar' ? 'ar' : 'en';
-  const heading =
-    block.props.heading?.trim() || drop.heroCopy[heroLocale] || drop.name;
+  const heading = block.props.heading?.trim() || drop.heroCopy[heroLocale] || drop.name;
   const subheading = block.props.subheading?.trim();
 
   const products = ctx.products.filter((p) => drop.productIds.includes(p.id));
@@ -97,24 +99,17 @@ export async function DropBlock({ block, ctx }: BlockRenderProps<DropProps>) {
       </header>
 
       {phase === 'teaser' ? (
-        <DropCountdown
-          targetIso={drop.startsAt}
-          locale={ctx.storefront.locale}
-        />
+        <DropCountdown targetIso={drop.startsAt} locale={ctx.storefront.locale} />
       ) : null}
 
-      {phase === 'live' && products.length > 0 ? (
-        <DropProductGrid products={products} />
-      ) : null}
+      {phase === 'live' && products.length > 0 ? <DropProductGrid products={products} /> : null}
 
       {phase === 'sold_out' ? (
         drop.waitlistEnabled ? (
           <DropWaitlistButton
             storefrontSlug={slug}
             dropId={dropId}
-            label={
-              ctx.isRtl ? 'أعلمني عند التوفر' : 'Notify me when it returns'
-            }
+            label={ctx.isRtl ? 'أعلمني عند التوفر' : 'Notify me when it returns'}
           />
         ) : (
           <p
@@ -137,10 +132,63 @@ export async function DropBlock({ block, ctx }: BlockRenderProps<DropProps>) {
   );
 }
 
-function phaseLabel(
-  phase: 'teaser' | 'live' | 'sold_out',
-  rtl: boolean,
-): string {
+function DropShowcaseCard({ block, ctx }: BlockRenderProps<DropProps>) {
+  const targetIso = new Date(Date.now() + 30 * 60 * 60 * 1000).toISOString();
+  const isAr = ctx.isRtl;
+  return (
+    <section
+      style={{
+        display: 'grid',
+        gap: 18,
+        padding: 'clamp(22px, 3vw, 32px)',
+        borderRadius: 18,
+        border: '1px solid color-mix(in srgb, var(--sf-accent) 32%, transparent)',
+        background: 'color-mix(in srgb, var(--sf-accent) 10%, transparent)',
+      }}
+    >
+      <header style={{ display: 'grid', gap: 6 }}>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            color: 'var(--sf-accent)',
+          }}
+        >
+          {isAr ? 'إصدار قريب' : 'Timed drop'}
+        </span>
+        <h2
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-serif, var(--font-sans))',
+            fontWeight: 'var(--sf-heading-weight, 400)' as unknown as number,
+            fontSize: 'clamp(28px, 4vw, 44px)',
+            lineHeight: 1.1,
+            color: 'var(--sf-ink)',
+          }}
+        >
+          {block.props.heading || (isAr ? 'إطلاق مؤقت' : 'Limited launch')}
+        </h2>
+        {block.props.subheading ? (
+          <p
+            style={{
+              margin: 0,
+              maxWidth: 640,
+              color: 'color-mix(in srgb, var(--sf-ink) 70%, transparent)',
+              lineHeight: 1.55,
+            }}
+          >
+            {block.props.subheading}
+          </p>
+        ) : null}
+      </header>
+      <DropCountdown targetIso={targetIso} locale={ctx.storefront.locale} />
+    </section>
+  );
+}
+
+function phaseLabel(phase: 'teaser' | 'live' | 'sold_out', rtl: boolean): string {
   if (rtl) {
     if (phase === 'teaser') return '◈ قريباً';
     if (phase === 'live') return '◈ متاح الآن';
@@ -167,8 +215,7 @@ function DropProductGrid({ products }: { products: Product[] }) {
             display: 'flex',
             flexDirection: 'column',
             gap: 10,
-            background:
-              'color-mix(in srgb, var(--sf-ink) 4%, transparent)',
+            background: 'color-mix(in srgb, var(--sf-ink) 4%, transparent)',
             borderRadius: 14,
             overflow: 'hidden',
             border: '1px solid color-mix(in srgb, var(--sf-ink) 8%, transparent)',
@@ -189,10 +236,10 @@ function DropProductGrid({ products }: { products: Product[] }) {
           ) : (
             <div style={{ width: '100%', aspectRatio: '4 / 5' }} />
           )}
-          <div style={{ padding: '12px 14px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--sf-ink)' }}>
-              {p.title}
-            </div>
+          <div
+            style={{ padding: '12px 14px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--sf-ink)' }}>{p.title}</div>
             {p.priceQar !== null ? (
               <div
                 style={{

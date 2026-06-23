@@ -1,6 +1,8 @@
 export const MAX_PRODUCT_SIZE_OPTIONS = 24;
+export const MAX_PRODUCT_VARIANT_OPTIONS = 7;
 export const MAX_PRODUCT_SIZE_LABEL_LENGTH = 40;
 export const MAX_PRODUCT_CUSTOM_INPUT_LENGTH = 80;
+export const DEFAULT_PRODUCT_VARIANT_OPTIONS = ['Beige (Custom)', 'Ref (Custom)', 'Additional'];
 export const DEFAULT_PRODUCT_HEIGHT_OPTIONS = ['156', '165', '178'];
 
 export function normalizeSizeOptions(value: unknown): string[] {
@@ -40,6 +42,10 @@ export function isAllowedSizeOption(
 
 export function normalizeCustomSizeValue(value: unknown): string | null {
   return normalizeSizeOptions([value])[0] ?? null;
+}
+
+export function normalizeVariantOptions(value: unknown): string[] {
+  return normalizeSizeOptions(value).slice(0, MAX_PRODUCT_VARIANT_OPTIONS);
 }
 
 export function isAllowedProductSizeOption(

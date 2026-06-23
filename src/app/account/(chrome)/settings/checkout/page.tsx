@@ -7,6 +7,8 @@ import {
   POLICY_KEYS,
   type PolicyKey,
 } from '@/lib/storefrontSettings';
+import { storefrontBaseUrl } from '@/lib/storefrontUrl';
+import { getPlan, planUnlocksOnlinePayments } from '@/lib/billing';
 
 export default async function CheckoutPage({
   searchParams,
@@ -16,10 +18,12 @@ export default async function CheckoutPage({
   const sp = (await searchParams) ?? {};
   const { storefront } = await resolveSettingsContext(sp, '/account/settings/checkout');
 
-  const [checkout, policies] = await Promise.all([
+  const [checkout, policies, plan] = await Promise.all([
     getStorefrontCheckoutSettings(storefront.slug),
     getStorefrontPolicies(storefront.slug),
+    getPlan(storefront.clerkUserId),
   ]);
+  const canAcceptOnlinePayments = planUnlocksOnlinePayments(plan);
 
   const policiesPresent = POLICY_KEYS.reduce(
     (acc, key) => {
@@ -40,10 +44,16 @@ export default async function CheckoutPage({
       <CheckoutSettings
         slug={storefront.slug}
         initial={checkout}
+        storefrontBaseUrl={
+          storefront.customDomain
+            ? `https://${storefront.customDomain}`
+            : storefrontBaseUrl(storefront.slug)
+        }
         policiesPresent={policiesPresent}
         skipCashEligible={Boolean(storefront.crNumber)}
         skipCashBlockedReason={storefront.crNumber ? 'Confirm CR ownership' : 'Add CR number'}
         crNumber={storefront.crNumber}
+        canAcceptOnlinePayments={canAcceptOnlinePayments}
       />
     </>
   );

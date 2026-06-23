@@ -9,11 +9,7 @@ import {
   unfeatureSouqnaWebsite,
 } from '@/app/actions/souqnaDiscover';
 import { grantSouqnaUserPlan } from '@/app/actions/souqnaBilling';
-import {
-  markSouqnaFeeCollected,
-  markSouqnaPayoutPaid,
-  waiveSouqnaFee,
-} from '@/app/actions/souqnaFinance';
+import { markSouqnaPayoutPaid } from '@/app/actions/souqnaFinance';
 import { EmptyState, PageHeader, StatusBadge, Surface } from '@/components/admin/primitives';
 import { DeletedWebsitesToggle } from '@/components/admin/souqna/DeletedWebsitesToggle';
 import {
@@ -21,7 +17,7 @@ import {
   SouqnaReasonInput,
 } from '@/components/admin/souqna/SouqnaActionControls';
 import { listDiscoverAdminStorefronts, type DiscoverAdminStorefront } from '@/lib/discover';
-import { listPlatformFinanceOverview } from '@/lib/platformFees';
+import { listPlatformFinanceOverview } from '@/lib/platformPayouts';
 import { PLAN_LIMITS, PLANS } from '@/lib/plans';
 import { getSouqnaOperator } from '@/lib/souqna-operator';
 import {
@@ -646,7 +642,6 @@ function PlanGrantPanel() {
 async function FinancePanel() {
   const finance = await listPlatformFinanceOverview(30);
   const pendingNet = finance.payouts.reduce((sum, payout) => sum + payout.netQar, 0);
-  const receivableFees = finance.fees.reduce((sum, fee) => sum + fee.feeQar, 0);
 
   return (
     <Surface padding={18} style={{ marginBottom: 26 }}>
@@ -662,25 +657,18 @@ async function FinancePanel() {
       >
         <div>
           <h2 style={{ margin: 0, fontSize: 22, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>
-            Platform fees and payouts
+            Platform payouts
           </h2>
           <p style={{ margin: '6px 0 0', color: 'var(--ink-muted)', fontSize: 13.5 }}>
-            Review Souqna-collected SkipCash payouts and offline fee receivables.
+            Review Souqna-collected SkipCash payments awaiting seller payout.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <StatusBadge tone="warning">Pending payouts: QAR {pendingNet}</StatusBadge>
-          <StatusBadge tone="info">Receivable fees: QAR {receivableFees}</StatusBadge>
         </div>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-          gap: 14,
-        }}
-      >
+      <div>
         <div>
           <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>Seller payouts</h3>
           {finance.payouts.length === 0 ? (
@@ -706,7 +694,7 @@ async function FinancePanel() {
                     <div style={{ color: 'var(--ink-strong)', fontWeight: 700 }}>
                       {payout.storefrontSlug} - seller net QAR {payout.netQar}
                     </div>
-                    <div>Gross QAR {payout.grossQar} - fee QAR {payout.feeQar}</div>
+                    <div>Gross QAR {payout.grossQar}</div>
                     <code style={{ overflowWrap: 'anywhere' }}>{payout.orderId}</code>
                   </div>
                   <form
@@ -719,60 +707,6 @@ async function FinancePanel() {
                       Mark paid
                     </SouqnaActionButton>
                   </form>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>Offline fee receivables</h3>
-          {finance.fees.length === 0 ? (
-            <p style={{ margin: 0, color: 'var(--ink-muted)', fontSize: 13 }}>
-              No offline fees awaiting collection.
-            </p>
-          ) : (
-            <div style={{ display: 'grid', gap: 8 }}>
-              {finance.fees.map((fee) => (
-                <div
-                  key={fee.id}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 1fr) auto',
-                    gap: 10,
-                    alignItems: 'center',
-                    border: '1px solid var(--surface-rule)',
-                    borderRadius: 8,
-                    padding: 10,
-                  }}
-                >
-                  <div style={{ minWidth: 0, fontSize: 12.5, color: 'var(--ink-muted)' }}>
-                    <div style={{ color: 'var(--ink-strong)', fontWeight: 700 }}>
-                      {fee.storefrontSlug} - fee QAR {fee.feeQar}
-                    </div>
-                    <div>Gross QAR {fee.grossQar} - {fee.feeBps / 100}% - {fee.collectionMode}</div>
-                    <code style={{ overflowWrap: 'anywhere' }}>{fee.orderId}</code>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'end' }}>
-                    <form
-                      action={async () => {
-                        'use server';
-                        await markSouqnaFeeCollected(fee.id);
-                      }}
-                    >
-                      <SouqnaActionButton tone="primary" pendingLabel="Collecting...">
-                        Collected
-                      </SouqnaActionButton>
-                    </form>
-                    <form
-                      action={async () => {
-                        'use server';
-                        await waiveSouqnaFee(fee.id);
-                      }}
-                    >
-                      <SouqnaActionButton pendingLabel="Waiving...">Waive</SouqnaActionButton>
-                    </form>
-                  </div>
                 </div>
               ))}
             </div>

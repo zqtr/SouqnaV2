@@ -3,7 +3,12 @@
 import Link from 'next/link';
 import { Check } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import {
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react';
 import type { Locale } from '@/i18n/locales';
 import type { Copy } from '@/content/copy';
 import { Eyebrow } from '@/components/primitives/Eyebrow';
@@ -52,7 +57,6 @@ const FEATURES_EN: Record<Plan, { intro: string; bullets: string[] }> = {
       '1 template',
       '25 orders per month',
       'Souqna branding locked',
-      '5% transaction fee',
       'Upgrade to unlock growth tools',
     ],
   },
@@ -68,7 +72,6 @@ const FEATURES_EN: Record<Plan, { intro: string; bullets: string[] }> = {
       'WhatsApp integration',
       'Discount codes + SEO settings',
       '100 AI credits per month',
-      '3% transaction fee',
       'Email support',
     ],
   },
@@ -85,7 +88,6 @@ const FEATURES_EN: Record<Plan, { intro: string; bullets: string[] }> = {
       'Automation flows',
       'Premium templates and builder blocks',
       'Advanced analytics',
-      '1% transaction fee',
       'Priority support',
     ],
   },
@@ -101,7 +103,6 @@ const FEATURES_EN: Record<Plan, { intro: string; bullets: string[] }> = {
       'Bulk operations',
       'Advanced SEO AI',
       'Early access features',
-      '0% transaction fee',
       'Dedicated support',
     ],
   },
@@ -120,12 +121,7 @@ const FEATURES_AR: Record<Plan, { intro: string; bullets: string[] }> = {
   },
   starter: {
     intro: 'كل اللي في مجاني:',
-    bullets: [
-      'متجران',
-      '٥ قوالب تجارة',
-      'نطاق مخصص — yourbrand.com',
-      'دعم بالبريد والدردشة',
-    ],
+    bullets: ['متجران', '٥ قوالب تجارة', 'نطاق مخصص — yourbrand.com', 'دعم بالبريد والدردشة'],
   },
   pro: {
     intro: 'كل اللي في برو:',
@@ -278,7 +274,12 @@ function CycleToggle({
 }) {
   const tabs: Array<{ id: BillingCycle; label: string }> = [
     { id: 'monthly', label: isRtl ? 'شهرياً' : 'Monthly' },
-    { id: 'annual', label: isRtl ? `سنوياً · وفّر ${ANNUAL_DISCOUNT_PCT}٪` : `Annual · Save ${ANNUAL_DISCOUNT_PCT}%` },
+    {
+      id: 'annual',
+      label: isRtl
+        ? `سنوياً · وفّر ${ANNUAL_DISCOUNT_PCT}٪`
+        : `Annual · Save ${ANNUAL_DISCOUNT_PCT}%`,
+    },
   ];
 
   return (
@@ -375,10 +376,7 @@ function PlanCard({
       }}
     >
       {isFeatured ? (
-        <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-1 bg-[color:var(--color-maroon)]"
-        />
+        <div aria-hidden className="absolute inset-x-0 top-0 h-1 bg-[color:var(--color-maroon)]" />
       ) : null}
       <div className="relative z-10 mb-4 flex items-start justify-between gap-3">
         <div>

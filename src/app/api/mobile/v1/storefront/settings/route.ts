@@ -14,6 +14,7 @@ import {
 } from '@/lib/brief';
 import { storefrontBaseUrl } from '@/lib/storefrontUrl';
 import { recordAudit } from '@/lib/audit';
+import { writeStorefrontPolicies, type StorefrontPolicies } from '@/lib/storefrontSettings';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,15 @@ const PatchSchema = z.object({
       hours: z.string().trim().max(280).nullable().optional(),
       instagram: z.string().trim().max(120).nullable().optional(),
       logoUrl: nullableUrl,
+      policies: z
+        .object({
+          terms: z.string().trim().max(20000).nullable().optional(),
+          privacy: z.string().trim().max(20000).nullable().optional(),
+          refund: z.string().trim().max(20000).nullable().optional(),
+          shipping: z.string().trim().max(20000).nullable().optional(),
+        })
+        .strict()
+        .optional(),
     })
     .strict(),
 });
@@ -66,6 +76,7 @@ export async function PATCH(req: Request): Promise<Response> {
 
   const current = gate.access.storefront;
   const patch = parsed.data.patch;
+  const policiesPatch = buildPoliciesPatch(current, patch.policies);
   const next: UpdateStorefrontInput = {
     founderName: current.founderName,
     businessName: patch.businessName ?? current.businessName,
@@ -92,6 +103,9 @@ export async function PATCH(req: Request): Promise<Response> {
     if (!updated) {
       return mobileError(500, 'settings_failed', 'Could not save site settings.');
     }
+    if (policiesPatch) {
+      await writeStorefrontPolicies(current.slug, policiesPatch);
+    }
     await recordAudit({
       storefrontSlug: current.slug,
       clerkUserId: gate.user.userId,
@@ -100,6 +114,14 @@ export async function PATCH(req: Request): Promise<Response> {
       summary: 'Site settings saved from mobile',
       meta: {
         fields: Object.keys(patch),
+        policiesPresent: policiesPatch
+          ? {
+              terms: policiesPatch.terms !== null,
+              privacy: policiesPatch.privacy !== null,
+              refund: policiesPatch.refund !== null,
+              shipping: policiesPatch.shipping !== null,
+            }
+          : undefined,
         source: 'mobile',
       },
     });
@@ -107,11 +129,38 @@ export async function PATCH(req: Request): Promise<Response> {
     revalidatePath('/account/builder');
     revalidatePath(`/account/${current.slug}/preview`);
     revalidatePath(`/brief/${current.slug}`, 'layout');
-    return mobileJson({ settings: toSettings(updated) });
+    return mobileJson({
+      settings: toSettings(
+        policiesPatch ? { ...updated, policies: policiesPatch } : updated,
+      ),
+    });
   } catch (err) {
     console.error('[mobile/storefront/settings PATCH] failed', err);
     return mobileError(500, 'settings_failed', 'Could not save site settings.');
   }
+}
+
+function buildPoliciesPatch(
+  storefront: Storefront,
+  patch: z.infer<typeof PatchSchema>['patch']['policies'],
+): StorefrontPolicies | null {
+  if (!patch) return null;
+  const clean = (value: string | null | undefined): string | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  };
+  const terms = clean(patch.terms);
+  const privacy = clean(patch.privacy);
+  const refund = clean(patch.refund);
+  const shipping = clean(patch.shipping);
+  return {
+    terms: terms === undefined ? storefront.policies.terms : terms,
+    privacy: privacy === undefined ? storefront.policies.privacy : privacy,
+    refund: refund === undefined ? storefront.policies.refund : refund,
+    shipping: shipping === undefined ? storefront.policies.shipping : shipping,
+  };
 }
 
 function toSettings(storefront: Storefront) {
@@ -130,5 +179,6 @@ function toSettings(storefront: Storefront) {
     publicUrl: storefront.customDomain ? `https://${storefront.customDomain}` : storefrontBaseUrl(storefront.slug),
     templateId: storefront.templateId,
     isPublished: storefront.isPublished,
+    policies: storefront.policies,
   };
 }

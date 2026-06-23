@@ -1,13 +1,17 @@
 import { notFound } from 'next/navigation';
 import { getStorefront } from '@/lib/brief';
-import { getStorefrontCheckoutSettings, getStorefrontPolicies } from '@/lib/storefrontSettings';
+import {
+  checkoutPaymentMethodsForPlan,
+  getStorefrontCheckoutSettings,
+  getStorefrontPolicies,
+} from '@/lib/storefrontSettings';
 import { palettes, paletteCssVars, type PaletteId } from '@/lib/palettes';
 import type { Theme } from '@/lib/theme';
 import { getServerTheme } from '@/components/theme/ServerThemeScript';
 import { CheckoutFlow } from '@/components/storefront/checkout/CheckoutFlow';
 import { CartProvider } from '@/components/storefront/cart/CartContext';
 import { storefrontBaseUrl } from '@/lib/storefrontUrl';
-import { checkoutThemeForBackground } from '@/lib/storefrontCheckoutTheme';
+import { getPlan, planUnlocksOnlinePayments } from '@/lib/billing';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -30,20 +34,25 @@ export default async function CheckoutPage({ params }: Props) {
   if (!storefront) notFound();
   if (!storefront.isPublished) notFound();
 
-  const [rawCheckout, policies, visitorTheme] = await Promise.all([
+  const [rawCheckout, policies, visitorTheme, ownerPlan] = await Promise.all([
     getStorefrontCheckoutSettings(slug),
     getStorefrontPolicies(slug),
     getServerTheme(),
+    getPlan(storefront.clerkUserId),
   ]);
+  const canAcceptOnlinePayments = planUnlocksOnlinePayments(ownerPlan);
   const checkout = {
     ...rawCheckout,
-    paymentMethods: rawCheckout.paymentMethods.filter(
-      (m) =>
-        m !== 'pay_link' &&
-        (m !== 'skipcash' || rawCheckout.skipCash?.enabled) &&
-        (m !== 'sadad' || rawCheckout.sadad?.enabled),
+    paymentMethods: checkoutPaymentMethodsForPlan(
+      rawCheckout.paymentMethods.filter(
+        (m) =>
+          (m !== 'pay_link' || rawCheckout.payLink) &&
+          (m !== 'skipcash' || rawCheckout.skipCash?.enabled) &&
+          (m !== 'sadad' || rawCheckout.sadad?.enabled),
+      ),
+      canAcceptOnlinePayments,
     ),
-    payLink: null,
+    payLink: rawCheckout.payLink,
   };
 
   const paletteId = (storefront.themeOverrides.palette ?? storefront.palette) as PaletteId;
@@ -51,17 +60,13 @@ export default async function CheckoutPage({ params }: Props) {
   const behaviour = storefront.themeOverrides.themeBehaviour ?? 'auto';
   const effectiveTheme: Theme =
     behaviour === 'light' ? 'light' : behaviour === 'dark' ? 'dark' : visitorTheme;
-  const checkoutTheme = checkoutThemeForBackground(
-    storefront.themeOverrides.pageBg,
-    effectiveTheme,
-  );
 
   const wrapperStyle: React.CSSProperties = {
-    ...paletteCssVars(palette, checkoutTheme),
+    ...paletteCssVars(palette, effectiveTheme),
     background: storefront.themeOverrides.pageBg ?? 'var(--sf-ground)',
     color: 'var(--sf-ink)',
     minHeight: '100dvh',
-    colorScheme: checkoutTheme,
+    colorScheme: effectiveTheme,
   };
 
   const dir = storefront.locale === 'ar' ? 'rtl' : 'ltr';

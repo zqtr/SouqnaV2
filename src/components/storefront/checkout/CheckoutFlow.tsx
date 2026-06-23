@@ -3,11 +3,7 @@
 import { useEffect, useId, useRef, useState, useTransition } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCart } from '../cart/CartContext';
-import {
-  createOrder,
-  previewCheckoutDiscount,
-  type PreviewCheckoutDiscountResult,
-} from '@/app/actions/checkout';
+import { applyDiscountCode, createOrder } from '@/app/actions/checkout';
 import type {
   CheckoutSettings,
   PaymentMethod,
@@ -50,7 +46,11 @@ type BuyerConsentState = {
   cookies: boolean;
   marketing: boolean;
 };
-type AppliedDiscount = Extract<PreviewCheckoutDiscountResult, { status: 'success' }>;
+type AppliedDiscount = {
+  code: string;
+  title: string | null;
+  discountQar: number;
+};
 
 const ALWAYS_REQUIRED_POLICY_KEYS = [
   'terms',
@@ -71,16 +71,6 @@ const COUNTRIES = [
 ] as const;
 
 type Strings = ReturnType<typeof getStrings>;
-
-const PROMO_COPY = {
-  codeLabel: 'Promo code',
-  placeholder: 'WELCOME10',
-  apply: 'Apply',
-  remove: 'Remove',
-  discount: 'Discount',
-  invalid: 'Could not apply code',
-  applied: (code: string) => `${code} applied`,
-};
 
 function getStrings(locale: 'en' | 'ar') {
   if (locale === 'ar') {
@@ -110,6 +100,7 @@ function getStrings(locale: 'en' | 'ar') {
       notes: 'ملاحظات للبائع',
       cod: 'الدفع عند الاستلام',
       bank: 'تحويل بنكي',
+      fawran: 'Fawran',
       payLink: 'الدفع الإلكتروني',
       skipCash: 'الدفع عبر SkipCash',
       sadad: 'الدفع عبر SADAD',
@@ -133,6 +124,13 @@ function getStrings(locale: 'en' | 'ar') {
       goShop: 'العودة للمتجر',
       orderSummary: 'ملخص الطلب',
       subtotal: 'المجموع الفرعي',
+      discount: 'الخصم',
+      promoQuestion: 'هل لديك كود خصم؟',
+      promoPlaceholder: 'أدخل الكود',
+      applyCode: 'تطبيق',
+      removeCode: 'إزالة',
+      promoEnterCode: 'أدخل كود الخصم.',
+      promoApplied: (code: string) => `تم تطبيق ${code}.`,
       shipping: 'الشحن',
       total: 'الإجمالي',
       noShipping: 'مجاني',
@@ -168,6 +166,7 @@ function getStrings(locale: 'en' | 'ar') {
     notes: 'Notes for the seller',
     cod: 'Cash on delivery',
     bank: 'Bank transfer',
+    fawran: 'Fawran',
     payLink: 'Pay online',
     skipCash: 'Pay with SkipCash',
     sadad: 'Pay with SADAD',
@@ -193,6 +192,13 @@ function getStrings(locale: 'en' | 'ar') {
     goShop: 'Back to the storefront',
     orderSummary: 'Order summary',
     subtotal: 'Subtotal',
+    discount: 'Discount',
+    promoQuestion: 'Have a promo/discount Code?',
+    promoPlaceholder: 'Enter code',
+    applyCode: 'Apply',
+    removeCode: 'Remove',
+    promoEnterCode: 'Enter a promo code.',
+    promoApplied: (code: string) => `${code} applied.`,
     shipping: 'Shipping',
     total: 'Total',
     noShipping: 'Free',
@@ -260,14 +266,12 @@ export function CheckoutFlow({
   });
   const [promoCode, setPromoCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState<AppliedDiscount | null>(null);
-  const [discountError, setDiscountError] = useState<string | null>(null);
+  const [promoMessage, setPromoMessage] = useState<string | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
   const [error, setError] = useState<{ message: string; field?: string } | null>(null);
   const [pending, start] = useTransition();
-  const [discountPending, startDiscount] = useTransition();
+  const [promoPending, startPromo] = useTransition();
   const liveRegionRef = useRef<HTMLDivElement | null>(null);
-  const cartSignature = cart.items
-    .map((item) => `${item.productId}:${item.quantity}:${item.variantLabel ?? ''}`)
-    .join('|');
 
   // Empty cart: bounce back to the storefront. We do this in an effect
   // so the cart can hydrate first — going off [].length === 0 at first
@@ -283,19 +287,19 @@ export function CheckoutFlow({
     }
   }, [cart.items.length, pending, router]);
 
+  const cartSignature = cart.items
+    .map((it) => `${it.productId}:${it.quantity}:${it.variantLabel ?? ''}:${it.priceQar}`)
+    .join('|');
   useEffect(() => {
     setAppliedDiscount(null);
-    setDiscountError(null);
-  }, [cartSignature]);
+    setPromoMessage(null);
+    setPromoError(null);
+  }, [cartSignature, address.city, address.country]);
 
   const subtotal = cart.subtotalQar;
   const shipping = cart.items.length > 0 ? (checkout.shippingFlatQar ?? 0) : 0;
-  const subtotalDiscount = appliedDiscount?.subtotalDiscountQar ?? 0;
-  const shippingDiscount = appliedDiscount?.shippingDiscountQar ?? 0;
-  const totalDiscount = appliedDiscount?.totalDiscountQar ?? 0;
-  const discountedSubtotal = Math.max(subtotal - subtotalDiscount, 0);
-  const discountedShipping = Math.max(shipping - shippingDiscount, 0);
-  const total = discountedSubtotal + discountedShipping;
+  const discount = appliedDiscount?.discountQar ?? 0;
+  const total = Math.max(subtotal + shipping - discount, 0);
 
   function go(next: number) {
     setError(null);
@@ -320,46 +324,79 @@ export function CheckoutFlow({
     go(Math.max(stepIdx - 1, 0));
   }
 
+  function updatePromoCode(value: string) {
+    const normalized = value.toUpperCase().replace(/\s+/g, '');
+    setPromoCode(normalized);
+    setPromoError(null);
+    setPromoMessage(null);
+    setAppliedDiscount((current) => (current?.code === normalized ? current : null));
+  }
+
+  function applyPromo() {
+    const code = promoCode.trim();
+    if (!code) {
+      setAppliedDiscount(null);
+      setPromoMessage(null);
+      setPromoError(t.promoEnterCode);
+      return;
+    }
+    if (cart.items.length === 0) {
+      setPromoError(t.cartEmpty);
+      return;
+    }
+
+    setPromoError(null);
+    setPromoMessage(null);
+    startPromo(async () => {
+      const result = await applyDiscountCode({
+        slug: storefrontSlug,
+        code,
+        items: cart.items.map((it) => ({
+          productId: it.productId,
+          quantity: it.quantity,
+          variantLabel: it.variantLabel ?? null,
+          customInputs: it.customInputs ?? {},
+        })),
+        customer: {
+          phone: contact.phone.trim() || null,
+          email: contact.email.trim() || null,
+        },
+        address: {
+          city: address.city.trim() || null,
+          country: address.country.trim() || null,
+        },
+      });
+
+      if (result.status === 'success') {
+        setPromoCode(result.code);
+        setAppliedDiscount({
+          code: result.code,
+          title: result.title,
+          discountQar: result.discountQar,
+        });
+        setPromoMessage(t.promoApplied(result.code));
+        setPromoError(null);
+        return;
+      }
+
+      setAppliedDiscount(null);
+      setPromoMessage(null);
+      setPromoError(result.message);
+    });
+  }
+
+  function removePromo() {
+    setAppliedDiscount(null);
+    setPromoCode('');
+    setPromoMessage(null);
+    setPromoError(null);
+  }
+
   const requiredPolicyKeys = requiredCheckoutPolicies(checkout.requiredPolicies);
   const requiredAccepted =
     requiredPolicyKeys.every((p) => accepted[p]) &&
     buyerConsents.cookies &&
     buyerConsents.marketing;
-
-  function applyPromoCode() {
-    const code = promoCode.trim();
-    setDiscountError(null);
-    if (!code || cart.items.length === 0) {
-      setAppliedDiscount(null);
-      return;
-    }
-
-    startDiscount(async () => {
-      const result = await previewCheckoutDiscount({
-        slug: storefrontSlug,
-        code,
-        items: cart.items.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-        })),
-      });
-
-      if (result.status === 'success') {
-        setAppliedDiscount(result);
-        setPromoCode(result.code);
-        setDiscountError(null);
-        return;
-      }
-      setAppliedDiscount(null);
-      setDiscountError(result.message || PROMO_COPY.invalid);
-    });
-  }
-
-  function removePromoCode() {
-    setAppliedDiscount(null);
-    setDiscountError(null);
-    setPromoCode('');
-  }
 
   function submit() {
     setError(null);
@@ -397,7 +434,7 @@ export function CheckoutFlow({
           notes: address.notes.trim() || null,
         },
         paymentMethod,
-        discountCode: appliedDiscount?.code ?? null,
+        discountCode: promoCode.trim() || undefined,
         acceptedPolicies: acceptedKeys,
         consents: {
           terms: accepted.terms,
@@ -419,6 +456,11 @@ export function CheckoutFlow({
         return;
       }
       setError({ message: result.message, field: result.field });
+      if (result.field === 'discountCode') {
+        setPromoError(result.message);
+        setPromoMessage(null);
+        setAppliedDiscount(null);
+      }
       const fieldStep = stepForField(result.field);
       if (fieldStep != null) setStepIdx(fieldStep);
     });
@@ -538,16 +580,17 @@ export function CheckoutFlow({
           items={cart.items}
           currency={checkout.currency}
           subtotal={subtotal}
+          discount={discount}
           shipping={shipping}
-          discount={totalDiscount}
-          promoCode={promoCode}
-          setPromoCode={setPromoCode}
-          appliedDiscount={appliedDiscount}
-          discountError={discountError}
-          discountPending={discountPending}
-          onApplyPromo={applyPromoCode}
-          onRemovePromo={removePromoCode}
           total={total}
+          promoCode={promoCode}
+          onPromoCodeChange={updatePromoCode}
+          onApplyPromo={applyPromo}
+          onRemovePromo={removePromo}
+          appliedDiscount={appliedDiscount}
+          promoPending={promoPending}
+          promoMessage={promoMessage}
+          promoError={promoError}
         />
       </div>
     </div>
@@ -828,6 +871,21 @@ function PaymentStep({
             )}
           </PaymentCard>
         )}
+        {checkout.paymentMethods.includes('fawran') && (
+          <PaymentCard
+            id="fawran"
+            checked={method === 'fawran'}
+            onSelect={() => setMethod('fawran')}
+            title={t.fawran}
+          >
+            <p style={paymentBodyStyle()}>
+              {checkout.bankDetails?.notes ??
+                (locale === 'ar'
+                  ? 'Fawran is enabled for this store.'
+                  : 'Fawran is enabled for this store.')}
+            </p>
+          </PaymentCard>
+        )}
         {checkout.paymentMethods.includes('pay_link') && (
           <PaymentCard
             id="pay_link"
@@ -1091,11 +1149,13 @@ function ReviewStep({
             ? t.cod
             : paymentMethod === 'bank_transfer'
               ? t.bank
-              : paymentMethod === 'skipcash'
-                ? t.skipCash
-                : paymentMethod === 'sadad'
-                  ? t.sadad
-                  : t.payLink}
+              : paymentMethod === 'fawran'
+                ? t.fawran
+                : paymentMethod === 'skipcash'
+                  ? t.skipCash
+                  : paymentMethod === 'sadad'
+                    ? t.sadad
+                    : t.payLink}
         </div>
       </ReviewBlock>
 
@@ -1521,131 +1581,41 @@ function ReviewBlock({ label, children }: { label: string; children: React.React
   );
 }
 
-function PromoCodeControl({
-  currency,
-  promoCode,
-  setPromoCode,
-  appliedDiscount,
-  discountError,
-  discountPending,
-  disabled,
-  onApplyPromo,
-  onRemovePromo,
-}: {
-  currency: string;
-  promoCode: string;
-  setPromoCode: (code: string) => void;
-  appliedDiscount: AppliedDiscount | null;
-  discountError: string | null;
-  discountPending: boolean;
-  disabled: boolean;
-  onApplyPromo: () => void;
-  onRemovePromo: () => void;
-}) {
-  return (
-    <div
-      style={{
-        marginTop: 14,
-        paddingTop: 12,
-        borderTop: '1px dashed color-mix(in srgb, currentColor 14%, transparent)',
-      }}
-    >
-      <label
-        htmlFor="souqna-promo-code"
-        style={{
-          display: 'block',
-          marginBottom: 6,
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10.5,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-          color: 'color-mix(in srgb, currentColor 58%, transparent)',
-        }}
-      >
-        {PROMO_COPY.codeLabel}
-      </label>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          id="souqna-promo-code"
-          value={promoCode}
-          onChange={(event) => {
-            setPromoCode(event.target.value.toUpperCase().replace(/\s+/g, ''));
-          }}
-          placeholder={PROMO_COPY.placeholder}
-          disabled={disabled || discountPending || appliedDiscount !== null}
-          style={{
-            minWidth: 0,
-            flex: 1,
-            height: 38,
-            borderRadius: 10,
-            border: '1px solid color-mix(in srgb, currentColor 16%, transparent)',
-            background: 'color-mix(in srgb, var(--sf-ground, transparent) 86%, white 14%)',
-            color: 'inherit',
-            padding: '0 10px',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-            textTransform: 'uppercase',
-            outline: 'none',
-          }}
-        />
-        {appliedDiscount ? (
-          <button type="button" onClick={onRemovePromo} style={promoButtonStyle(false)}>
-            {PROMO_COPY.remove}
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onApplyPromo}
-            disabled={disabled || discountPending || !promoCode.trim()}
-            style={promoButtonStyle(disabled || discountPending || !promoCode.trim())}
-          >
-            {discountPending ? '...' : PROMO_COPY.apply}
-          </button>
-        )}
-      </div>
-      {appliedDiscount ? (
-        <p style={promoMessageStyle('success')}>
-          {PROMO_COPY.applied(appliedDiscount.code)} · - {currency}{' '}
-          {appliedDiscount.totalDiscountQar}
-        </p>
-      ) : discountError ? (
-        <p style={promoMessageStyle('error')}>{discountError}</p>
-      ) : null}
-    </div>
-  );
-}
-
 function OrderSummary({
   t,
   items,
   currency,
   subtotal,
-  shipping,
   discount,
+  shipping,
+  total,
   promoCode,
-  setPromoCode,
-  appliedDiscount,
-  discountError,
-  discountPending,
+  onPromoCodeChange,
   onApplyPromo,
   onRemovePromo,
-  total,
+  appliedDiscount,
+  promoPending,
+  promoMessage,
+  promoError,
 }: {
   t: Strings;
   items: ReturnType<typeof useCart>['items'];
   currency: string;
   subtotal: number;
-  shipping: number;
   discount: number;
+  shipping: number;
+  total: number;
   promoCode: string;
-  setPromoCode: (code: string) => void;
-  appliedDiscount: AppliedDiscount | null;
-  discountError: string | null;
-  discountPending: boolean;
+  onPromoCodeChange: (value: string) => void;
   onApplyPromo: () => void;
   onRemovePromo: () => void;
-  total: number;
+  appliedDiscount: AppliedDiscount | null;
+  promoPending: boolean;
+  promoMessage: string | null;
+  promoError: string | null;
 }) {
+  const promoInputId = useId();
+  const promoStatusId = `${promoInputId}-status`;
   return (
     <aside
       aria-label={t.orderSummary}
@@ -1750,17 +1720,62 @@ function OrderSummary({
         ))}
       </ul>
 
-      <PromoCodeControl
-        currency={currency}
-        promoCode={promoCode}
-        setPromoCode={setPromoCode}
-        appliedDiscount={appliedDiscount}
-        discountError={discountError}
-        discountPending={discountPending}
-        disabled={items.length === 0}
-        onApplyPromo={onApplyPromo}
-        onRemovePromo={onRemovePromo}
-      />
+      <div
+        style={{
+          marginTop: 16,
+          paddingTop: 12,
+          borderTop: '1px dashed color-mix(in srgb, currentColor 18%, transparent)',
+          display: 'grid',
+          gap: 8,
+        }}
+      >
+        <label htmlFor={promoInputId} style={labelStyle()}>
+          {t.promoQuestion}
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 8 }}>
+          <input
+            id={promoInputId}
+            value={promoCode}
+            onChange={(e) => onPromoCodeChange(e.target.value)}
+            placeholder={t.promoPlaceholder}
+            aria-invalid={Boolean(promoError) || undefined}
+            aria-describedby={promoMessage || promoError ? promoStatusId : undefined}
+            disabled={promoPending || items.length === 0}
+            style={{
+              ...inputStyle(Boolean(promoError)),
+              fontFamily: 'var(--font-mono)',
+              textTransform: 'uppercase',
+            }}
+          />
+          <button
+            type="button"
+            onClick={appliedDiscount ? onRemovePromo : onApplyPromo}
+            disabled={promoPending || items.length === 0}
+            style={{
+              ...secondaryBtnStyle(promoPending || items.length === 0),
+              borderRadius: 8,
+              padding: '10px 12px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {appliedDiscount ? t.removeCode : t.applyCode}
+          </button>
+        </div>
+        {promoMessage || promoError ? (
+          <div
+            id={promoStatusId}
+            role={promoError ? 'alert' : 'status'}
+            style={{
+              fontSize: 12,
+              color: promoError
+                ? 'var(--color-maroon, #8b3a3a)'
+                : 'color-mix(in srgb, var(--sf-accent, var(--color-gold-deep)) 85%, currentColor)',
+            }}
+          >
+            {promoError ?? promoMessage}
+          </div>
+        ) : null}
+      </div>
 
       <div
         style={{
@@ -1774,43 +1789,17 @@ function OrderSummary({
         }}
       >
         <Row label={t.subtotal} value={`${currency} ${subtotal}`} />
-        <Row label={t.shipping} value={shipping === 0 ? t.noShipping : `${currency} ${shipping}`} />
         {discount > 0 ? (
-          <Row label={PROMO_COPY.discount} value={`- ${currency} ${discount}`} />
+          <Row
+            label={appliedDiscount ? `${t.discount} (${appliedDiscount.code})` : t.discount}
+            value={`- ${currency} ${discount}`}
+          />
         ) : null}
+        <Row label={t.shipping} value={shipping === 0 ? t.noShipping : `${currency} ${shipping}`} />
         <Row strong label={t.total} value={`${currency} ${total}`} />
       </div>
     </aside>
   );
-}
-
-function promoButtonStyle(disabled: boolean): React.CSSProperties {
-  return {
-    width: 76,
-    height: 38,
-    borderRadius: 10,
-    border: '1px solid color-mix(in srgb, currentColor 16%, transparent)',
-    background: disabled
-      ? 'color-mix(in srgb, currentColor 8%, transparent)'
-      : 'var(--sf-ink, #111)',
-    color: disabled
-      ? 'color-mix(in srgb, currentColor 45%, transparent)'
-      : 'var(--sf-ground, #fff)',
-    fontSize: 12,
-    fontWeight: 600,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-  };
-}
-
-function promoMessageStyle(kind: 'success' | 'error'): React.CSSProperties {
-  return {
-    margin: '7px 0 0',
-    fontSize: 12,
-    color:
-      kind === 'success'
-        ? 'color-mix(in srgb, currentColor 68%, transparent)'
-        : 'var(--color-maroon, #8b3a3a)',
-  };
 }
 
 function checkoutRootHrefForPath(pathname: string | null, storefrontSlug: string): string {
@@ -2056,6 +2045,6 @@ function stepForField(field?: string): number | null {
   if (field.startsWith('customer.')) return 0;
   if (field.startsWith('address.')) return 1;
   if (field === 'paymentMethod') return 2;
-  if (field === 'acceptedPolicies' || field === 'items') return 3;
+  if (field === 'acceptedPolicies' || field === 'items' || field === 'discountCode') return 3;
   return null;
 }
