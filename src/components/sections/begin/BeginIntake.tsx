@@ -40,8 +40,10 @@ import { env } from '@/lib/env';
 
 type Path = 'have_business' | 'want_to_start';
 type FawranMode = 'fawran_number' | 'commercial_registration';
+type FawranCrType = 'CL' | 'ER' | 'IB';
 
 const ROOT_DOMAIN = env.BRIEF_ROOT_DOMAIN;
+const FAWRAN_CR_TYPES: FawranCrType[] = ['CL', 'ER', 'IB'];
 
 type FormState = {
   ownership: '' | Path;
@@ -50,6 +52,7 @@ type FormState = {
   businessType: '' | CreateBriefInput['businessType'];
   templateId: '' | CreateBriefInput['templateId'];
   fawranMode: FawranMode;
+  fawranCrType: FawranCrType;
   fawranNumber: string;
   crNumber: string;
   logoUrl: string;
@@ -78,6 +81,33 @@ function naiveSlug(input: string): string {
     .slice(0, 40);
 }
 
+function normalizeQatarMobileInput(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  const local = digits.startsWith('974') ? digits.slice(3) : digits;
+  return local.slice(0, 8).replace(/(\d{4})(?=\d)/, '$1 ');
+}
+
+function qatarMobileDigits(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  return digits.startsWith('974') ? digits.slice(3, 11) : digits.slice(0, 8);
+}
+
+function isValidQatarMobile(value: string): boolean {
+  return /^\d{8}$/.test(qatarMobileDigits(value));
+}
+
+function formatQatarMobileForPayload(value: string): string {
+  const digits = qatarMobileDigits(value);
+  return digits.length === 8 ? `+974${digits}` : '';
+}
+
+function normalizeCrNumberInput(value: string): string {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .slice(0, 32);
+}
+
 export function BeginIntake({ locale, copy, currentPlan = 'free' }: Props) {
   const reduced = useReducedMotion();
   const isRtl = locale === 'ar';
@@ -91,6 +121,7 @@ export function BeginIntake({ locale, copy, currentPlan = 'free' }: Props) {
     businessType: '',
     templateId: '',
     fawranMode: 'fawran_number',
+    fawranCrType: 'CL',
     fawranNumber: '',
     crNumber: '',
     logoUrl: '',
@@ -185,9 +216,7 @@ export function BeginIntake({ locale, copy, currentPlan = 'free' }: Props) {
     if (key === 'template') return form.templateId !== '';
     if (key === 'csv') return true; // optional
     if (key === 'fawran') {
-      return form.fawranMode === 'commercial_registration'
-        ? form.crNumber.trim().length > 0
-        : form.fawranNumber.trim().length > 0;
+      return isValidQatarMobile(form.fawranNumber) && form.crNumber.trim().length > 0;
     }
     return true;
   }
@@ -223,7 +252,8 @@ export function BeginIntake({ locale, copy, currentPlan = 'free' }: Props) {
         businessType,
         templateId: form.templateId as CreateBriefInput['templateId'],
         fawranMode: form.fawranMode,
-        fawranNumber: form.fawranNumber.trim(),
+        fawranCrType: form.fawranCrType,
+        fawranNumber: formatQatarMobileForPayload(form.fawranNumber),
         crNumber: form.crNumber.trim(),
         logoUrl: form.logoUrl.trim(),
         slug: form.slug,
@@ -393,9 +423,11 @@ export function BeginIntake({ locale, copy, currentPlan = 'free' }: Props) {
           {currentKey === 'fawran' && (
             <FawranStep
               mode={form.fawranMode}
+              crType={form.fawranCrType}
               fawranNumber={form.fawranNumber}
               crNumber={form.crNumber}
               onMode={(v) => update('fawranMode', v)}
+              onCrType={(v) => update('fawranCrType', v)}
               onFawranNumber={(v) => update('fawranNumber', v)}
               onCrNumber={(v) => update('crNumber', v)}
               isRtl={isRtl}
@@ -1305,17 +1337,21 @@ function CrStep({
 
 function FawranStep({
   mode,
+  crType,
   fawranNumber,
   crNumber,
   onMode,
+  onCrType,
   onFawranNumber,
   onCrNumber,
   isRtl,
 }: {
   mode: FawranMode;
+  crType: FawranCrType;
   fawranNumber: string;
   crNumber: string;
   onMode: (v: FawranMode) => void;
+  onCrType: (v: FawranCrType) => void;
   onFawranNumber: (v: string) => void;
   onCrNumber: (v: string) => void;
   isRtl: boolean;
@@ -1325,9 +1361,10 @@ function FawranStep({
     ? {
         eyebrow: 'Fawran · checkout',
         title: 'Set up Fawran for checkout.',
-        sub: 'Enter your Fawran number, or use the Commercial Registration option. Fawran will be selected automatically at checkout.',
-        fawran: 'Fawran Number',
-        cr: 'Commercial Registration',
+        sub: 'Fawran uses a Qatar mobile number and a registration identifier: CL, ER, or IB.',
+        mobile: 'Mobile number',
+        crType: 'Registration type',
+        cr: 'CR / registration number',
         fawranPlaceholder: '5500 0000',
         crPlaceholder: '00000000',
         ready: 'Auto checkout: Fawran',
@@ -1335,14 +1372,15 @@ function FawranStep({
     : {
         eyebrow: 'Fawran · checkout',
         title: 'Set up Fawran for checkout.',
-        sub: 'Enter your Fawran number, or use the Commercial Registration option. Fawran will be selected automatically at checkout.',
-        fawran: 'Fawran Number',
-        cr: 'Commercial Registration',
+        sub: 'Fawran uses a Qatar mobile number and a registration identifier: CL, ER, or IB.',
+        mobile: 'Mobile number',
+        crType: 'Registration type',
+        cr: 'CR / registration number',
         fawranPlaceholder: '5500 0000',
         crPlaceholder: '00000000',
         ready: 'Auto checkout: Fawran',
       };
-  const useCr = mode === 'commercial_registration';
+  void mode;
 
   return (
     <div>
@@ -1355,47 +1393,61 @@ function FawranStep({
           padding: 16,
         }}
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <FawranModeButton
-            active={!useCr}
-            label={copy.fawran}
-            marker="#"
-            onClick={() => onMode('fawran_number')}
-            isRtl={isRtl}
-          />
-          <FawranModeButton
-            active={useCr}
-            label={copy.cr}
-            marker="CR"
-            onClick={() => onMode('commercial_registration')}
-            isRtl={isRtl}
-          />
+        <Field
+          id={`${idBase}-fawran-number`}
+          label={`${copy.mobile} (+974)`}
+          value={fawranNumber}
+          onChange={(value) => {
+            onMode('fawran_number');
+            onFawranNumber(normalizeQatarMobileInput(value));
+          }}
+          placeholder={copy.fawranPlaceholder}
+          isRtl={false}
+          autoComplete="tel"
+          maxLength={11}
+        />
+
+        <div className="mt-5">
+          <p
+            className="mb-2"
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              color: 'rgba(232,220,196,0.58)',
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {copy.crType}
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            {FAWRAN_CR_TYPES.map((type) => (
+              <FawranModeButton
+                key={type}
+                active={crType === type}
+                label={type}
+                marker={type}
+                onClick={() => {
+                  onMode('commercial_registration');
+                  onCrType(type);
+                }}
+                isRtl={isRtl}
+              />
+            ))}
+          </div>
         </div>
 
         <div className="mt-5">
-          {useCr ? (
-            <Field
-              id={`${idBase}-fawran-cr`}
-              label={copy.cr}
-              value={crNumber}
-              onChange={onCrNumber}
-              placeholder={copy.crPlaceholder}
-              isRtl={false}
-              autoComplete="off"
-              maxLength={40}
-            />
-          ) : (
-            <Field
-              id={`${idBase}-fawran-number`}
-              label={copy.fawran}
-              value={fawranNumber}
-              onChange={onFawranNumber}
-              placeholder={copy.fawranPlaceholder}
-              isRtl={false}
-              autoComplete="off"
-              maxLength={40}
-            />
-          )}
+          <Field
+            id={`${idBase}-fawran-cr`}
+            label={copy.cr}
+            value={crNumber}
+            onChange={(value) => onCrNumber(normalizeCrNumberInput(value))}
+            placeholder={copy.crPlaceholder}
+            isRtl={false}
+            autoComplete="off"
+            maxLength={32}
+          />
         </div>
 
         <div

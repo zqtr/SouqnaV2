@@ -27,7 +27,7 @@ import { palettes } from '@/lib/palettes';
 import { sortedTemplateIdsForPicker, templatePresets } from '@/lib/templates';
 
 type StepKey = 'identity' | 'activity' | 'template' | 'payment' | 'confirmation';
-type FawranMode = 'fawran_number' | 'commercial_registration';
+type FawranCrType = 'CL' | 'ER' | 'IB';
 type LocalSlugStatus = SlugAvailability | { status: 'idle' } | { status: 'offline'; slug: string };
 type PreviewProduct = {
   title: string;
@@ -47,6 +47,7 @@ const FALLBACK_PREVIEW_PRODUCT: PreviewProduct = {
 const StarSwipe = dynamic(() => import('@/components/star-swipe'), { ssr: false });
 
 const STEP_KEYS: StepKey[] = ['identity', 'activity', 'template', 'payment', 'confirmation'];
+const FAWRAN_CR_TYPES: FawranCrType[] = ['CL', 'ER', 'IB'];
 
 const ACTIVITIES: Array<{ id: BusinessType; en: string; ar: string }> = [
   { id: 'graphic_design', en: 'Graphic design', ar: 'تصميم جرافيكي' },
@@ -150,15 +151,15 @@ const COPY = {
       payment: {
         title: 'Set up Fawran checkout.',
         side: 'Payment is ready first.',
-        body: 'Add a Fawran number or use Commercial Registration. Souqna will automatically use Fawran at checkout.',
-        fawran: 'Fawran Number',
-        cr: 'Commercial Registration',
-        numberLabel: 'Fawran number',
-        crLabel: 'Commercial Registration',
-        numberPlaceholder: '5500 0000',
+        body: 'Fawran uses a Qatar mobile number and a registration identifier: CL, ER, or IB.',
+        mobileLabel: 'Mobile number',
+        mobilePrefix: '+974',
+        mobilePlaceholder: '5500 0000',
+        crTypeLabel: 'Registration type',
+        crLabel: 'CR / registration number',
         crPlaceholder: '123456',
         ready: 'Auto checkout: Fawran',
-        hint: 'This keeps checkout minimal for the customer.',
+        hint: 'Customers will see Fawran at checkout with the correct payment instructions.',
       },
       confirmation: {
         title: 'Confirm your setup.',
@@ -226,15 +227,15 @@ const COPY = {
       payment: {
         title: 'Set up Fawran checkout.',
         side: 'Payment is ready first.',
-        body: 'Add a Fawran number or use Commercial Registration. Souqna will automatically use Fawran at checkout.',
-        fawran: 'Fawran Number',
-        cr: 'Commercial Registration',
-        numberLabel: 'Fawran number',
-        crLabel: 'Commercial Registration',
-        numberPlaceholder: '5500 0000',
+        body: 'Fawran uses a Qatar mobile number and a registration identifier: CL, ER, or IB.',
+        mobileLabel: 'Mobile number',
+        mobilePrefix: '+974',
+        mobilePlaceholder: '5500 0000',
+        crTypeLabel: 'Registration type',
+        crLabel: 'CR / registration number',
         crPlaceholder: '123456',
         ready: 'Auto checkout: Fawran',
-        hint: 'This keeps checkout minimal for the customer.',
+        hint: 'Customers will see Fawran at checkout with the correct payment instructions.',
       },
       confirmation: {
         title: 'راجع إعداد المتجر.',
@@ -290,6 +291,39 @@ function statusText(t: (typeof COPY)[Locale], status: LocalSlugStatus, slug: str
   if (status.status === 'rate_limited') return t.slug.rate;
   if (status.status === 'offline') return t.slug.offline;
   return t.slug.idle;
+}
+
+function normalizeQatarMobileInput(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  const local = digits.startsWith('974') ? digits.slice(3) : digits;
+  return local.slice(0, 8).replace(/(\d{4})(?=\d)/, '$1 ');
+}
+
+function qatarMobileDigits(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  return digits.startsWith('974') ? digits.slice(3, 11) : digits.slice(0, 8);
+}
+
+function isValidQatarMobile(value: string): boolean {
+  return /^\d{8}$/.test(qatarMobileDigits(value));
+}
+
+function formatQatarMobileForPayload(value: string): string {
+  const digits = qatarMobileDigits(value);
+  return digits.length === 8 ? `+974${digits}` : '';
+}
+
+function maskFawranMobile(value: string): string {
+  const digits = qatarMobileDigits(value);
+  if (digits.length < 4) return '+974';
+  return `+974 ••••${digits.slice(-4)}`;
+}
+
+function normalizeCrNumberInput(value: string): string {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .slice(0, 32);
 }
 
 function TemplateVisual({
@@ -591,8 +625,8 @@ export function SouqnaBeginExperience({
   const [logoPreview, setLogoPreview] = useState('');
   const [activity, setActivity] = useState<BusinessType>('graphic_design');
   const [templateId, setTemplateId] = useState<TemplateId>('atrium');
-  const [fawranMode, setFawranMode] = useState<FawranMode>('fawran_number');
   const [fawranNumber, setFawranNumber] = useState('');
+  const [fawranCrType, setFawranCrType] = useState<FawranCrType>('CL');
   const [crNumber, setCrNumber] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [createState, setCreateState] = useState<CreateBriefState>({ status: 'idle' });
@@ -630,12 +664,10 @@ export function SouqnaBeginExperience({
     if (activeKey === 'activity') return activity.length > 0;
     if (activeKey === 'template') return templateId.length > 0;
     if (activeKey === 'payment') {
-      return fawranMode === 'commercial_registration'
-        ? crNumber.trim().length > 0
-        : fawranNumber.trim().length > 0;
+      return isValidQatarMobile(fawranNumber) && crNumber.trim().length > 0;
     }
     return true;
-  }, [activeKey, activity, brandName, crNumber, fawranMode, fawranNumber, templateId, slug]);
+  }, [activeKey, activity, brandName, crNumber, fawranNumber, templateId, slug]);
 
   async function checkAvailability() {
     const candidate = slugify(slug);
@@ -672,7 +704,16 @@ export function SouqnaBeginExperience({
   }
 
   function beginDraft() {
-    return { brandName, slug, logoName, activity, templateId, fawranMode, fawranNumber, crNumber };
+    return {
+      brandName,
+      slug,
+      logoName,
+      activity,
+      templateId,
+      fawranNumber: formatQatarMobileForPayload(fawranNumber),
+      fawranCrType,
+      crNumber,
+    };
   }
 
   function goNext() {
@@ -696,8 +737,8 @@ export function SouqnaBeginExperience({
       businessType: activity,
       templateId,
       crNumber: crNumber.trim(),
-      fawranMode,
-      fawranNumber: fawranNumber.trim(),
+      fawranCrType,
+      fawranNumber: formatQatarMobileForPayload(fawranNumber),
       logoUrl: '',
       slug,
       website: '',
@@ -732,14 +773,9 @@ export function SouqnaBeginExperience({
   };
   const selectedActivity = ACTIVITIES.find((a) => a.id === activity) ?? FALLBACK_ACTIVITY;
   const selectedTemplate = templatePresets[templateId];
-  const checkoutLabel =
-    fawranMode === 'commercial_registration'
-      ? crNumber.trim()
-        ? 'Fawran via CR'
-        : 'Fawran'
-      : fawranNumber.trim()
-        ? `Fawran ${fawranNumber.trim().slice(-4).padStart(fawranNumber.trim().length, '*')}`
-        : 'Fawran';
+  const checkoutLabel = `Fawran ${maskFawranMobile(fawranNumber)} · ${fawranCrType}${
+    crNumber.trim() ? ` ${crNumber.trim()}` : ''
+  }`;
   const splashTemplate = launchSplash ? templatePresets[launchSplash.templateId] : selectedTemplate;
   const splashPalette = palettes[splashTemplate.palette][isDark ? 'dark' : 'light'];
 
@@ -891,58 +927,55 @@ export function SouqnaBeginExperience({
 
     if (activeKey === 'payment') {
       const c = t.steps.payment;
-      const isCr = fawranMode === 'commercial_registration';
       return (
         <div className="begin-fawran">
-          <div className="begin-fawran-mode" role="radiogroup" aria-label={c.title}>
-            <button
-              type="button"
-              className={`begin-fawran-option${!isCr ? ' is-selected' : ''}`}
-              onClick={() => setFawranMode('fawran_number')}
-              role="radio"
-              aria-checked={!isCr}
-            >
-              <span>{c.fawran}</span>
-              <small>Primary</small>
-            </button>
-            <button
-              type="button"
-              className={`begin-fawran-option${isCr ? ' is-selected' : ''}`}
-              onClick={() => setFawranMode('commercial_registration')}
-              role="radio"
-              aria-checked={isCr}
-            >
-              <span>{c.cr}</span>
-              <small>CR</small>
-            </button>
-          </div>
-
-          {isCr ? (
-            <label className="begin-field">
-              <span>{c.crLabel}</span>
-              <input
-                name="crNumber"
-                value={crNumber}
-                onChange={(event) => setCrNumber(event.target.value)}
-                placeholder={c.crPlaceholder}
-                autoComplete="off"
-                dir="ltr"
-              />
-            </label>
-          ) : (
-            <label className="begin-field">
-              <span>{c.numberLabel}</span>
+          <label className="begin-field">
+            <span>{c.mobileLabel}</span>
+            <div className="begin-phone-input" dir="ltr">
+              <strong>{c.mobilePrefix}</strong>
               <input
                 name="fawranNumber"
                 value={fawranNumber}
-                onChange={(event) => setFawranNumber(event.target.value)}
-                placeholder={c.numberPlaceholder}
+                onChange={(event) => setFawranNumber(normalizeQatarMobileInput(event.target.value))}
+                placeholder={c.mobilePlaceholder}
                 autoComplete="tel"
                 inputMode="tel"
                 dir="ltr"
+                maxLength={11}
               />
-            </label>
-          )}
+            </div>
+          </label>
+
+          <div className="begin-field">
+            <span>{c.crTypeLabel}</span>
+            <div className="begin-fawran-mode" role="radiogroup" aria-label={c.crTypeLabel}>
+              {FAWRAN_CR_TYPES.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={`begin-fawran-option${fawranCrType === type ? ' is-selected' : ''}`}
+                  onClick={() => setFawranCrType(type)}
+                  role="radio"
+                  aria-checked={fawranCrType === type}
+                >
+                  <span>{type}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="begin-field">
+            <span>{c.crLabel}</span>
+            <input
+              name="crNumber"
+              value={crNumber}
+              onChange={(event) => setCrNumber(normalizeCrNumberInput(event.target.value))}
+              placeholder={c.crPlaceholder}
+              autoComplete="off"
+              dir="ltr"
+              maxLength={32}
+            />
+          </label>
 
           <div className="begin-fawran-status">
             <span>$$$</span>
@@ -1617,6 +1650,41 @@ export function SouqnaBeginExperience({
           color: var(--begin-muted);
         }
 
+        .begin-phone-input {
+          display: flex;
+          align-items: center;
+          height: 38px;
+          padding: 0 12px;
+          border-radius: 9px;
+          border: 1px solid var(--begin-field-border);
+          background: var(--begin-field-bg);
+          gap: 8px;
+        }
+
+        .begin-phone-input strong {
+          flex: 0 0 auto;
+          font-family: var(--font-mono);
+          font-size: 12px;
+          font-weight: 800;
+          color: var(--begin-text);
+        }
+
+        .begin-phone-input input {
+          flex: 1;
+          min-width: 0;
+          height: 100%;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          font-family: var(--font-mono);
+          letter-spacing: 0;
+        }
+
+        .begin-phone-input input:focus {
+          outline: none;
+          box-shadow: none;
+        }
+
         .begin-shell[dir='rtl'] .begin-subdomain {
           flex-direction: row-reverse;
         }
@@ -1842,7 +1910,7 @@ export function SouqnaBeginExperience({
 
         .begin-fawran-mode {
           display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 9px;
         }
 

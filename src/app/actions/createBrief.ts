@@ -88,6 +88,7 @@ const Schema = z.object({
     .enum(['fawran_number', 'commercial_registration'])
     .optional()
     .default('fawran_number'),
+  fawranCrType: z.enum(['CL', 'ER', 'IB']).optional().default('CL'),
   fawranNumber: z.string().trim().max(40).optional().or(z.literal('')).default(''),
   crNumber: z.string().trim().max(40).optional().or(z.literal('')).default(''),
   logoUrl: z
@@ -113,6 +114,19 @@ export type CreateBriefState =
   | { status: 'idle' }
   | { status: 'success'; slug: string; url: string; dashboardUrl: string }
   | { status: 'error'; message: string; field?: keyof CreateBriefInput };
+
+function normalizeFawranMobile(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  const local = digits.startsWith('974') ? digits.slice(3, 11) : digits.slice(0, 8);
+  return /^\d{8}$/.test(local) ? `+974${local}` : '';
+}
+
+function normalizeFawranCrNumber(value: string): string {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .slice(0, 32);
+}
 
 export async function createBrief(input: CreateBriefInput): Promise<CreateBriefState> {
   const parsed = Schema.safeParse(input);
@@ -149,8 +163,28 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
   const data = parsed.data;
   const locale = data.locale as Locale;
   const tBegin = getCopy(locale).begin;
+  const fawranMobile = normalizeFawranMobile(data.fawranNumber);
+  const fawranCrNumber = normalizeFawranCrNumber(data.crNumber);
+  const fawranCrLabel = fawranCrNumber ? `${data.fawranCrType} ${fawranCrNumber}` : '';
+  const hasPartialFawran = Boolean(data.fawranNumber.trim() || data.crNumber.trim());
   const fawranCredential =
-    data.fawranMode === 'commercial_registration' ? data.crNumber.trim() : data.fawranNumber.trim();
+    fawranMobile && fawranCrLabel ? `Mobile ${fawranMobile} · ${fawranCrLabel}` : '';
+
+  if (hasPartialFawran && !fawranMobile) {
+    return {
+      status: 'error',
+      message: 'Fawran requires an 8-digit Qatar mobile number with +974.',
+      field: 'fawranNumber',
+    };
+  }
+
+  if (hasPartialFawran && !fawranCrLabel) {
+    return {
+      status: 'error',
+      message: 'Fawran requires a CL, ER, or IB registration number.',
+      field: 'crNumber',
+    };
+  }
 
   if (data.website.length > 0) {
     return {
@@ -278,7 +312,7 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
       design: 'atrium',
       palette: preset.palette,
       templateId: data.templateId as TemplateId,
-      crNumber: data.crNumber ? data.crNumber.trim() : null,
+      crNumber: fawranCrLabel || null,
       tagline: null,
       phone: null,
       area: null,
@@ -304,9 +338,7 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
             bankName: 'Fawran',
             iban: 'Fawran',
             notes:
-              data.fawranMode === 'commercial_registration'
-                ? `Commercial Registration: ${fawranCredential}`
-                : `Fawran Number: ${fawranCredential}`,
+              `Fawran ${fawranCredential}`,
           }
         : null,
       requiredPolicies: [],
@@ -373,6 +405,7 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
       ownership: data.ownership,
       businessType: data.businessType,
       hasCr: Boolean(data.crNumber),
+      fawranCrType: data.fawranCrType,
       locale,
     },
   });
@@ -444,7 +477,8 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
         `Ownership:      ${data.ownership}`,
         `Business type:  ${data.businessType}`,
         `Template:       ${data.templateId}`,
-        `CR:             ${data.crNumber || '—'}`,
+        `Fawran mobile:  ${fawranMobile || '—'}`,
+        `CR:             ${fawranCrLabel || '—'}`,
         '',
         `Private storefront URL: ${publicUrl}`,
         `Owner builder: ${dashboardUrl}`,
