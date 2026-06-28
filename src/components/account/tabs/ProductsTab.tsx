@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from 'next/link';
-import { Plus, ArrowUpRight, FileUp } from 'lucide-react';
+import { Plus, ArrowUpRight, FileUp, PencilLine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { Storefront } from '@/lib/brief';
@@ -416,9 +416,17 @@ function ProductCard({ product: p, locale }: { product: ProductWithStorefront; l
             <span className="truncate font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
               {p.storefrontName}
             </span>
-            <div className="flex items-center gap-1">
-              <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                <a href={editHref}>{t('Edit')}</a>
+            <div className="flex items-center gap-1.5">
+              <Button
+                asChild
+                variant="outline"
+                size="xs"
+                className="h-7 rounded-md border-border/80 bg-background/75 px-2.5 text-xs text-foreground shadow-xs hover:border-foreground/20 hover:bg-muted"
+              >
+                <a href={editHref}>
+                  <PencilLine className="h-3.5 w-3.5" data-icon="inline-start" />
+                  {t('Manage')}
+                </a>
               </Button>
               <AccountDeleteProductButton
                 slug={p.storefrontSlug}
@@ -529,7 +537,7 @@ function CategoryStrip({
     <div
       role="tablist"
       aria-label={locale === 'ar' ? 'التصفية حسب التصنيف' : 'Filter by category'}
-      className="flex flex-wrap items-center gap-1.5 border-t border-dashed pt-3"
+      className="flex flex-wrap items-center gap-1.5 border-t border-border/70 pt-3"
     >
       <span className="me-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
         {t('Categories')}
@@ -605,28 +613,33 @@ function ProductStatusBadge({
   status: 'active' | 'draft' | 'sold_out';
   locale?: string;
 }) {
-  const map: Record<typeof status, { label: string; className: string }> = {
+  const map: Record<typeof status, { label: string; className: string; dotClassName: string }> = {
     active: {
-      label: 'Active',
-      className: 'border-emerald-600/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+      label: 'Live',
+      className:
+        'border-[#c8a45d]/35 bg-[#f4ead2]/70 text-[#5f4a1f] dark:border-[#c8a45d]/40 dark:bg-[#c8a45d]/10 dark:text-[#f3db9d]',
+      dotClassName: 'bg-[#c8a45d]',
     },
     draft: {
       label: 'Draft',
       className: 'border-border bg-muted/40 text-muted-foreground',
+      dotClassName: 'bg-muted-foreground/55',
     },
     sold_out: {
       label: 'Sold out',
-      className: 'border-amber-600/40 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+      className: 'border-red-600/30 bg-red-500/10 text-red-700 dark:text-red-400',
+      dotClassName: 'bg-red-500',
     },
   };
   const m = map[status];
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em]',
+        'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium leading-none',
         m.className,
       )}
     >
+      <span aria-hidden className={cn('size-1.5 rounded-full', m.dotClassName)} />
       {adminPhrase(locale, m.label)}
     </span>
   );

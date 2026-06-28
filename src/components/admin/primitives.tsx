@@ -300,7 +300,9 @@ export function Stat({
             marginTop: 6,
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
-            color: isPositive ? '#2f7d5b' : 'var(--color-maroon, #8b3a3a)',
+            color: isPositive
+              ? 'var(--dash-black, var(--ink-strong))'
+              : 'var(--dash-ink-muted, var(--ink-muted))',
           }}
           title={hint}
         >
@@ -412,14 +414,26 @@ export function StatusBadge({
   children: React.ReactNode;
 }) {
   const map = {
-    success: ['#2f7d5b', 'color-mix(in srgb, #2f7d5b 18%, transparent)'],
-    warning: ['#a4761c', 'color-mix(in srgb, #a4761c 18%, transparent)'],
-    critical: [
-      'var(--color-maroon, #8b3a3a)',
-      'color-mix(in srgb, var(--color-maroon, #8b3a3a) 18%, transparent)',
+    success: [
+      'var(--dash-green, #167244)',
+      'var(--dash-green-soft, color-mix(in srgb, #167244 18%, transparent))',
     ],
-    info: ['#3a4a6a', 'color-mix(in srgb, #3a4a6a 18%, transparent)'],
-    neutral: ['var(--ink-muted)', 'color-mix(in srgb, var(--ink-strong) 8%, transparent)'],
+    warning: [
+      'var(--dash-black, var(--ink-strong))',
+      'var(--dash-important-soft, color-mix(in srgb, #d4c4a7 24%, transparent))',
+    ],
+    critical: [
+      'var(--dash-red, #b63b31)',
+      'var(--dash-red-soft, color-mix(in srgb, #b63b31 18%, transparent))',
+    ],
+    info: [
+      'var(--dash-black, var(--ink-strong))',
+      'color-mix(in srgb, var(--dash-important, #d4c4a7) 18%, transparent)',
+    ],
+    neutral: [
+      'var(--dash-ink-muted, var(--ink-muted))',
+      'color-mix(in srgb, var(--dash-black, var(--ink-strong)) 7%, transparent)',
+    ],
   } as const;
   const [color, bg] = map[tone];
   return (

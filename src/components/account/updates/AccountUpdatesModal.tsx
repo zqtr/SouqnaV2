@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useId, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ExternalLink, Rocket, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Rocket, X } from 'lucide-react';
+
 import { markAccountUpdateRead } from '@/app/actions/accountUpdates';
 import { UpdateEmptyState } from './UpdateEmptyState';
 import { UpdateProgress } from './UpdateProgress';
@@ -12,89 +13,134 @@ import type { AccountUpdateView } from './types';
 type AccountUpdatesModalProps = {
   initialUpdates: AccountUpdateView[];
   locale?: 'en' | 'ar';
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onUpdateRead?: (updateId: string) => void;
+  autoOpen?: boolean;
 };
 
 const modalCopy = {
   en: {
-    eyebrow: 'Changelog',
-    title: 'Souqna changelog',
-    subtitle: 'Updates and product improvements you have not seen yet.',
+    title: 'Souqna updates',
+    subtitle: 'Product improvements and changelog notes.',
     close: 'Close updates',
-    sticky: 'Important update. Acknowledge it to keep moving.',
-    revisit: 'You can come back to unread updates by reopening this page.',
     details: 'View details',
     footerTitle: 'Souqna just updated',
-    gotIt: 'Got it',
+    gotIt: 'Done',
     next: 'Next',
+    previous: 'Previous',
   },
   ar: {
-    eyebrow: 'سجل التحديثات',
     title: 'تحديثات سوقنا',
-    subtitle: 'التحديثات والتحسينات التي لم ترها بعد.',
+    subtitle: 'تحسينات المنتج وسجل التغييرات.',
     close: 'إغلاق التحديثات',
-    sticky: 'تحديث مهم. أكده للمتابعة.',
-    revisit: 'يمكنك الرجوع للتحديثات غير المقروءة عند فتح هذه الصفحة.',
     details: 'عرض التفاصيل',
     footerTitle: 'تم تحديث سوقنا',
     gotIt: 'تم',
     next: 'التالي',
+    previous: 'السابق',
   },
 } as const;
 
 const focusableSelector =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function AccountUpdatesModal({ initialUpdates, locale = 'en' }: AccountUpdatesModalProps) {
+export function AccountUpdatesModal({
+  initialUpdates,
+  locale = 'en',
+  open,
+  onOpenChange,
+  onUpdateRead,
+  autoOpen = true,
+}: AccountUpdatesModalProps) {
   const [updates, setUpdates] = useState(initialUpdates);
   const [index, setIndex] = useState(0);
-  const [open, setOpen] = useState(initialUpdates.length > 0);
+  const [internalOpen, setInternalOpen] = useState(
+    autoOpen && initialUpdates.some((update) => !update.readAt),
+  );
   const [, startTransition] = useTransition();
   const reduceMotion = useReducedMotion();
   const titleId = useId();
   const subtitleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isControlled = open !== undefined;
+  const modalOpen = isControlled ? open : internalOpen;
+  const setModalOpen = useCallback(
+    (value: boolean) => {
+      if (isControlled) {
+        onOpenChange?.(value);
+      } else {
+        setInternalOpen(value);
+      }
+    },
+    [isControlled, onOpenChange],
+  );
+
+  const firstUnreadIndex = useMemo(() => {
+    const unreadIndex = updates.findIndex((update) => !update.readAt);
+    return unreadIndex >= 0 ? unreadIndex : 0;
+  }, [updates]);
 
   const current = updates[index] ?? null;
   const detailsHref = current?.detailsHref ?? current?.ctaHref ?? null;
   const isLast = index >= updates.length - 1;
+  const isFirst = index <= 0;
   const isRtl = locale === 'ar';
   const copy = modalCopy[locale];
+  const PreviousIcon = isRtl ? ChevronRight : ChevronLeft;
+  const NextIcon = isRtl ? ChevronLeft : ChevronRight;
 
-  const markReadOptimistically = useCallback((updateId: string) => {
-    startTransition(() => {
-      void markAccountUpdateRead(updateId);
-    });
-  }, [startTransition]);
+  useEffect(() => {
+    setUpdates(initialUpdates);
+  }, [initialUpdates]);
 
-  const finishCurrent = useCallback(() => {
-    if (!current) return;
-    markReadOptimistically(current.id);
+  useEffect(() => {
+    if (!modalOpen) return;
+    setIndex(firstUnreadIndex);
+  }, [firstUnreadIndex, modalOpen]);
+
+  const markReadOptimistically = useCallback(
+    (update: AccountUpdateView) => {
+      if (update.readAt) return;
+      const readAt = new Date().toISOString();
+      setUpdates((value) =>
+        value.map((item) => (item.id === update.id ? { ...item, readAt } : item)),
+      );
+      onUpdateRead?.(update.id);
+      startTransition(() => {
+        void markAccountUpdateRead(update.id);
+      });
+    },
+    [onUpdateRead, startTransition],
+  );
+
+  const goNext = useCallback(() => {
+    if (current) markReadOptimistically(current);
     if (!isLast) {
-      setIndex((value) => value + 1);
+      setIndex((value) => Math.min(value + 1, updates.length - 1));
       return;
     }
-    setUpdates([]);
-    setIndex(0);
-    closeTimerRef.current = setTimeout(() => setOpen(false), 900);
-  }, [current, isLast, markReadOptimistically]);
+    setModalOpen(false);
+  }, [current, isLast, markReadOptimistically, setModalOpen, updates.length]);
+
+  const goPrevious = useCallback(() => {
+    setIndex((value) => Math.max(value - 1, 0));
+  }, []);
 
   const viewDetails = useCallback(() => {
     if (!current || !detailsHref) return;
-    setUpdates((value) => value.filter((update) => update.id !== current.id));
-    void markAccountUpdateRead(current.id).finally(() => {
-      window.location.href = detailsHref;
-    });
-  }, [current, detailsHref]);
+    markReadOptimistically(current);
+    window.location.href = detailsHref;
+  }, [current, detailsHref, markReadOptimistically]);
 
   const closeIfAllowed = useCallback(() => {
-    if (current?.isSticky) return;
-    setOpen(false);
-  }, [current]);
+    if (current?.isSticky && !current.readAt) return;
+    setModalOpen(false);
+  }, [current, setModalOpen]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!modalOpen) return;
     previousFocusRef.current = document.activeElement as HTMLElement | null;
     const id = window.setTimeout(() => {
       const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector);
@@ -104,14 +150,26 @@ export function AccountUpdatesModal({ initialUpdates, locale = 'en' }: AccountUp
       window.clearTimeout(id);
       previousFocusRef.current?.focus?.();
     };
-  }, [open]);
+  }, [modalOpen]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!modalOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         closeIfAllowed();
+        return;
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        if (isRtl) goNext();
+        else goPrevious();
+        return;
+      }
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        if (isRtl) goPrevious();
+        else goNext();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -131,19 +189,13 @@ export function AccountUpdatesModal({ initialUpdates, locale = 'en' }: AccountUp
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [closeIfAllowed, open]);
+  }, [closeIfAllowed, goNext, goPrevious, isRtl, modalOpen]);
 
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    };
-  }, []);
-
-  if (initialUpdates.length === 0 && updates.length === 0) return null;
+  if (updates.length === 0 && !modalOpen) return null;
 
   return (
     <AnimatePresence>
-      {open ? (
+      {modalOpen ? (
         <motion.div
           className="fixed inset-0 z-[90] flex items-center justify-center bg-[#080608]/75 px-3 py-5 backdrop-blur-xl sm:px-6"
           initial={reduceMotion ? false : { opacity: 0 }}
@@ -159,37 +211,60 @@ export function AccountUpdatesModal({ initialUpdates, locale = 'en' }: AccountUp
             aria-describedby={subtitleId}
             tabIndex={-1}
             dir={isRtl ? 'rtl' : 'ltr'}
-            className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-[#31282d] bg-[#121113] text-[#f8efdf] shadow-[0_42px_140px_rgba(0,0,0,0.62)] outline-none ring-1 ring-[#e8d6b8]/10"
+            className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-[#31282d] bg-[#121113] text-[#f8efdf] shadow-[0_42px_140px_rgba(0,0,0,0.62)] outline-none ring-1 ring-[#e8d6b8]/10"
             initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.98 }}
             animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
           >
-            {!current?.isSticky ? (
-              <button
-                type="button"
-                onClick={closeIfAllowed}
-                className="absolute end-4 top-4 z-10 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#e8d6b8]/15 bg-[#0d0c0e]/75 text-[#e8d6b8] backdrop-blur transition hover:border-[#d8b56b]/45 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8b56b]"
-                aria-label={copy.close}
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={closeIfAllowed}
+              className="absolute end-4 top-4 z-10 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#e8d6b8]/15 bg-[#0d0c0e]/75 text-[#e8d6b8] backdrop-blur transition hover:border-[#d8b56b]/45 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8b56b]"
+              aria-label={copy.close}
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+
+            <span id={subtitleId} className="sr-only">
+              {copy.subtitle}
+            </span>
 
             {current ? (
               <>
-                <span id={subtitleId} className="sr-only">
-                  {copy.subtitle}
-                </span>
                 <div className="min-h-0 flex-1 overflow-y-auto">
-                  <UpdateStack
-                    update={current}
-                    index={index}
-                    total={updates.length}
-                    onViewDetails={viewDetails}
-                    locale={locale}
-                    titleId={titleId}
-                  />
+                  <div className="border-b border-[#29252a] px-5 py-4 text-center">
+                    <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[#d8b56b]">
+                      {copy.title}
+                    </p>
+                  </div>
+                  <div className="grid items-center gap-3 px-3 py-4 sm:grid-cols-[44px_minmax(0,1fr)_44px] sm:px-4">
+                    <CarouselArrow
+                      label={copy.previous}
+                      disabled={isFirst}
+                      onClick={goPrevious}
+                      className="hidden sm:inline-flex"
+                    >
+                      <PreviousIcon className="h-4 w-4" aria-hidden="true" />
+                    </CarouselArrow>
+
+                    <UpdateStack
+                      update={current}
+                      index={index}
+                      total={updates.length}
+                      onViewDetails={viewDetails}
+                      locale={locale}
+                      titleId={titleId}
+                    />
+
+                    <CarouselArrow
+                      label={isLast ? copy.gotIt : copy.next}
+                      onClick={goNext}
+                      className="hidden sm:inline-flex"
+                    >
+                      <NextIcon className="h-4 w-4" aria-hidden="true" />
+                    </CarouselArrow>
+                  </div>
                 </div>
                 <div className="flex items-center justify-center border-t border-[#29252a] bg-[#121113] px-4 py-3">
                   <UpdateProgress index={index} total={updates.length} locale={locale} />
@@ -200,6 +275,9 @@ export function AccountUpdatesModal({ initialUpdates, locale = 'en' }: AccountUp
                     {copy.footerTitle}
                   </span>
                   <div className="flex items-center justify-end gap-2">
+                    <CarouselArrow label={copy.previous} disabled={isFirst} onClick={goPrevious}>
+                      <PreviousIcon className="h-4 w-4" aria-hidden="true" />
+                    </CarouselArrow>
                     {detailsHref ? (
                       <button
                         type="button"
@@ -212,10 +290,11 @@ export function AccountUpdatesModal({ initialUpdates, locale = 'en' }: AccountUp
                     ) : null}
                     <button
                       type="button"
-                      onClick={finishCurrent}
-                      className="min-h-9 rounded-full bg-[#5f7cff] px-5 text-sm font-semibold text-white shadow-[0_14px_35px_rgba(95,124,255,0.26)] transition hover:bg-[#718cff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8b56b]"
+                      onClick={goNext}
+                      className="inline-flex min-h-9 items-center gap-2 rounded-full bg-[#5f7cff] px-5 text-sm font-semibold text-white shadow-[0_14px_35px_rgba(95,124,255,0.26)] transition hover:bg-[#718cff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8b56b]"
                     >
                       {isLast ? copy.gotIt : copy.next}
+                      <NextIcon className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </div>
                 </footer>
@@ -227,5 +306,32 @@ export function AccountUpdatesModal({ initialUpdates, locale = 'en' }: AccountUp
         </motion.div>
       ) : null}
     </AnimatePresence>
+  );
+}
+
+function CarouselArrow({
+  children,
+  label,
+  disabled,
+  onClick,
+  className = '',
+}: {
+  children: React.ReactNode;
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#d8b56b]/25 bg-[#171417] text-[#e8d6b8] transition hover:border-[#d8b56b]/55 hover:bg-[#21181a] disabled:pointer-events-none disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8b56b] ${className}`}
+    >
+      {children}
+    </button>
   );
 }

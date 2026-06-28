@@ -1,10 +1,11 @@
 ﻿'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { UserButton } from '@clerk/nextjs';
 import { useLocale } from 'next-intl';
+import { Newspaper } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   CommandDialog,
@@ -16,15 +17,15 @@ import {
 } from '@/components/ui/command';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Spinner } from '@/components/ui/spinner';
-import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { useStorefronts } from './StorefrontContext';
-import { SearchGlyph, HelpGlyph, ExternalGlyph } from './glyphs';
+import { SearchGlyph, ExternalGlyph } from './glyphs';
 import { NotificationsBell } from './NotificationsBell';
 import { PLAN_LIMITS, planUnlocksSouqy } from '@/lib/plans';
 import { SouqyChatDrawer } from './SouqyChatDrawer';
 import { SouqyLogo } from './SouqyLogo';
-import { LocaleToggle } from '@/components/souqna/LocaleToggle';
 import { adminText } from './adminLocale';
+import { AccountUpdatesModal } from '@/components/account/updates/AccountUpdatesModal';
+import type { AccountUpdateView } from '@/components/account/updates/types';
 import type { Locale } from '@/i18n/locales';
 
 type SearchResult = {
@@ -47,18 +48,40 @@ const EMPTY_RESULTS: SearchResponse = {
   customers: [],
 };
 
-export function AdminTopBar({ initialSouqyOpen = false }: { initialSouqyOpen?: boolean }) {
+type AdminTopBarProps = {
+  initialSouqyOpen?: boolean;
+  accountUpdates?: AccountUpdateView[];
+};
+
+export function AdminTopBar({
+  initialSouqyOpen = false,
+  accountUpdates = [],
+}: AdminTopBarProps) {
   const { active, plan, planPeriodEnd } = useStorefronts();
   const locale = useLocale() as Locale;
   const t = adminText(locale);
   const router = useRouter();
   const [assistantOpen, setAssistantOpen] = useState(initialSouqyOpen);
+  const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [updates, setUpdates] = useState(accountUpdates);
   const [commandOpen, setCommandOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResponse>(EMPTY_RESULTS);
   const [searching, setSearching] = useState(false);
+  const autoOpenedUpdatesRef = useRef(false);
   const souqyPortalHref = active ? (locale === 'ar' ? '/ar/begin/souqy' : '/begin/souqy') : null;
   const canUseSouqy = planUnlocksSouqy(plan);
+  const unreadUpdates = updates.filter((update) => !update.readAt).length;
+
+  useEffect(() => {
+    setUpdates(accountUpdates);
+  }, [accountUpdates]);
+
+  useEffect(() => {
+    if (autoOpenedUpdatesRef.current || unreadUpdates === 0) return;
+    autoOpenedUpdatesRef.current = true;
+    setUpdatesOpen(true);
+  }, [unreadUpdates]);
 
   useEffect(() => {
     if (canUseSouqy && window.location.search.includes('souqy=1')) {
@@ -125,11 +148,18 @@ export function AdminTopBar({ initialSouqyOpen = false }: { initialSouqyOpen?: b
     router.push(href);
   };
 
+  const markUpdateRead = useCallback((updateId: string) => {
+    const readAt = new Date().toISOString();
+    setUpdates((value) =>
+      value.map((update) => (update.id === updateId ? { ...update, readAt } : update)),
+    );
+  }, []);
+
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: topBarPortalStyles }} />
       <header
-        className="sticky top-0 z-50 flex h-14 items-center gap-2 border-b border-border px-3 backdrop-blur-xl"
+        className="souqna-admin-topbar sticky top-0 z-50 flex h-14 items-center gap-2 border-b border-border px-3 backdrop-blur-xl"
         style={{
           background: 'color-mix(in srgb, var(--surface-bg) 92%, transparent)',
         }}
@@ -139,7 +169,7 @@ export function AdminTopBar({ initialSouqyOpen = false }: { initialSouqyOpen?: b
         <button
           type="button"
           onClick={() => setCommandOpen(true)}
-          className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-muted px-3 text-left text-sm text-muted-foreground transition hover:bg-accent hover:text-accent-foreground md:max-w-xl"
+          className="souqna-admin-search-trigger flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-muted px-3 text-left text-sm text-muted-foreground transition hover:bg-accent hover:text-accent-foreground md:max-w-xl"
           dir="ltr"
         >
           <SearchGlyph size={15} />
@@ -148,6 +178,23 @@ export function AdminTopBar({ initialSouqyOpen = false }: { initialSouqyOpen?: b
             Ctrl K
           </kbd>
         </button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => setUpdatesOpen(true)}
+          aria-label={`${locale === 'ar' ? 'التحديثات' : 'Updates'}${unreadUpdates > 0 ? ` (${unreadUpdates})` : ''}`}
+          title={locale === 'ar' ? 'التحديثات' : 'Updates'}
+          className="relative h-9 w-9 shrink-0 rounded-md border border-border bg-background/60 text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
+        >
+          <Newspaper className="size-4" aria-hidden />
+          {unreadUpdates > 0 ? (
+            <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-[var(--admin-accent)] px-1 font-mono text-[10px] font-bold leading-4 text-[var(--surface-bg)] shadow-[0_0_0_2px_var(--surface-bg)]">
+              {unreadUpdates > 9 ? '9+' : unreadUpdates}
+            </span>
+          ) : null}
+        </Button>
 
         <div className="flex flex-1 items-center justify-end gap-2">
           {souqyPortalHref ? (
@@ -169,16 +216,7 @@ export function AdminTopBar({ initialSouqyOpen = false }: { initialSouqyOpen?: b
             </Link>
           ) : null}
 
-          <IconLink href="/docs" ariaLabel={t.docs} newTab>
-            <HelpGlyph size={18} />
-          </IconLink>
           <NotificationsBell />
-          <ThemeToggle compact />
-          <LocaleToggle
-            locale={locale}
-            mode="account"
-            style={{ minHeight: 34, padding: '7px 10px' }}
-          />
           <PlanBadge plan={plan} periodEnd={planPeriodEnd} />
           <UserButton afterSignOutUrl="/" />
         </div>
@@ -191,7 +229,10 @@ export function AdminTopBar({ initialSouqyOpen = false }: { initialSouqyOpen?: b
         description={t.searchDescription}
         className="border-border bg-popover text-popover-foreground"
       >
-        <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className={locale === 'ar' ? 'text-right' : 'text-left'}>
+        <div
+          dir={locale === 'ar' ? 'rtl' : 'ltr'}
+          className={locale === 'ar' ? 'text-right' : 'text-left'}
+        >
           <CommandInput
             value={query}
             onValueChange={setQuery}
@@ -204,15 +245,22 @@ export function AdminTopBar({ initialSouqyOpen = false }: { initialSouqyOpen?: b
                 {t.searching}
               </div>
             ) : null}
-            <CommandEmpty>
-              {query.trim().length < 2 ? t.typeTwo : t.noMatches}
-            </CommandEmpty>
+            <CommandEmpty>{query.trim().length < 2 ? t.typeTwo : t.noMatches}</CommandEmpty>
             <SearchGroup label={t.products} items={results.products} onSelect={openResult} />
             <SearchGroup label={t.orders} items={results.orders} onSelect={openResult} />
             <SearchGroup label={t.customers} items={results.customers} onSelect={openResult} />
           </CommandList>
         </div>
       </CommandDialog>
+
+      <AccountUpdatesModal
+        initialUpdates={updates}
+        locale={locale}
+        open={updatesOpen}
+        onOpenChange={setUpdatesOpen}
+        onUpdateRead={markUpdateRead}
+        autoOpen={false}
+      />
 
       {canUseSouqy ? (
         <SouqyFloatingTrigger hidden={assistantOpen} onOpen={() => setAssistantOpen(true)} />
@@ -258,17 +306,17 @@ const topBarPortalStyles = `
   padding: 5px 8px 5px 9px;
   overflow: hidden;
   isolation: isolate;
-  border: 1px solid rgba(255, 237, 167, 0.38);
+  border: 1px solid color-mix(in srgb, var(--admin-accent) 42%, transparent);
   border-radius: 999px;
-  color: rgba(255, 249, 225, 0.96);
+  color: var(--dash-panel-strong, var(--surface-overlay));
   background:
-    radial-gradient(circle at 19px 50%, rgba(255, 222, 82, 0.28), transparent 34px),
-    linear-gradient(105deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.045) 42%, rgba(255, 236, 156, 0.1)),
-    rgba(10, 10, 9, 0.78);
+    radial-gradient(circle at 19px 50%, color-mix(in srgb, var(--admin-accent) 28%, transparent), transparent 34px),
+    linear-gradient(105deg, color-mix(in srgb, var(--dash-panel-strong, var(--surface-overlay)) 10%, transparent), color-mix(in srgb, var(--admin-accent) 10%, transparent)),
+    rgba(10, 10, 9, 0.84);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(255, 228, 126, 0.08),
-    0 0 0 1px rgba(255, 226, 118, 0.05),
+    inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong, var(--surface-overlay)) 16%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--admin-accent) 10%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--admin-accent) 8%, transparent),
     0 14px 30px rgba(0, 0, 0, 0.2);
   font-size: 12px;
   font-weight: 750;
@@ -292,8 +340,8 @@ const topBarPortalStyles = `
   z-index: -1;
   border-radius: inherit;
   background:
-    radial-gradient(circle at 29px 50%, rgba(255, 241, 184, 0.2), transparent 38px),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.09), transparent 54%, rgba(0, 0, 0, 0.12));
+    radial-gradient(circle at 29px 50%, color-mix(in srgb, var(--admin-accent) 20%, transparent), transparent 38px),
+    linear-gradient(180deg, color-mix(in srgb, var(--dash-panel-strong, var(--surface-overlay)) 8%, transparent), transparent 54%, rgba(0, 0, 0, 0.12));
   opacity: 1;
   pointer-events: none;
 }
@@ -304,8 +352,8 @@ const topBarPortalStyles = `
   inset: -55% -24%;
   z-index: -2;
   background:
-    linear-gradient(105deg, transparent 30%, rgba(255, 252, 224, 0.34) 46%, transparent 62%),
-    radial-gradient(circle at 22% 52%, rgba(255, 222, 82, 0.2), transparent 20%);
+    linear-gradient(105deg, transparent 30%, color-mix(in srgb, var(--admin-accent) 36%, transparent) 46%, transparent 62%),
+    radial-gradient(circle at 22% 52%, color-mix(in srgb, var(--admin-accent) 20%, transparent), transparent 20%);
   transform: translateX(-48%) rotate(8deg);
   opacity: 0;
   animation: souqy-portal-sweep 6.2s ease-in-out infinite;
@@ -320,7 +368,7 @@ const topBarPortalStyles = `
   flex: 0 0 auto;
   place-items: center;
   border-radius: 999px;
-  box-shadow: 0 0 18px rgba(255, 223, 88, 0.32);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--admin-accent) 30%, transparent);
 }
 
 .souqy-portal-link-mark::after {
@@ -329,7 +377,7 @@ const topBarPortalStyles = `
   inset: -4px;
   z-index: -1;
   border-radius: inherit;
-  border: 1px solid rgba(255, 237, 167, 0.2);
+  border: 1px solid color-mix(in srgb, var(--admin-accent) 22%, transparent);
   animation: souqy-portal-ripple 3.8s ease-in-out infinite;
 }
 
@@ -349,7 +397,7 @@ const topBarPortalStyles = `
 
 .souqy-portal-link-logo .souqy-logo-core {
   box-shadow:
-    inset 0 0 0 1px rgba(255, 245, 198, 0.13),
+    inset 0 0 0 1px color-mix(in srgb, var(--dash-panel-strong, var(--surface-overlay)) 12%, transparent),
     inset 0 0 15px rgba(0, 0, 0, 0.68),
     0 8px 20px rgba(0, 0, 0, 0.22);
 }
@@ -363,7 +411,7 @@ const topBarPortalStyles = `
 }
 
 .souqy-portal-link-kicker {
-  color: rgba(245, 211, 94, 0.72);
+  color: color-mix(in srgb, var(--admin-accent) 72%, var(--dash-panel-strong, var(--surface-overlay)));
   font-size: 9px;
   font-weight: 850;
   letter-spacing: 0.16em;
@@ -388,10 +436,10 @@ const topBarPortalStyles = `
   height: 25px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid rgba(255, 237, 167, 0.18);
+  border: 1px solid color-mix(in srgb, var(--admin-accent) 24%, transparent);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.055);
-  color: rgba(255, 248, 223, 0.72);
+  background: color-mix(in srgb, var(--admin-accent) 8%, transparent);
+  color: color-mix(in srgb, var(--admin-accent) 72%, var(--dash-panel-strong, var(--surface-overlay)));
   transition:
     background 180ms ease,
     border-color 180ms ease,
@@ -401,19 +449,19 @@ const topBarPortalStyles = `
 
 .souqy-portal-link:hover {
   transform: translateY(-1px);
-  border-color: rgba(255, 231, 129, 0.64);
-  color: #fff9df;
+  border-color: color-mix(in srgb, var(--admin-accent) 68%, transparent);
+  color: var(--dash-panel-strong, var(--surface-overlay));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.26),
-    inset 0 -1px 0 rgba(255, 225, 135, 0.18),
-    0 0 0 1px rgba(255, 226, 118, 0.12),
+    inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong, var(--surface-overlay)) 20%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--admin-accent) 18%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--admin-accent) 14%, transparent),
     0 16px 34px rgba(0, 0, 0, 0.24);
 }
 
 .souqy-portal-link:hover .souqy-portal-link-arrow {
-  border-color: rgba(255, 237, 167, 0.34);
-  background: rgba(255, 237, 167, 0.11);
-  color: #fff6cd;
+  border-color: color-mix(in srgb, var(--admin-accent) 42%, transparent);
+  background: color-mix(in srgb, var(--admin-accent) 14%, transparent);
+  color: var(--dash-panel-strong, var(--surface-overlay));
   transform: translateX(1px);
 }
 
@@ -422,20 +470,20 @@ const topBarPortalStyles = `
 }
 
 .souqy-portal-link:focus-visible {
-  outline: 2px solid color-mix(in srgb, #f5d35e 72%, white);
+  outline: 2px solid color-mix(in srgb, var(--admin-accent) 72%, var(--dash-panel-strong, var(--surface-overlay)));
   outline-offset: 3px;
 }
 
 [data-theme='dark'] .souqy-portal-link {
-  border-color: rgba(255, 235, 142, 0.36);
-  color: rgba(255, 248, 223, 0.96);
+  border-color: color-mix(in srgb, var(--admin-accent) 40%, transparent);
+  color: var(--dash-panel-strong, var(--surface-overlay));
   background:
-    radial-gradient(circle at 19px 50%, rgba(255, 227, 93, 0.24), transparent 34px),
-    linear-gradient(105deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04) 42%, rgba(255, 236, 156, 0.1)),
+    radial-gradient(circle at 19px 50%, color-mix(in srgb, var(--admin-accent) 24%, transparent), transparent 34px),
+    linear-gradient(105deg, color-mix(in srgb, var(--dash-panel-strong, var(--surface-overlay)) 10%, transparent), color-mix(in srgb, var(--admin-accent) 10%, transparent)),
     rgba(8, 8, 7, 0.8);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(255, 242, 168, 0.1),
+    inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong, var(--surface-overlay)) 16%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--admin-accent) 12%, transparent),
     0 12px 30px rgba(0, 0, 0, 0.24);
 }
 
@@ -489,7 +537,7 @@ const souqyLauncherStyles = `
   position: absolute;
   inset: 4px;
   z-index: -1;
-  border: 1px solid color-mix(in srgb, var(--color-gold) 26%, transparent);
+  border: 1px solid color-mix(in srgb, var(--admin-accent) 30%, transparent);
   border-radius: 999px;
   opacity: 0.42;
   transform: scale(1);
@@ -502,7 +550,7 @@ const souqyLauncherStyles = `
   inset: 8px;
   z-index: -1;
   border-radius: inherit;
-  background: radial-gradient(circle, color-mix(in srgb, var(--color-gold) 18%, transparent), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--admin-accent) 20%, transparent), transparent 70%);
   opacity: 0.7;
   transition: opacity 180ms ease;
   pointer-events: none;
@@ -526,7 +574,7 @@ const souqyLauncherStyles = `
 }
 
 .souqy-launcher:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--admin-accent) 70%, white);
+  outline: 2px solid color-mix(in srgb, var(--admin-accent) 70%, var(--dash-panel-strong, var(--surface-overlay)));
   outline-offset: 4px;
 }
 
@@ -644,16 +692,17 @@ function PlanBadge({
   const locale = useLocale();
   const label =
     locale === 'ar'
-      ? ({ free: 'مجاني', starter: 'برو', pro: 'برو+', atelier: 'ماكس+' } as Record<string, string>)[plan] ??
-        PLAN_LIMITS[plan].label
+      ? ((
+          { free: 'مجاني', starter: 'برو', pro: 'برو+', atelier: 'ماكس+' } as Record<string, string>
+        )[plan] ?? PLAN_LIMITS[plan].label)
       : PLAN_LIMITS[plan].label;
   const renews =
     periodEnd && plan !== 'free'
       ? `${locale === 'ar' ? 'يتجدد' : 'Renews'} ${new Date(periodEnd).toLocaleDateString(
           locale === 'ar' ? 'ar-QA' : 'en-GB',
           {
-          day: 'numeric',
-          month: 'short',
+            day: 'numeric',
+            month: 'short',
           },
         )}`
       : null;
@@ -665,35 +714,12 @@ function PlanBadge({
       size="sm"
       className="hidden rounded-full text-xs lg:inline-flex"
     >
-      <Link href="/account/settings/plan" title={renews ?? (locale === 'ar' ? 'إدارة الخطة' : 'Manage plan')}>
+      <Link
+        href="/account/settings/plan"
+        title={renews ?? (locale === 'ar' ? 'إدارة الخطة' : 'Manage plan')}
+      >
         <span className="font-semibold">{label}</span>
         {renews ? <span className="text-muted-foreground">{renews}</span> : null}
-      </Link>
-    </Button>
-  );
-}
-
-function IconLink({
-  href,
-  ariaLabel,
-  newTab,
-  children,
-}: {
-  href: string;
-  ariaLabel: string;
-  newTab?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Button asChild variant="ghost" size="icon">
-      <Link
-        href={href}
-        aria-label={ariaLabel}
-        title={ariaLabel}
-        target={newTab ? '_blank' : undefined}
-        rel={newTab ? 'noopener noreferrer' : undefined}
-      >
-        {children}
       </Link>
     </Button>
   );

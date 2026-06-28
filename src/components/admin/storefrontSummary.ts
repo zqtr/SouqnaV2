@@ -20,6 +20,7 @@ export type StorefrontSummary = {
   templateId: string;
   palette: string;
   locale: 'en' | 'ar';
+  currency: string;
 };
 
 export function summariseStorefront(s: Storefront): StorefrontSummary {
@@ -30,6 +31,7 @@ export function summariseStorefront(s: Storefront): StorefrontSummary {
     templateId: s.templateId,
     palette: s.palette,
     locale: s.locale,
+    currency: s.checkout.currency,
   };
 }
 

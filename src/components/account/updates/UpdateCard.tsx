@@ -38,6 +38,7 @@ const typeLabels: Record<'en' | 'ar', Record<AccountUpdateView['type'], string>>
 const cardCopy = {
   en: {
     unread: 'Unread',
+    read: 'Read',
     preview: 'Souqna preview',
     builder: 'Builder actions',
     products: 'Product options',
@@ -47,6 +48,7 @@ const cardCopy = {
   },
   ar: {
     unread: 'ØºÙŠØ± Ù…Ù‚Ø±ÙˆØ¡',
+    read: 'مقروء',
     preview: 'Ù…Ø¹Ø§ÙŠÙ†Ø© Ø³ÙˆÙ‚Ù†Ø§',
     builder: 'Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø§Ù„Ø¨Ù†Ø§Ø¡',
     products: 'Ø®ÙŠØ§Ø±Ø§Øª Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª',
@@ -69,7 +71,7 @@ export function UpdateCard({ update, locale = 'en', titleId }: UpdateCardProps) 
         <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d8b56b]/25 bg-[#d8b56b]/10 px-3 py-1 text-xs font-semibold text-[#e8d6b8]">
             <Sparkles className="h-3.5 w-3.5 text-[#5f7cff]" aria-hidden="true" />
-            {copy.unread}
+            {update.readAt ? copy.read : copy.unread}
           </span>
           <span className="rounded-full border border-[#5f7cff]/25 bg-[#5f7cff]/10 px-3 py-1 text-xs font-semibold text-[#b9c6ff]">
             {badge}

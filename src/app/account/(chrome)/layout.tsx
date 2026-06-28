@@ -4,13 +4,11 @@ import { redirect } from 'next/navigation';
 import { NextIntlClientProvider } from 'next-intl';
 import '@/app/globals.css';
 import { adminFontVariables } from '@/lib/fonts';
-import {
-  getServerTheme,
-  ThemeInitScript,
-} from '@/components/theme/ServerThemeScript';
+import { getServerTheme, ThemeInitScript } from '@/components/theme/ServerThemeScript';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { AdminTopBar } from '@/components/admin/AdminTopBar';
+import { AdminCommandDock } from '@/components/admin/AdminCommandDock';
 import { AdminLanguageBridge } from '@/components/admin/AdminLanguageBridge';
 import { ActiveStoreSync } from '@/components/admin/ActiveStoreSync';
 import { UpgradeGrowthToolsNotice } from '@/components/admin/UpgradeGrowthToolsNotice';
@@ -25,6 +23,10 @@ import type { InstalledAppNavItem } from '@/components/admin/AdminSidebar';
 import { getPlan, getPlanMeta } from '@/lib/billing';
 import { getAdminUserId } from '@/lib/adminAuth';
 import { getSouqnaOperator } from '@/lib/souqna-operator';
+import {
+  listAccountUpdates,
+  syncProductionDeploymentAccountUpdate,
+} from '@/lib/accountUpdates';
 import { defaultLocale, direction, isLocale } from '@/i18n/locales';
 import { ADMIN_ACCENTS, type AdminAccent } from '@/lib/adminAccent';
 
@@ -48,7 +50,11 @@ export default async function ChromeLayout({
   searchParams,
 }: {
   children: React.ReactNode;
-  searchParams?: Promise<{ store?: string | string[]; embed?: string | string[]; souqy?: string | string[] }>;
+  searchParams?: Promise<{
+    store?: string | string[];
+    embed?: string | string[];
+    souqy?: string | string[];
+  }>;
 }) {
   const userId = await getAdminUserId('account/chrome/layout');
   if (!userId) redirect('/sign-in?redirect_url=/account');
@@ -91,11 +97,16 @@ export default async function ChromeLayout({
     }),
   ]);
   const souqnaOperator = await getSouqnaOperator();
+  await syncProductionDeploymentAccountUpdate().catch((err) => {
+    console.error('[admin/chrome] syncProductionDeploymentAccountUpdate failed', err);
+  });
+  const accountUpdates = await listAccountUpdates(userId, plan).catch((err) => {
+    console.error('[admin/chrome] listAccountUpdates failed', err);
+    return [] as Awaited<ReturnType<typeof listAccountUpdates>>;
+  });
   const known = storefronts.map((s) => s.slug);
   const activeSlug =
-    requested && known.includes(requested)
-      ? requested
-      : storefronts[0]?.slug ?? null;
+    requested && known.includes(requested) ? requested : (storefronts[0]?.slug ?? null);
   const cookieStore = await cookies();
   const cookieLocale = cookieStore.get('NEXT_LOCALE')?.value;
   const locale = cookieLocale && isLocale(cookieLocale) ? cookieLocale : defaultLocale;
@@ -154,8 +165,10 @@ export default async function ChromeLayout({
         ['--font-sans' as string]: adminSans,
         ['--font-serif' as string]: adminSans,
         ['--font-english' as string]: adminSans,
-        ['--font-arabic' as string]: 'var(--font-thmanyah-sans), ui-sans-serif, system-ui, sans-serif',
-        ['--font-arabic-serif' as string]: 'var(--font-thmanyah-sans), ui-sans-serif, system-ui, sans-serif',
+        ['--font-arabic' as string]:
+          'var(--font-thmanyah-sans), ui-sans-serif, system-ui, sans-serif',
+        ['--font-arabic-serif' as string]:
+          'var(--font-thmanyah-sans), ui-sans-serif, system-ui, sans-serif',
       }}
       suppressHydrationWarning
     >
@@ -163,7 +176,7 @@ export default async function ChromeLayout({
         <ThemeInitScript />
       </head>
       <body
-        className="min-h-dvh antialiased"
+        className="souqna-admin-shell min-h-dvh antialiased"
         style={{
           background: 'var(--surface-bg)',
           color: 'var(--ink-strong)',
@@ -180,9 +193,7 @@ export default async function ChromeLayout({
               activeSlug={activeSlug}
               plan={plan}
               planPeriodEnd={
-                typeof planMeta.currentPeriodEnd === 'string'
-                  ? planMeta.currentPeriodEnd
-                  : null
+                typeof planMeta.currentPeriodEnd === 'string' ? planMeta.currentPeriodEnd : null
               }
             >
               <ActiveStoreSync knownSlugs={known} serverActiveSlug={activeSlug} />
@@ -204,17 +215,23 @@ export default async function ChromeLayout({
                     side={direction[locale] === 'rtl' ? 'right' : 'left'}
                   />
                   <SidebarInset
+                    className="souqna-admin-inset"
                     style={{
                       background: 'var(--surface-bg)',
                       color: 'var(--ink-strong)',
                     }}
                   >
-                    <AdminTopBar initialSouqyOpen={souqyParam === '1'} />
+                    <AdminTopBar
+                      initialSouqyOpen={souqyParam === '1'}
+                      accountUpdates={accountUpdates}
+                    />
+                    <AdminCommandDock />
                     <main
+                      className="souqna-admin-main"
                       style={{
                         flex: 1,
-                        padding: 'clamp(20px, 3vw, 36px) clamp(20px, 4vw, 48px) 80px',
-                        maxWidth: 1320,
+                        padding: 'clamp(20px, 3vw, 36px) clamp(20px, 4vw, 48px) 124px',
+                        maxWidth: 1440,
                         width: '100%',
                         margin: '0 auto',
                       }}

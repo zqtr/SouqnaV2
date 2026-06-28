@@ -6,11 +6,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { createPortal, flushSync } from 'react-dom';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Sidebar,
   SidebarContent,
@@ -164,143 +160,147 @@ export function AdminSidebar({
 
   return (
     <>
-    <Sidebar
-      side={side}
-      dir={sidebarDir}
-      collapsible="icon"
-      className="border-sidebar-border bg-sidebar text-sidebar-foreground"
-      aria-label="Admin navigation"
-    >
-      <SidebarHeader className="gap-3 px-3 py-3">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              size="lg"
-              tooltip={t.souqnaHome}
-              className="h-auto items-center gap-3 rounded-lg px-2 py-2 hover:bg-sidebar-accent data-[active=true]:bg-sidebar-accent group-data-[collapsible=icon]:justify-center"
-            >
-              <Link href="/" aria-label={t.souqnaHome} className="flex items-center justify-center">
-                <Image
-                  src="/favicon.svg"
-                  alt=""
-                  width={96}
-                  height={44}
-                  priority
-                  className="h-8 w-20 shrink-0 object-contain grayscale opacity-90 [filter:grayscale(1)_contrast(1.08)_brightness(1.08)] group-data-[collapsible=icon]:h-7 group-data-[collapsible=icon]:w-7"
-                />
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <div className="group-data-[collapsible=icon]:hidden">
-          <StoreSwitcher />
-        </div>
-      </SidebarHeader>
-
-      <SidebarContent>
-        {settingsOpen ? (
-          <SettingsNavMode pathname={pathname} hrefFor={hrefFor} />
-        ) : (
-          <>
-            <SidebarGroup>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {PRIMARY_ITEMS.map((item) => (
-                    <AdminNavItem
-                      key={item.href}
-                      item={item}
-                      pathname={pathname}
-                      href={hrefFor(item.href)}
-                      onNavigate={startNavLoading}
-                    />
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-
-            <SidebarSeparator />
-
-            <NavGroup
-              title={t.salesChannels}
-              defaultOpen={salesChannelsOpen}
-              items={SALES_CHANNELS_ITEMS}
-              pathname={pathname}
-              hrefFor={hrefFor}
-              onNavigate={startNavLoading}
-            />
-
-            <SidebarSeparator />
-
-            <SidebarGroup>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <AdminNavItem
-                    item={{
-                      href: '/account/apps',
-                      label: 'Souqna Marketplace',
-                      glyph: AppsGlyph,
-                      prefix: true,
-                    }}
-                    pathname={pathname}
-                    href={hrefFor('/account/apps')}
-                    onNavigate={startNavLoading}
-                  />
-                  {installedApps.length > 0 ? (
-                    <InstalledAppsList
-                      apps={installedApps}
-                      pathname={pathname}
-                      hrefFor={hrefFor}
-                      onNavigate={startNavLoading}
-                    />
-                  ) : null}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-
-            {souqnaOperator ? (
-              <>
-                <SidebarSeparator />
-                <NavGroup
-                  title={adminNavLabel('Souqna', locale)}
-                  defaultOpen={pathname.startsWith('/account/souqna')}
-                  items={[
-                    {
-                      href: '/account/souqna',
-                      label: 'Operations',
-                      glyph: AnalyticsGlyph,
-                      prefix: true,
-                    },
-                  ]}
-                  pathname={pathname}
-                  hrefFor={hrefFor}
-                  onNavigate={startNavLoading}
-                />
-              </>
-            ) : null}
-          </>
-        )}
-      </SidebarContent>
-
-      {settingsOpen ? null : (
-        <SidebarFooter>
-          <SidebarSeparator />
+      <Sidebar
+        side={side}
+        dir={sidebarDir}
+        collapsible="icon"
+        className="souqna-admin-sidebar border-sidebar-border bg-sidebar text-sidebar-foreground"
+        aria-label="Admin navigation"
+      >
+        <SidebarHeader className="gap-3 px-3 py-3">
           <SidebarMenu>
-            {SETTINGS_ITEMS.map((item) => (
-              <AdminNavItem
-                key={item.href}
-                item={item}
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                size="lg"
+                tooltip={t.souqnaHome}
+                className="h-auto items-center gap-3 rounded-lg px-2 py-2 hover:bg-sidebar-accent data-[active=true]:bg-sidebar-accent group-data-[collapsible=icon]:justify-center"
+              >
+                <Link
+                  href="/"
+                  aria-label={t.souqnaHome}
+                  className="flex items-center justify-center"
+                >
+                  <Image
+                    src="/favicon.svg"
+                    alt=""
+                    width={96}
+                    height={44}
+                    priority
+                    className="h-8 w-20 shrink-0 object-contain grayscale opacity-90 [filter:grayscale(1)_contrast(1.08)_brightness(1.08)] group-data-[collapsible=icon]:h-7 group-data-[collapsible=icon]:w-7"
+                  />
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <div className="group-data-[collapsible=icon]:hidden">
+            <StoreSwitcher />
+          </div>
+        </SidebarHeader>
+
+        <SidebarContent>
+          {settingsOpen ? (
+            <SettingsNavMode pathname={pathname} hrefFor={hrefFor} />
+          ) : (
+            <>
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {PRIMARY_ITEMS.map((item) => (
+                      <AdminNavItem
+                        key={item.href}
+                        item={item}
+                        pathname={pathname}
+                        href={hrefFor(item.href)}
+                        onNavigate={startNavLoading}
+                      />
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+
+              <SidebarSeparator />
+
+              <NavGroup
+                title={t.salesChannels}
+                defaultOpen={salesChannelsOpen}
+                items={SALES_CHANNELS_ITEMS}
                 pathname={pathname}
-                href={hrefFor(item.href)}
+                hrefFor={hrefFor}
                 onNavigate={startNavLoading}
               />
-            ))}
-          </SidebarMenu>
-        </SidebarFooter>
-      )}
-      <SidebarRail className="after:bg-sidebar-border hover:after:bg-sidebar-foreground/45" />
-    </Sidebar>
-    {loadingOverlay}
+
+              <SidebarSeparator />
+
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <AdminNavItem
+                      item={{
+                        href: '/account/apps',
+                        label: 'Souqna Marketplace',
+                        glyph: AppsGlyph,
+                        prefix: true,
+                      }}
+                      pathname={pathname}
+                      href={hrefFor('/account/apps')}
+                      onNavigate={startNavLoading}
+                    />
+                    {installedApps.length > 0 ? (
+                      <InstalledAppsList
+                        apps={installedApps}
+                        pathname={pathname}
+                        hrefFor={hrefFor}
+                        onNavigate={startNavLoading}
+                      />
+                    ) : null}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+
+              {souqnaOperator ? (
+                <>
+                  <SidebarSeparator />
+                  <NavGroup
+                    title={adminNavLabel('Souqna', locale)}
+                    defaultOpen={pathname.startsWith('/account/souqna')}
+                    items={[
+                      {
+                        href: '/account/souqna',
+                        label: 'Operations',
+                        glyph: AnalyticsGlyph,
+                        prefix: true,
+                      },
+                    ]}
+                    pathname={pathname}
+                    hrefFor={hrefFor}
+                    onNavigate={startNavLoading}
+                  />
+                </>
+              ) : null}
+            </>
+          )}
+        </SidebarContent>
+
+        {settingsOpen ? null : (
+          <SidebarFooter>
+            <SidebarSeparator />
+            <SidebarMenu>
+              {SETTINGS_ITEMS.map((item) => (
+                <AdminNavItem
+                  key={item.href}
+                  item={item}
+                  pathname={pathname}
+                  href={hrefFor(item.href)}
+                  onNavigate={startNavLoading}
+                />
+              ))}
+            </SidebarMenu>
+          </SidebarFooter>
+        )}
+        <SidebarRail className="after:bg-sidebar-border hover:after:bg-sidebar-foreground/45" />
+      </Sidebar>
+      {loadingOverlay}
     </>
   );
 }
@@ -426,7 +426,10 @@ function SettingsNavMode({
 
         <div className="mt-3 flex flex-col gap-4 group-data-[collapsible=icon]:hidden">
           {SETTINGS_NAV_SECTIONS.map((section) => (
-            <nav key={section.id} aria-label={`${adminNavLabel(section.title, locale)} ${t.settings}`}>
+            <nav
+              key={section.id}
+              aria-label={`${adminNavLabel(section.title, locale)} ${t.settings}`}
+            >
               <div
                 className="px-2 pb-1 text-[10px] font-medium uppercase tracking-[0.14em]"
                 style={{
@@ -438,8 +441,7 @@ function SettingsNavMode({
               </div>
               <SidebarMenuSub className="mx-0 border-sidebar-border px-2 py-1">
                 {section.items.map((item) => {
-                  const active =
-                    pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                   return (
                     <SidebarMenuSubItem key={item.id}>
                       <SidebarMenuSubButton
@@ -531,9 +533,7 @@ function AdminNavItem({
           <span className="mt-0.5 shrink-0 opacity-80">
             <Glyph size={17} />
           </span>
-          <span className="min-w-0 truncate group-data-[collapsible=icon]:hidden">
-            {label}
-          </span>
+          <span className="min-w-0 truncate group-data-[collapsible=icon]:hidden">{label}</span>
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -633,13 +633,7 @@ function AppNavMark({ app }: { app: InstalledAppNavItem }) {
   if (app.markSrc) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={app.markSrc}
-        alt=""
-        width={16}
-        height={16}
-        className="block rounded"
-      />
+      <img src={app.markSrc} alt="" width={16} height={16} className="block rounded" />
     );
   }
 

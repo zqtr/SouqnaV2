@@ -27,6 +27,7 @@ export type AccountUpdate = {
   bannerPayload: Record<string, unknown>;
   isSticky: boolean;
   audience: Record<string, unknown>;
+  readAt?: string | null;
 };
 
 type AccountUpdateRow = {
@@ -49,6 +50,7 @@ type AccountUpdateRow = {
   banner_payload: unknown;
   is_sticky: boolean;
   audience: unknown;
+  read_at?: string | null;
 };
 
 type DeploymentEnv = Record<string, string | undefined>;
@@ -91,6 +93,7 @@ function fromRow(row: AccountUpdateRow): AccountUpdate {
     bannerPayload: asObject(row.banner_payload),
     isSticky: row.is_sticky === true,
     audience: asObject(row.audience),
+    readAt: row.read_at ?? null,
   };
 }
 
@@ -259,6 +262,44 @@ export async function listUnreadAccountUpdates(
         )
       order by u.priority desc, u.published_at desc
       limit ${Math.min(Math.max(limit * 4, 10), 100)}
+    `) as unknown as AccountUpdateRow[];
+  } catch (error) {
+    if (!isMissingUpdatesTableError(error)) throw error;
+    console.warn('[accountUpdates] updates tables unavailable', error);
+    return [];
+  }
+
+  return rows
+    .map(fromRow)
+    .filter((update) => accountUpdateAudienceMatchesPlan(update.audience, plan))
+    .slice(0, Math.min(Math.max(limit, 1), 50));
+}
+
+export async function listAccountUpdates(
+  userId: string,
+  plan: Plan,
+  limit = 12,
+): Promise<AccountUpdate[]> {
+  noStore();
+  if (!hasDb() || !userId) return [];
+  let rows: AccountUpdateRow[];
+  try {
+    rows = (await db()`
+      select
+        u.id, u.title, u.body, u.type, u.version, u.priority,
+        u.published_at, u.expires_at, u.summary, u.badge,
+        u.cta_label, u.cta_href, u.details_href, u.image_url, u.video_url,
+        u.preview_payload, u.banner_payload, u.is_sticky, u.audience,
+        r.read_at
+      from updates u
+      left join user_update_reads r
+        on r.user_id = ${userId}
+       and r.update_id = u.id
+      where u.is_active = true
+        and u.published_at <= now()
+        and (u.expires_at is null or u.expires_at > now())
+      order by u.priority desc, u.published_at desc
+      limit ${Math.min(Math.max(limit * 4, 12), 120)}
     `) as unknown as AccountUpdateRow[];
   } catch (error) {
     if (!isMissingUpdatesTableError(error)) throw error;

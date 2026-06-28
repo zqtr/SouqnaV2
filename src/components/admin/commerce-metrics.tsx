@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { ArrowUpRight, BarChart3, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -14,34 +14,48 @@ import {
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Reveal } from '@/components/motion/Reveal';
 import { MiniBarChart } from '@/components/admin/charts/MiniBarChart';
 import { Sparkline } from '@/components/admin/charts/Sparkline';
 import type { TopProductByOrders } from '@/lib/products';
-import { cn } from '@/lib/utils';
 
 type MetricTone = 'neutral' | 'success' | 'warning' | 'critical' | 'info';
 
 const TONE_ACCENT: Record<MetricTone, string> = {
-  neutral: 'var(--admin-accent)',
-  success: '#2f9e6d',
-  warning: '#c9a961',
-  critical: 'var(--color-maroon)',
-  info: '#3b82f6',
+  neutral: 'var(--dash-black)',
+  success: 'var(--dash-green)',
+  warning: 'var(--dash-important)',
+  critical: 'var(--dash-red)',
+  info: 'var(--dash-important)',
 };
 
-const TONE_BADGE: Record<MetricTone, string> = {
-  neutral: 'border-border bg-muted text-muted-foreground',
-  success: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-  warning: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300',
-  critical: 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
-  info: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300',
+const TONE_BADGE_STYLE: Record<MetricTone, CSSProperties> = {
+  neutral: {
+    borderColor: 'var(--dash-rule-strong)',
+    background: 'color-mix(in srgb, var(--dash-black) 5%, transparent)',
+    color: 'var(--dash-ink-muted)',
+  },
+  success: {
+    borderColor: 'color-mix(in srgb, var(--dash-green) 32%, transparent)',
+    background: 'var(--dash-green-soft)',
+    color: 'var(--dash-green)',
+  },
+  warning: {
+    borderColor: 'color-mix(in srgb, var(--dash-important) 42%, transparent)',
+    background: 'var(--dash-important-soft)',
+    color: 'var(--dash-black)',
+  },
+  critical: {
+    borderColor: 'color-mix(in srgb, var(--dash-red) 40%, transparent)',
+    background: 'var(--dash-red-soft)',
+    color: 'var(--dash-red)',
+  },
+  info: {
+    borderColor: 'color-mix(in srgb, var(--dash-important) 36%, transparent)',
+    background: 'color-mix(in srgb, var(--dash-important) 16%, transparent)',
+    color: 'var(--dash-black)',
+  },
 };
 
 export function CommerceMetricGrid({ children }: { children: ReactNode }) {
@@ -76,7 +90,7 @@ export function CommerceMetricCard({
   const accent = TONE_ACCENT[tone];
   return (
     <Card
-      className="group relative overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/18 hover:shadow-[var(--shadow-card)]"
+      className="souqna-metric-card group relative overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/18 hover:shadow-[var(--shadow-card)]"
       style={{
         background:
           'linear-gradient(180deg, color-mix(in srgb, var(--card) 94%, var(--surface-overlay)) 0%, var(--card) 100%)',
@@ -102,7 +116,12 @@ export function CommerceMetricCard({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon-xs" aria-label={`${label} details`}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`${label} details`}
+                  >
                     <Info className="size-3.5" />
                   </Button>
                 </TooltipTrigger>
@@ -112,7 +131,7 @@ export function CommerceMetricCard({
               </Tooltip>
             </TooltipProvider>
           ) : badge ? (
-            <Badge variant="outline" className={cn('shrink-0', TONE_BADGE[tone])}>
+            <Badge variant="outline" className="shrink-0" style={TONE_BADGE_STYLE[tone]}>
               {badge}
             </Badge>
           ) : null}
@@ -129,9 +148,21 @@ export function CommerceMetricCard({
           {trend && trend.length > 0 ? (
             <div className="h-12 w-28 shrink-0 opacity-90 transition-opacity group-hover:opacity-100">
               {chart === 'bar' ? (
-                <MiniBarChart data={trend} width={112} height={48} accent={accent} ariaLabel={`${label} bar trend`} />
+                <MiniBarChart
+                  data={trend}
+                  width={112}
+                  height={48}
+                  accent={accent}
+                  ariaLabel={`${label} bar trend`}
+                />
               ) : (
-                <Sparkline data={trend} width={112} height={48} accent={accent} ariaLabel={`${label} trend`} />
+                <Sparkline
+                  data={trend}
+                  width={112}
+                  height={48}
+                  accent={accent}
+                  ariaLabel={`${label} trend`}
+                />
               )}
             </div>
           ) : null}
@@ -163,7 +194,7 @@ export function SalesLeaderboardCard({
   const maxRevenue = Math.max(...rows.map((row) => row.revenueQar), 1);
   return (
     <Reveal y={16}>
-      <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+      <Card className="souqna-dashboard-card overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
         <CardHeader className="border-b border-border px-5 py-4">
           <div>
             <CardTitle className="text-base">{title}</CardTitle>
@@ -212,7 +243,7 @@ export function SalesLeaderboardCard({
                     </div>
                     <Progress
                       value={pct}
-                      className="h-1.5 bg-muted [&>[data-slot=progress-indicator]]:bg-[var(--admin-accent)]"
+                      className="h-1.5 bg-muted [&>[data-slot=progress-indicator]]:bg-[var(--chart-primary)]"
                     />
                   </li>
                 );
@@ -239,11 +270,11 @@ export function ComparisonSignalCard({
   tone?: MetricTone;
 }) {
   return (
-    <Card className="border-border/80 bg-card/92 py-0 shadow-sm">
+    <Card className="souqna-dashboard-card border-border/80 bg-card/92 py-0 shadow-sm">
       <CardHeader className="px-4 pt-4 pb-2">
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="text-sm">{title}</CardTitle>
-          <Badge variant="outline" className={TONE_BADGE[tone]}>
+          <Badge variant="outline" style={TONE_BADGE_STYLE[tone]}>
             {value}
           </Badge>
         </div>
@@ -251,7 +282,7 @@ export function ComparisonSignalCard({
       <CardContent className="px-4 pb-4">
         <Progress
           value={Math.max(0, Math.min(100, progress))}
-          className="h-1.5 bg-muted [&>[data-slot=progress-indicator]]:bg-[var(--admin-accent)]"
+          className="h-1.5 bg-muted [&>[data-slot=progress-indicator]]:bg-[var(--chart-primary)]"
         />
         <Separator className="my-3" />
         <p className="m-0 text-sm leading-6 text-muted-foreground">{description}</p>

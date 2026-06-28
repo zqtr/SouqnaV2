@@ -18,4 +18,5 @@ export type AccountUpdateView = {
   bannerPayload: Record<string, unknown>;
   isSticky: boolean;
   audience: Record<string, unknown>;
+  readAt?: string | null;
 };

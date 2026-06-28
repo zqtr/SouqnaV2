@@ -33,25 +33,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  EmptyState,
-  PageHeader,
-  StatusBadge,
-  Surface,
-} from '@/components/admin/primitives';
-import {
-  CommerceMetricCard,
-  CommerceMetricGrid,
-} from '@/components/admin/commerce-metrics';
-import { AccountUpdatesModal } from '@/components/account/updates/AccountUpdatesModal';
+import { EmptyState, PageHeader, StatusBadge, Surface } from '@/components/admin/primitives';
+import { CommerceMetricCard, CommerceMetricGrid } from '@/components/admin/commerce-metrics';
 import { adminPhrase } from '@/components/admin/adminLocale';
 import { getAdminUserId } from '@/lib/adminAuth';
 import { getStorefrontsForUser } from '@/lib/brief';
-import {
-  listUnreadAccountUpdates,
-  syncProductionDeploymentAccountUpdate,
-} from '@/lib/accountUpdates';
-import { getPlan } from '@/lib/billing';
 import { getAllProducts, topProductsByOrders } from '@/lib/products';
 import { countCustomers } from '@/lib/customers';
 import {
@@ -87,30 +73,27 @@ export default async function AccountHomePage({
   const requested = Array.isArray(sp.store) ? sp.store[0] : sp.store;
   const cookieStore = await cookies();
   const cookieLocale = cookieStore.get('NEXT_LOCALE')?.value;
-  const locale: Locale =
-    cookieLocale && isLocale(cookieLocale) ? cookieLocale : defaultLocale;
+  const locale: Locale = cookieLocale && isLocale(cookieLocale) ? cookieLocale : defaultLocale;
   const t = HOME_STRINGS[locale];
   const p = (text: string) => adminPhrase(locale, text);
-  const [storefronts, currentPlan] = await Promise.all([
-    getStorefrontsForUser(userId),
-    getPlan(userId),
-  ]);
-  await syncProductionDeploymentAccountUpdate();
-  const accountUpdates = await listUnreadAccountUpdates(userId, currentPlan);
+  const storefronts = await getStorefrontsForUser(userId);
 
   if (storefronts.length === 0) {
     return (
       <>
-        <AccountUpdatesModal initialUpdates={accountUpdates} locale={locale} />
         <PageHeader
           eyebrow={p('Workspace')}
           title={p('Create your first storefront')}
-          subtitle={p('Your account is ready. Start with the onboarding flow and this dashboard will fill with live orders, products, customers, and activity.')}
+          subtitle={p(
+            'Your account is ready. Start with the onboarding flow and this dashboard will fill with live orders, products, customers, and activity.',
+          )}
         />
         <EmptyState
           eyebrow={p('No store yet')}
           title={p('Start with a real storefront')}
-          body={p('Souqna needs one storefront before the admin workspace can show live commerce data.')}
+          body={p(
+            'Souqna needs one storefront before the admin workspace can show live commerce data.',
+          )}
           action={{ label: p('Start a store'), href: '/begin' }}
         />
       </>
@@ -153,26 +136,36 @@ export default async function AccountHomePage({
     topProductsByOrders(storefront.slug, 30, 5).catch(() => []),
   ]);
   const setupItems = [
-    { label: t.setupAddProducts, done: products.length > 0, href: `/account/products${storeParam}` },
-    { label: t.setupConfigureCheckout, done: storefront.checkout.paymentMethods.length > 0, href: `/account/settings/checkout${storeParam}` },
-    { label: t.setupPublishStorefront, done: storefront.isPublished, href: `/account/builder${storeParam}` },
-    { label: t.setupInstallApps, done: installedApps.length > 0, href: `/account/apps${storeParam}` },
+    {
+      label: t.setupAddProducts,
+      done: products.length > 0,
+      href: `/account/products${storeParam}`,
+    },
+    {
+      label: t.setupConfigureCheckout,
+      done: storefront.checkout.paymentMethods.length > 0,
+      href: `/account/settings/checkout${storeParam}`,
+    },
+    {
+      label: t.setupPublishStorefront,
+      done: storefront.isPublished,
+      href: `/account/builder${storeParam}`,
+    },
+    {
+      label: t.setupInstallApps,
+      done: installedApps.length > 0,
+      href: `/account/apps${storeParam}`,
+    },
   ];
   const setupProgress = Math.round(
     (setupItems.filter((item) => item.done).length / setupItems.length) * 100,
   );
   const souqyPortalHref = locale === 'ar' ? '/ar/begin/souqy' : '/begin/souqy';
-  const conversionRate =
-    visitors30 > 0 ? (orderStats.totalOrders / visitors30) * 100 : 0;
+  const conversionRate = visitors30 > 0 ? (orderStats.totalOrders / visitors30) * 100 : 0;
   const paidOrderShare =
-    orderStats.totalOrders > 0
-      ? (orderStats.paidOrders / orderStats.totalOrders) * 100
-      : 0;
+    orderStats.totalOrders > 0 ? (orderStats.paidOrders / orderStats.totalOrders) * 100 : 0;
 
-  const revenueDisplay = formatCurrency(
-    orderStats.revenueQar,
-    storefront.checkout.currency,
-  );
+  const revenueDisplay = formatCurrency(orderStats.revenueQar, storefront.checkout.currency);
   const metricsSlot = (
     <CommerceMetricGrid>
       <CommerceMetricCard
@@ -239,7 +232,6 @@ export default async function AccountHomePage({
 
   return (
     <>
-      <AccountUpdatesModal initialUpdates={accountUpdates} locale={locale} />
       <AccountHomeHero
         storefront={storefront}
         setupProgress={setupProgress}
@@ -250,6 +242,7 @@ export default async function AccountHomePage({
         builderHref={`/account/builder${storeParam}`}
         souqyPortalHref={souqyPortalHref}
         labels={t}
+        locale={locale}
       />
       <div className="souqna-dashboard5-home" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
         {metricsSlot}
@@ -267,11 +260,7 @@ export default async function AccountHomePage({
             ariaLabel={t.ordersBarAria}
           />
           <div className="souqna-dashboard5-side-stack">
-            <Dashboard5OrderMixCard
-              stats={orderStats}
-              labels={t}
-              locale={locale}
-            />
+            <Dashboard5OrderMixCard stats={orderStats} labels={t} locale={locale} />
             <Dashboard5SetupCard
               setupProgress={setupProgress}
               setupItems={setupItems}
@@ -305,26 +294,26 @@ export default async function AccountHomePage({
       <style>{`
         .souqna-dashboard5-home {
           display: grid;
-          gap: 16px;
+          gap: 18px;
           margin-bottom: 32px;
         }
 
         .souqna-dashboard5-primary-grid {
           display: grid;
           grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.82fr);
-          gap: 16px;
+          gap: 18px;
           align-items: start;
         }
 
         .souqna-dashboard5-side-stack {
           display: grid;
-          gap: 16px;
+          gap: 18px;
         }
 
         .souqna-dashboard5-secondary-grid {
           display: grid;
           grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.25fr) minmax(280px, 0.8fr);
-          gap: 16px;
+          gap: 18px;
           align-items: start;
         }
 
@@ -350,6 +339,7 @@ function AccountHomeHero({
   builderHref,
   souqyPortalHref,
   labels,
+  locale,
 }: {
   storefront: StorefrontForHome;
   setupProgress: number;
@@ -360,19 +350,22 @@ function AccountHomeHero({
   builderHref: string;
   souqyPortalHref: string;
   labels: (typeof HOME_STRINGS)[Locale];
+  locale: Locale;
 }) {
   return (
     <Surface
+      className="souqna-dashboard-dither"
       padding={0}
       style={{
         overflow: 'hidden',
-        margin: '18px 0 22px',
+        margin: '8px 0 24px',
         background:
-          'linear-gradient(135deg, color-mix(in srgb, var(--admin-accent) 9%, var(--surface-elevated)) 0%, var(--surface-elevated) 52%, var(--surface-bg) 100%)',
+          'linear-gradient(135deg, color-mix(in srgb, var(--dash-important) 18%, var(--dash-panel-strong)) 0%, var(--dash-panel) 54%, var(--dash-beige) 100%)',
+        borderColor: 'var(--dash-rule-strong)',
       }}
     >
       <div
-        dir="ltr"
+        dir={locale === 'ar' ? 'rtl' : 'ltr'}
         style={{
           display: 'grid',
           gridTemplateColumns: 'minmax(0, 1fr) auto',
@@ -404,10 +397,10 @@ function AccountHomeHero({
             >
               {labels.workspace}
             </span>
-            <StatusBadge tone={storefront.isPublished ? 'success' : 'neutral'}>
+            <StatusBadge tone={storefront.isPublished ? 'info' : 'neutral'}>
               {storefront.isPublished ? labels.live : labels.draft}
             </StatusBadge>
-            <StatusBadge tone={setupProgress === 100 ? 'success' : 'warning'}>
+            <StatusBadge tone={setupProgress === 100 ? 'info' : 'warning'}>
               {setupProgress}% {labels.setup}
             </StatusBadge>
           </div>
@@ -449,10 +442,16 @@ function AccountHomeHero({
             }}
           >
             <Button asChild>
-              <Link href={builderHref}>{labels.openBuilder}</Link>
+              <Link href={builderHref}>
+                {labels.openBuilder}
+                <ArrowUpRight className="size-4" aria-hidden />
+              </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href={souqyPortalHref}>{labels.viewStore}</Link>
+              <Link href={souqyPortalHref}>
+                {labels.viewStore}
+                <ArrowUpRight className="size-4" aria-hidden />
+              </Link>
             </Button>
           </div>
         </div>
@@ -513,14 +512,21 @@ function Dashboard5CommerceFlowCard({
   const ordersTotal = ordersTrend.reduce((sum, value) => sum + value, 0);
   const cartAddsTotal = cartAddTrend.reduce((sum, value) => sum + value, 0);
   return (
-    <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+    <Card className="souqna-dashboard-card overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
       <CardHeader className="border-b border-border/80 px-5 py-4">
         <div>
           <CardTitle className="text-base">{title}</CardTitle>
           <CardDescription className="mt-1">{subtitle}</CardDescription>
         </div>
         <CardAction>
-          <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+          <Badge
+            variant="outline"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--dash-important) 42%, transparent)',
+              background: 'var(--dash-important-soft)',
+              color: 'var(--dash-black)',
+            }}
+          >
             {windowLabel}
           </Badge>
         </CardAction>
@@ -575,7 +581,7 @@ function Dashboard5AreaChart({
   ].join(' ');
 
   return (
-    <div className="rounded-lg border border-border/80 bg-muted/40 p-3">
+    <div className="souqna-dashboard-chart rounded-lg border border-border/80 bg-muted/40 p-3">
       <svg
         role="img"
         aria-label={ariaLabel}
@@ -585,8 +591,8 @@ function Dashboard5AreaChart({
         <title>{ariaLabel}</title>
         <defs>
           <linearGradient id="souqna-dashboard5-flow-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="var(--admin-accent)" stopOpacity="0.34" />
-            <stop offset="100%" stopColor="var(--admin-accent)" stopOpacity="0.03" />
+            <stop offset="0%" stopColor="var(--chart-primary)" stopOpacity="0.34" />
+            <stop offset="100%" stopColor="var(--chart-primary)" stopOpacity="0.03" />
           </linearGradient>
         </defs>
         {[0.25, 0.5, 0.75].map((line) => (
@@ -605,7 +611,7 @@ function Dashboard5AreaChart({
         <polyline
           points={pointsToString(primaryPoints)}
           fill="none"
-          stroke="var(--admin-accent)"
+          stroke="var(--chart-primary)"
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth="4"
@@ -613,7 +619,7 @@ function Dashboard5AreaChart({
         <polyline
           points={pointsToString(secondaryPoints)}
           fill="none"
-          stroke="#3b82f6"
+          stroke="var(--chart-secondary)"
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth="3"
@@ -622,11 +628,11 @@ function Dashboard5AreaChart({
       </svg>
       <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-[var(--admin-accent)]" />
+          <span className="size-2 rounded-full bg-[var(--chart-primary)]" />
           {primaryLabel}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-[#3b82f6]" />
+          <span className="size-2 rounded-full bg-[var(--chart-secondary)]" />
           {secondaryLabel}
         </span>
       </div>
@@ -649,24 +655,24 @@ function Dashboard5OrderMixCard({
       label: labels.paidOrders,
       value: stats.paidOrders,
       icon: CheckCircle2,
-      accent: '#2f9e6d',
+      accent: 'var(--dash-important)',
     },
     {
       label: labels.unpaid,
       value: stats.unpaidOrders,
       icon: AlertCircle,
-      accent: '#c9a961',
+      accent: 'var(--dash-important)',
     },
     {
       label: labels.pending,
       value: stats.pendingOrders,
       icon: Clock3,
-      accent: '#3b82f6',
+      accent: 'var(--dash-black)',
     },
   ];
 
   return (
-    <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+    <Card className="souqna-dashboard-card overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
       <CardHeader className="border-b border-border/80 px-5 py-4">
         <div>
           <CardTitle className="text-base">{labels.checkoutSignal}</CardTitle>
@@ -695,13 +701,11 @@ function Dashboard5OrderMixCard({
                   </span>
                   <span className="truncate">{row.label}</span>
                 </span>
-                <span className="font-mono text-sm font-semibold tabular-nums">
-                  {row.value}
-                </span>
+                <span className="font-mono text-sm font-semibold tabular-nums">{row.value}</span>
               </div>
               <Progress
                 value={pct}
-                className="h-1.5 bg-muted [&>[data-slot=progress-indicator]]:bg-[var(--admin-accent)]"
+                className="h-1.5 bg-muted [&>[data-slot=progress-indicator]]:bg-[var(--chart-primary)]"
               />
             </div>
           );
@@ -711,15 +715,7 @@ function Dashboard5OrderMixCard({
   );
 }
 
-function PaidShareRing({
-  paid,
-  total,
-  locale,
-}: {
-  paid: number;
-  total: number;
-  locale: Locale;
-}) {
+function PaidShareRing({ paid, total, locale }: { paid: number; total: number; locale: Locale }) {
   const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
   return (
     <div
@@ -727,7 +723,7 @@ function PaidShareRing({
       style={{
         background:
           total > 0
-            ? `conic-gradient(#2f9e6d 0 ${pct}%, color-mix(in srgb, var(--muted) 78%, transparent) ${pct}% 100%)`
+            ? `conic-gradient(var(--dash-important) 0 ${pct}%, color-mix(in srgb, var(--muted) 78%, transparent) ${pct}% 100%)`
             : 'var(--muted)',
       }}
     >
@@ -754,14 +750,14 @@ function Dashboard5SetupCard({
   labels: HomeLabels;
 }) {
   return (
-    <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+    <Card className="souqna-dashboard-card overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
       <CardHeader className="border-b border-border/80 px-5 py-4">
         <div>
           <CardTitle className="text-base">{labels.setupTitle}</CardTitle>
           <CardDescription className="mt-1">{labels.setupProgress(setupProgress)}</CardDescription>
         </div>
         <CardAction>
-          <StatusBadge tone={setupProgress === 100 ? 'success' : 'warning'}>
+          <StatusBadge tone={setupProgress === 100 ? 'info' : 'warning'}>
             {setupProgress === 100 ? labels.ready : labels.progress}
           </StatusBadge>
         </CardAction>
@@ -806,7 +802,7 @@ function Dashboard5TopProductsCard({
 }) {
   const maxRevenue = Math.max(...rows.map((row) => row.revenueQar), 1);
   return (
-    <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+    <Card className="souqna-dashboard-card overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
       <CardHeader className="border-b border-border/80 px-5 py-4">
         <div>
           <CardTitle className="text-base">{labels.topProductsTitle}</CardTitle>
@@ -830,7 +826,14 @@ function Dashboard5TopProductsCard({
                 <li key={row.product.id} className="grid gap-2">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="grid size-9 shrink-0 place-items-center rounded-md border border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                      <span
+                        className="grid size-9 shrink-0 place-items-center rounded-md border"
+                        style={{
+                          borderColor: 'color-mix(in srgb, var(--dash-important) 42%, transparent)',
+                          background: 'var(--dash-important-soft)',
+                          color: 'var(--dash-black)',
+                        }}
+                      >
                         {index + 1}
                       </span>
                       <div className="min-w-0">
@@ -848,7 +851,7 @@ function Dashboard5TopProductsCard({
                   </div>
                   <Progress
                     value={pct}
-                    className="h-1.5 bg-muted [&>[data-slot=progress-indicator]]:bg-[var(--admin-accent)]"
+                    className="h-1.5 bg-muted [&>[data-slot=progress-indicator]]:bg-[var(--chart-primary)]"
                   />
                 </li>
               );
@@ -879,7 +882,7 @@ function Dashboard5RecentOrdersCard({
   phrase: (text: string) => string;
 }) {
   return (
-    <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+    <Card className="souqna-dashboard-card overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
       <CardHeader className="border-b border-border/80 px-5 py-4">
         <div>
           <CardTitle className="text-base">{labels.recentOrdersTitle}</CardTitle>
@@ -960,7 +963,7 @@ function Dashboard5ActivityCard({
   labels: HomeLabels;
 }) {
   return (
-    <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+    <Card className="souqna-dashboard-card overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
       <CardHeader className="border-b border-border/80 px-5 py-4">
         <div>
           <CardTitle className="text-base">{labels.recentActivityTitle}</CardTitle>
@@ -979,7 +982,10 @@ function Dashboard5ActivityCard({
         {entries.length > 0 ? (
           <ol className="grid gap-3">
             {entries.slice(0, 5).map((entry) => (
-              <li key={entry.id} className="flex gap-3 rounded-lg border border-border/70 bg-muted/30 p-3">
+              <li
+                key={entry.id}
+                className="flex gap-3 rounded-lg border border-border/70 bg-muted/30 p-3"
+              >
                 <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border bg-card text-muted-foreground">
                   <Bell className="size-4" aria-hidden />
                 </span>
@@ -1015,10 +1021,7 @@ function InlineEmpty({
 }) {
   return (
     <div className="flex flex-col items-start gap-2 px-4 py-10">
-      <h3
-        className="m-0 font-serif text-base font-semibold"
-        style={{ color: 'var(--ink-strong)' }}
-      >
+      <h3 className="m-0 font-serif text-base font-semibold" style={{ color: 'var(--ink-strong)' }}>
         {title}
       </h3>
       <p
@@ -1042,7 +1045,7 @@ function InlineEmpty({
 
 function Signal({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-md border border-border bg-muted px-3 py-2">
+    <div className="souqna-dashboard-signal rounded-md border border-border bg-muted px-3 py-2">
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="mt-1 text-sm font-semibold text-foreground">{value}</dd>
     </div>
@@ -1097,8 +1100,10 @@ function formatDate(value: string | Date): string {
   }).format(new Date(value));
 }
 
-function statusTone(status: Order['orderStatus']): 'success' | 'warning' | 'critical' | 'info' | 'neutral' {
-  if (status === 'delivered' || status === 'confirmed') return 'success';
+function statusTone(
+  status: Order['orderStatus'],
+): 'success' | 'warning' | 'critical' | 'info' | 'neutral' {
+  if (status === 'delivered' || status === 'confirmed') return 'info';
   if (status === 'cancelled') return 'critical';
   if (status === 'pending') return 'warning';
   if (status === 'preparing' || status === 'shipped') return 'info';
@@ -1111,7 +1116,8 @@ const HOME_STRINGS = {
     live: 'live',
     draft: 'draft',
     setup: 'setup',
-    heroSubtitle: 'A quieter control room for orders, products, customers, and the storefront you are building.',
+    heroSubtitle:
+      'A quieter control room for orders, products, customers, and the storefront you are building.',
     openBuilder: 'Open builder',
     viewStore: 'Souqy Portal',
     orders: 'Orders',
@@ -1138,8 +1144,7 @@ const HOME_STRINGS = {
     ordersBarAria: 'Daily order count over the last 30 days',
     topProductsTitle: 'Top products',
     topProductsViewAll: 'View all',
-    topProductsEmpty:
-      'No paid orders yet. Once buyers check out, your best sellers surface here.',
+    topProductsEmpty: 'No paid orders yet. Once buyers check out, your best sellers surface here.',
     topProductsEmptyCta: 'Manage catalogue',
     topProductsOrdersSuffix: 'orders',
     ordersTrendTitle: 'Orders trend',

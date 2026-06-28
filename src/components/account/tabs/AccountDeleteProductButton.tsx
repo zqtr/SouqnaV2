@@ -2,8 +2,12 @@
 
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Locale } from '@/i18n/locales';
+import { Loader2, Trash2 } from 'lucide-react';
+
 import { deleteProduct } from '@/app/actions/products';
+import { adminPhrase } from '@/components/admin/adminLocale';
+import { Button } from '@/components/ui/button';
+import type { Locale } from '@/i18n/locales';
 
 type Props = {
   slug: string;
@@ -12,13 +16,6 @@ type Props = {
   productTitle: string;
 };
 
-/**
- * Light-themed sibling of `<DeleteProductButton>` — same `deleteProduct`
- * server action, restyled for the sand `/account` surface (the dashboard
- * version is tuned for the dark Atelier chrome and reads pinkish on
- * light). Shows a native confirm dialog with the product title so the
- * founder can't fat-finger a delete on the wrong row.
- */
 export function AccountDeleteProductButton({
   slug,
   locale,
@@ -27,10 +24,13 @@ export function AccountDeleteProductButton({
 }: Props) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const removeLabel = adminPhrase(locale, 'Remove');
+  const actionLabel = `${removeLabel}: ${productTitle}`;
 
   function onClick() {
     if (pending) return;
-    if (!window.confirm(`Delete "${productTitle}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Remove "${productTitle}"? This cannot be undone.`)) return;
+
     startTransition(async () => {
       const result = await deleteProduct({ slug, locale, id: productId });
       if (result.status === 'success') {
@@ -42,25 +42,22 @@ export function AccountDeleteProductButton({
   }
 
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="icon-xs"
       onClick={onClick}
       disabled={pending}
-      style={{
-        fontSize: 12,
-        fontFamily: 'var(--font-mono)',
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
-        padding: '6px 10px',
-        borderRadius: 999,
-        border: '1px solid color-mix(in srgb, #b85c5c 35%, transparent)',
-        background: 'transparent',
-        color: pending ? 'color-mix(in srgb, #b85c5c 50%, transparent)' : '#b85c5c',
-        cursor: pending ? 'default' : 'pointer',
-        lineHeight: 1,
-      }}
+      aria-label={actionLabel}
+      title={actionLabel}
+      className="h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-red-500/20 hover:bg-red-500/10 hover:text-red-700 focus-visible:ring-red-500/25 dark:hover:text-red-400"
     >
-      {pending ? 'Deleting…' : 'Delete'}
-    </button>
+      {pending ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+      ) : (
+        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+      )}
+      <span className="sr-only">{actionLabel}</span>
+    </Button>
   );
 }

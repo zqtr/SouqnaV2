@@ -63,7 +63,8 @@
   --font-english: var(--font-exo-2), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-english);
   --font-serif: var(--font-exo-2), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), var(--font-exo-2), ui-monospace, SFMono-Regular, monospace;
+  --font-mono:
+    var(--font-jetbrains-mono), var(--font-exo-2), ui-monospace, SFMono-Regular, monospace;
   --font-arabic: var(--font-thmanyah-serif-display), ui-serif, Georgia, serif;
   --font-arabic-serif: var(--font-thmanyah-serif-display), ui-serif, Georgia, serif;
 
@@ -105,7 +106,8 @@
   --font-english: var(--font-exo-2), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-english);
   --font-serif: var(--font-exo-2), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), var(--font-exo-2), ui-monospace, SFMono-Regular, monospace;
+  --font-mono:
+    var(--font-jetbrains-mono), var(--font-exo-2), ui-monospace, SFMono-Regular, monospace;
   --font-arabic: var(--font-thmanyah-serif-display), ui-serif, Georgia, serif;
   --font-arabic-serif: var(--font-thmanyah-serif-display), ui-serif, Georgia, serif;
   --font-arabic-text: var(--font-thmanyah-serif-text), ui-serif, Georgia, serif;
@@ -217,8 +219,8 @@
   --surface-elevated: #171717;
   --surface-overlay: #1a1a1a;
   --surface-sunken: #050505;
-  --surface-rule: rgba(250, 250, 250, 0.10);
-  --surface-rule-strong: rgba(250, 250, 250, 0.20);
+  --surface-rule: rgba(250, 250, 250, 0.1);
+  --surface-rule-strong: rgba(250, 250, 250, 0.2);
   --ink-strong: #fafafa;
   --ink-muted: rgba(250, 250, 250, 0.62);
   --ink-faint: rgba(250, 250, 250, 0.38);
@@ -232,32 +234,38 @@
   --surface-elevated: #f1f5f9;
   --surface-overlay: #ffffff;
   --surface-sunken: #e2e8f0;
-  --surface-rule: rgba(15, 23, 42, 0.10);
-  --surface-rule-strong: rgba(15, 23, 42, 0.20);
+  --surface-rule: rgba(15, 23, 42, 0.1);
+  --surface-rule-strong: rgba(15, 23, 42, 0.2);
   --ink-strong: #0f172a;
   --ink-muted: rgba(15, 23, 42, 0.62);
-  --ink-faint: rgba(15, 23, 42, 0.40);
+  --ink-faint: rgba(15, 23, 42, 0.4);
   --admin-accent: #334155;
-  --admin-accent-soft: rgba(51, 65, 85, 0.10);
+  --admin-accent-soft: rgba(51, 65, 85, 0.1);
 }
 [data-theme='dark'][data-admin-accent='slate'] {
   --surface-bg: #020617;
   --surface-elevated: #0f172a;
   --surface-overlay: #1e293b;
   --surface-sunken: #010410;
-  --surface-rule: rgba(248, 250, 252, 0.10);
-  --surface-rule-strong: rgba(248, 250, 252, 0.20);
+  --surface-rule: rgba(248, 250, 252, 0.1);
+  --surface-rule-strong: rgba(248, 250, 252, 0.2);
   --ink-strong: #f8fafc;
   --ink-muted: rgba(248, 250, 252, 0.62);
-  --ink-faint: rgba(248, 250, 252, 0.40);
+  --ink-faint: rgba(248, 250, 252, 0.4);
   --admin-accent: #cbd5e1;
   --admin-accent-soft: rgba(203, 213, 225, 0.12);
 }
 
 /* Warm — keep the original Souqna cream. No surface override; just
    restore the warm gold accent for users who liked it. */
-[data-theme='light'][data-admin-accent='warm'] { --admin-accent: #a8893f; --admin-accent-soft: color-mix(in srgb, #a8893f 14%, transparent); }
-[data-theme='dark'][data-admin-accent='warm']  { --admin-accent: #c8a14a; --admin-accent-soft: color-mix(in srgb, #c8a14a 18%, transparent); }
+[data-theme='light'][data-admin-accent='warm'] {
+  --admin-accent: #a8893f;
+  --admin-accent-soft: color-mix(in srgb, #a8893f 14%, transparent);
+}
+[data-theme='dark'][data-admin-accent='warm'] {
+  --admin-accent: #c8a14a;
+  --admin-accent-soft: color-mix(in srgb, #c8a14a 18%, transparent);
+}
 
 /* Midnight — premium dark-first operator mode with a cool commerce signal. */
 [data-theme='light'][data-admin-accent='midnight'] {
@@ -265,8 +273,8 @@
   --surface-elevated: #f8fbff;
   --surface-overlay: #ffffff;
   --surface-sunken: #dbeafe;
-  --surface-rule: rgba(15, 23, 42, 0.10);
-  --surface-rule-strong: rgba(15, 23, 42, 0.20);
+  --surface-rule: rgba(15, 23, 42, 0.1);
+  --surface-rule-strong: rgba(15, 23, 42, 0.2);
   --ink-strong: #0f172a;
   --ink-muted: rgba(15, 23, 42, 0.64);
   --ink-faint: rgba(15, 23, 42, 0.42);
@@ -285,7 +293,7 @@
   --ink-faint: rgba(248, 250, 252, 0.42);
   --admin-accent: #60a5fa;
   --admin-accent-soft: rgba(96, 165, 250, 0.14);
-  --shadow-card: 0 1px 0 rgba(255,255,255,0.04), 0 18px 44px rgba(0,0,0,0.42);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 44px rgba(0, 0, 0, 0.42);
 }
 
 /* Pearl — light editorial calm, still works as a warm dark admin. */
@@ -314,7 +322,7 @@
   --ink-faint: rgba(247, 243, 234, 0.42);
   --admin-accent: #d8bd82;
   --admin-accent-soft: rgba(216, 189, 130, 0.14);
-  --shadow-card: 0 1px 0 rgba(255,255,255,0.04), 0 18px 42px rgba(0,0,0,0.44);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 42px rgba(0, 0, 0, 0.44);
 }
 
 /* Graphite — dense neutral workspace with stronger dark-card lift. */
@@ -323,8 +331,8 @@
   --surface-elevated: #ffffff;
   --surface-overlay: #ffffff;
   --surface-sunken: #e4e4e7;
-  --surface-rule: rgba(24, 24, 27, 0.10);
-  --surface-rule-strong: rgba(24, 24, 27, 0.20);
+  --surface-rule: rgba(24, 24, 27, 0.1);
+  --surface-rule-strong: rgba(24, 24, 27, 0.2);
   --ink-strong: #18181b;
   --ink-muted: rgba(24, 24, 27, 0.64);
   --ink-faint: rgba(24, 24, 27, 0.42);
@@ -343,7 +351,7 @@
   --ink-faint: rgba(250, 250, 250, 0.42);
   --admin-accent: #e4e4e7;
   --admin-accent-soft: rgba(228, 228, 231, 0.12);
-  --shadow-card: 0 1px 0 rgba(255,255,255,0.04), 0 20px 48px rgba(0,0,0,0.46);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04), 0 20px 48px rgba(0, 0, 0, 0.46);
 }
 
 /* ─── Base ──────────────────────────────────────────────────────────
@@ -546,6 +554,1049 @@ html:has([data-homepage-blank]) body > footer:not([data-homepage-footer]) {
   100% {
     opacity: 0;
     transform: translateY(-16px) scale(1);
+  }
+}
+
+/* Dashboard operating system layer.
+   Scoped to /account chrome via body.souqna-admin-shell so the public
+   storefront and marketing pages keep their current Souqna palette. */
+@keyframes shimmer {
+  to {
+    background-position: -200% center;
+  }
+}
+
+@keyframes tw-shimmer {
+  to {
+    background-position: -200% center;
+  }
+}
+
+@keyframes souqna-dashboard-dither {
+  0% {
+    background-position:
+      0 0,
+      0 0;
+  }
+  100% {
+    background-position:
+      22px 14px,
+      -18px 20px;
+  }
+}
+
+@keyframes souqna-dashboard-scan {
+  0%,
+  26% {
+    transform: translateX(-120%);
+    opacity: 0;
+  }
+  48% {
+    opacity: 0.32;
+  }
+  72%,
+  100% {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+}
+
+.shimmer {
+  --shimmer-duration: 2s;
+  --shimmer-color: color-mix(in srgb, currentColor 62%, var(--surface-overlay));
+  --shimmer-spread: calc(3ch + 40px);
+  --shimmer-text-fill: transparent;
+  color: inherit;
+  background-image: linear-gradient(
+    110deg,
+    currentColor 0,
+    currentColor calc(50% - var(--shimmer-spread)),
+    var(--shimmer-color) 50%,
+    currentColor calc(50% + var(--shimmer-spread)),
+    currentColor 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: var(--shimmer-text-fill);
+  animation: tw-shimmer var(--shimmer-duration) linear infinite;
+}
+
+.shimmer-once {
+  animation-iteration-count: 1;
+}
+
+.shimmer-reverse {
+  animation-direction: reverse;
+}
+
+.shimmer-none {
+  --shimmer-color: currentColor;
+  --shimmer-text-fill: currentColor;
+  animation: none;
+}
+
+body.souqna-admin-shell {
+  --dash-beige: #f2eadb;
+  --dash-panel: #fbf6ea;
+  --dash-panel-strong: #fffaf0;
+  --dash-sunken: #e9dfcc;
+  --dash-black: #090908;
+  --dash-black-soft: #171713;
+  --dash-ink-muted: color-mix(in srgb, var(--dash-black) 64%, transparent);
+  --dash-ink-faint: color-mix(in srgb, var(--dash-black) 42%, transparent);
+  --dash-important: #d4c4a7;
+  --dash-important-soft: color-mix(in srgb, var(--dash-important) 32%, transparent);
+  --dash-green: #167244;
+  --dash-green-soft: color-mix(in srgb, var(--dash-green) 13%, transparent);
+  --dash-red: #b63b31;
+  --dash-red-soft: color-mix(in srgb, var(--dash-red) 13%, transparent);
+  --chart-primary: var(--dash-important);
+  --chart-secondary: var(--dash-black);
+  --chart-success: var(--dash-green);
+  --chart-danger: var(--dash-red);
+  --chart-ink: var(--dash-black);
+  --dash-rule: color-mix(in srgb, var(--dash-black) 12%, transparent);
+  --dash-rule-strong: color-mix(in srgb, var(--dash-black) 20%, transparent);
+  --dash-shadow: 0 1px 0 rgba(9, 9, 8, 0.05), 0 18px 44px rgba(9, 9, 8, 0.08);
+  --dash-shadow-hover: 0 1px 0 rgba(9, 9, 8, 0.08), 0 24px 62px rgba(9, 9, 8, 0.12);
+  --dash-radius: 8px;
+  --surface-bg: var(--dash-beige);
+  --surface-elevated: var(--dash-panel);
+  --surface-overlay: var(--dash-panel-strong);
+  --surface-sunken: var(--dash-sunken);
+  --surface-rule: var(--dash-rule);
+  --surface-rule-strong: var(--dash-rule-strong);
+  --ink-strong: var(--dash-black);
+  --ink-muted: var(--dash-ink-muted);
+  --ink-faint: var(--dash-ink-faint);
+  --admin-accent: var(--dash-important);
+  --admin-accent-soft: var(--dash-important-soft);
+  --accent: var(--dash-important);
+  --accent-soft: var(--dash-important-soft);
+  --accent-wash: color-mix(in srgb, var(--dash-important) 12%, transparent);
+  --background: var(--dash-beige);
+  --foreground: var(--dash-black);
+  --card: var(--dash-panel);
+  --card-foreground: var(--dash-black);
+  --popover: var(--dash-panel-strong);
+  --popover-foreground: var(--dash-black);
+  --primary: var(--dash-black);
+  --primary-foreground: var(--dash-beige);
+  --secondary: color-mix(in srgb, var(--dash-black) 7%, transparent);
+  --secondary-foreground: var(--dash-black);
+  --muted: color-mix(in srgb, var(--dash-black) 6%, transparent);
+  --muted-foreground: var(--dash-ink-muted);
+  --destructive: var(--dash-red);
+  --destructive-foreground: var(--dash-panel-strong);
+  --border: var(--dash-rule);
+  --input: var(--dash-rule);
+  --ring: var(--dash-important);
+  --sidebar: var(--dash-black);
+  --sidebar-foreground: var(--dash-panel);
+  --sidebar-primary: var(--dash-panel);
+  --sidebar-primary-foreground: var(--dash-black);
+  --sidebar-accent: color-mix(in srgb, var(--dash-important) 18%, transparent);
+  --sidebar-accent-foreground: var(--dash-panel-strong);
+  --sidebar-border: color-mix(in srgb, var(--dash-panel) 10%, transparent);
+  --sidebar-ring: var(--dash-important);
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(
+      circle at 16% 12%,
+      color-mix(in srgb, var(--dash-important) 12%, transparent),
+      transparent 28%
+    ),
+    linear-gradient(
+      180deg,
+      var(--dash-panel-strong) 0%,
+      var(--dash-beige) 42%,
+      var(--dash-sunken) 100%
+    );
+}
+
+[data-theme='dark'] body.souqna-admin-shell {
+  --dash-beige: #10100d;
+  --dash-panel: #171713;
+  --dash-panel-strong: #1f1f1a;
+  --dash-sunken: #080807;
+  --dash-black: #f4eddd;
+  --dash-black-soft: #090908;
+  --dash-ink-muted: color-mix(in srgb, var(--dash-black) 68%, transparent);
+  --dash-ink-faint: color-mix(in srgb, var(--dash-black) 45%, transparent);
+  --dash-important: #d8c6a7;
+  --dash-important-soft: color-mix(in srgb, var(--dash-important) 20%, transparent);
+  --dash-green: #4fc27d;
+  --dash-green-soft: color-mix(in srgb, var(--dash-green) 16%, transparent);
+  --dash-red: #ff6b5c;
+  --dash-red-soft: color-mix(in srgb, var(--dash-red) 17%, transparent);
+  --dash-rule: color-mix(in srgb, var(--dash-black) 12%, transparent);
+  --dash-rule-strong: color-mix(in srgb, var(--dash-black) 22%, transparent);
+  --dash-shadow: 0 1px 0 rgba(244, 237, 221, 0.04), 0 20px 48px rgba(0, 0, 0, 0.42);
+  --dash-shadow-hover: 0 1px 0 rgba(244, 237, 221, 0.06), 0 28px 68px rgba(0, 0, 0, 0.55);
+  --sidebar: #080807;
+  --sidebar-foreground: #f4eddd;
+  --sidebar-primary: #f4eddd;
+  --sidebar-primary-foreground: #080807;
+  --sidebar-border: color-mix(in srgb, #f4eddd 11%, transparent);
+}
+
+body.souqna-admin-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.34;
+  background-image:
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--dash-black) 30%, transparent) 0.72px,
+      transparent 0.84px
+    ),
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--dash-important) 24%, transparent) 0.62px,
+      transparent 0.76px
+    );
+  background-position:
+    0 0,
+    10px 8px;
+  background-size:
+    9px 9px,
+    13px 13px;
+  animation: souqna-dashboard-dither 22s linear infinite;
+  mask-image: linear-gradient(180deg, black, rgba(0, 0, 0, 0.35) 58%, transparent);
+}
+
+.souqna-admin-shell [data-slot='sidebar-wrapper'] {
+  position: relative;
+  z-index: 1;
+}
+
+.souqna-admin-shell button:not(:disabled),
+.souqna-admin-shell [role='button']:not(:disabled) {
+  cursor: pointer;
+}
+
+.souqna-admin-shell [data-slot='card'] {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--dash-rule);
+  border-radius: var(--dash-radius);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--dash-panel-strong) 82%, transparent),
+      var(--dash-panel)
+    ),
+    var(--dash-panel);
+  box-shadow: var(--dash-shadow);
+}
+
+.souqna-admin-shell [data-slot='card']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.1;
+  background-image: radial-gradient(circle, currentColor 0.58px, transparent 0.74px);
+  background-size: 7px 7px;
+  color: var(--dash-black);
+  mask-image: linear-gradient(180deg, black, transparent 72%);
+}
+
+.souqna-admin-shell [data-slot='button']:not(.rounded-full) {
+  border-radius: var(--dash-radius);
+}
+
+.souqna-admin-shell [data-slot='button'] {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.souqna-admin-shell [data-slot='button']:hover {
+  transform: translateY(-1px);
+}
+
+.souqna-admin-shell [data-slot='button'][data-variant='default'] {
+  background: var(--dash-black);
+  color: var(--dash-beige);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--dash-black) 14%, transparent);
+}
+
+.souqna-admin-shell [data-slot='button'][data-variant='outline'] {
+  border-color: var(--dash-rule-strong);
+  background: color-mix(in srgb, var(--dash-panel-strong) 88%, transparent);
+  color: var(--dash-black);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 52%, transparent);
+}
+
+.souqna-admin-shell [data-slot='button'][data-variant='ghost'] {
+  color: var(--dash-ink-muted);
+}
+
+.souqna-admin-shell [data-slot='button'][data-variant='ghost']:hover,
+.souqna-admin-shell [data-slot='button'][data-variant='outline']:hover {
+  background: var(--dash-important-soft);
+  border-color: color-mix(in srgb, var(--dash-important) 42%, transparent);
+  color: var(--dash-black);
+}
+
+.souqna-admin-shell [data-slot='sidebar-inner'] {
+  position: relative;
+  overflow: hidden;
+  border-inline-end: 1px solid var(--sidebar-border);
+  background:
+    radial-gradient(
+      circle at 24px 28px,
+      color-mix(in srgb, var(--dash-important) 20%, transparent),
+      transparent 72px
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--sidebar) 90%, var(--dash-important)),
+      var(--sidebar)
+    );
+  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--dash-important) 10%, transparent);
+}
+
+.souqna-admin-shell [data-slot='sidebar-inner']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.22;
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--sidebar-foreground) 60%, transparent) 0.62px,
+    transparent 0.74px
+  );
+  background-size: 8px 8px;
+  mask-image: linear-gradient(180deg, black, transparent 78%);
+}
+
+.souqna-admin-shell [data-slot='sidebar-header'],
+.souqna-admin-shell [data-slot='sidebar-content'],
+.souqna-admin-shell [data-slot='sidebar-footer'] {
+  position: relative;
+  z-index: 1;
+}
+
+.souqna-admin-shell [data-slot='sidebar-menu-button'],
+.souqna-admin-shell [data-slot='sidebar-menu-sub-button'] {
+  border: 1px solid transparent;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.souqna-admin-shell [data-slot='sidebar-menu-button']:hover,
+.souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover {
+  transform: translateX(1px);
+  border-color: color-mix(in srgb, var(--dash-important) 28%, transparent);
+}
+
+html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-button']:hover,
+html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover {
+  transform: translateX(-1px);
+}
+
+.souqna-admin-shell [data-slot='sidebar-menu-button'][data-active='true'],
+.souqna-admin-shell [data-slot='sidebar-menu-sub-button'][data-active='true'] {
+  border-color: color-mix(in srgb, var(--dash-important) 50%, transparent);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--dash-important) 22%, transparent),
+    color-mix(in srgb, var(--dash-important) 8%, transparent)
+  );
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 7%, transparent);
+}
+
+.souqna-admin-topbar {
+  border-color: var(--dash-rule);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--dash-panel-strong) 92%, transparent),
+    color-mix(in srgb, var(--dash-panel) 82%, transparent)
+  );
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--dash-black) 7%, transparent);
+}
+
+.souqna-admin-inset {
+  position: relative;
+  z-index: 1;
+  background:
+    radial-gradient(
+      circle at 78% 0%,
+      color-mix(in srgb, var(--dash-important) 10%, transparent),
+      transparent 30rem
+    ),
+    var(--surface-bg);
+}
+
+.souqna-admin-main {
+  position: relative;
+}
+
+.souqna-admin-search-trigger {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--dash-rule-strong);
+  background: color-mix(in srgb, var(--dash-panel-strong) 82%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 50%, transparent);
+}
+
+.souqna-admin-search-trigger::after {
+  content: '';
+  position: absolute;
+  inset: -55% -18%;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    color-mix(in srgb, var(--dash-important) 28%, transparent) 48%,
+    transparent 66%
+  );
+  animation: souqna-dashboard-scan 8s ease-in-out infinite;
+}
+
+.souqna-admin-shell .souqy-portal-link {
+  border-color: color-mix(in srgb, var(--dash-important) 46%, transparent);
+  color: var(--dash-panel-strong);
+  background:
+    radial-gradient(
+      circle at 20px 50%,
+      color-mix(in srgb, var(--dash-important) 26%, transparent),
+      transparent 36px
+    ),
+    linear-gradient(
+      105deg,
+      color-mix(in srgb, var(--dash-panel-strong) 10%, transparent),
+      color-mix(in srgb, var(--dash-important) 10%, transparent)
+    ),
+    var(--dash-black-soft);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 16%, transparent),
+    0 14px 30px color-mix(in srgb, var(--dash-black-soft) 22%, transparent);
+}
+
+.souqna-admin-shell .souqy-portal-link::after {
+  background:
+    linear-gradient(
+      105deg,
+      transparent 30%,
+      color-mix(in srgb, var(--dash-important) 36%, transparent) 48%,
+      transparent 62%
+    ),
+    radial-gradient(
+      circle at 22% 52%,
+      color-mix(in srgb, var(--dash-important) 18%, transparent),
+      transparent 20%
+    );
+}
+
+.souqna-admin-shell .souqy-portal-link-kicker,
+.souqna-admin-shell .souqy-portal-link-arrow {
+  color: color-mix(in srgb, var(--dash-important) 72%, var(--dash-panel-strong));
+}
+
+.souqna-admin-shell .souqy-portal-link-arrow {
+  border-color: color-mix(in srgb, var(--dash-important) 26%, transparent);
+  background: color-mix(in srgb, var(--dash-important) 10%, transparent);
+}
+
+.souqna-admin-shell .souqy-portal-link:hover {
+  border-color: color-mix(in srgb, var(--dash-important) 68%, transparent);
+  color: var(--dash-panel-strong);
+}
+
+.souqna-admin-shell .souqy-launcher::before {
+  border-color: color-mix(in srgb, var(--dash-important) 32%, transparent);
+}
+
+.souqna-admin-shell .souqy-launcher::after {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--dash-important) 22%, transparent),
+    transparent 70%
+  );
+}
+
+.souqna-dashboard5-home {
+  --chart-success: var(--dash-green);
+  --chart-danger: var(--dash-red);
+  --chart-ink: var(--dash-black);
+}
+
+.souqna-dashboard-card,
+.souqna-metric-card {
+  isolation: isolate;
+}
+
+.souqna-dashboard-card:hover,
+.souqna-metric-card:hover {
+  box-shadow: var(--dash-shadow-hover);
+}
+
+.souqna-dashboard-dither {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.souqna-dashboard-dither::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background-image:
+    radial-gradient(circle, var(--dash-black) 0.64px, transparent 0.78px),
+    radial-gradient(circle, var(--dash-important) 0.55px, transparent 0.72px);
+  background-size:
+    8px 8px,
+    13px 13px;
+  background-position:
+    0 0,
+    7px 5px;
+  animation: souqna-dashboard-dither 18s linear infinite;
+  mask-image: linear-gradient(180deg, black, transparent 76%);
+}
+
+.souqna-dashboard-dither > * {
+  position: relative;
+  z-index: 1;
+}
+
+.souqna-dashboard-chart {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--dash-black) 13%, transparent);
+  border-radius: var(--dash-radius);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--dash-panel-strong) 76%, transparent),
+      color-mix(in srgb, var(--dash-beige) 90%, transparent)
+    ),
+    radial-gradient(
+      circle at 72% 0%,
+      color-mix(in srgb, var(--dash-important) 12%, transparent),
+      transparent 36%
+    );
+}
+
+.souqna-dashboard-chart::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 58%;
+  pointer-events: none;
+  opacity: 0.32;
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--dash-black) 42%, transparent) 0.72px,
+    transparent 0.82px
+  );
+  background-size: 7px 7px;
+  mask-image: linear-gradient(180deg, transparent, black);
+}
+
+.souqna-dashboard-signal {
+  border-color: var(--dash-rule);
+  border-radius: var(--dash-radius);
+  background: color-mix(in srgb, var(--dash-panel-strong) 78%, transparent);
+}
+
+.souqna-dashboard-positive {
+  color: var(--dash-green);
+}
+
+.souqna-dashboard-negative {
+  color: var(--dash-red);
+}
+
+.souqna-admin-dock-wrap {
+  position: fixed;
+  inset-inline: 0;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  padding-inline: 14px;
+  pointer-events: none;
+}
+
+.souqna-admin-dock-wrap.is-window-open {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.souqna-admin-dock {
+  position: relative;
+  display: flex;
+  max-width: min(100%, 920px);
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px;
+  border: 1px solid var(--dash-rule-strong);
+  border-radius: 12px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--dash-panel-strong) 90%, transparent),
+      color-mix(in srgb, var(--dash-panel) 86%, transparent)
+    ),
+    color-mix(in srgb, var(--dash-panel) 92%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 70%, transparent),
+    0 18px 42px color-mix(in srgb, var(--dash-black-soft) 20%, transparent);
+  pointer-events: auto;
+  scrollbar-width: none;
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.souqna-admin-mobile-dock-trigger {
+  position: relative;
+  display: none;
+  max-width: min(100%, 360px);
+  min-height: 48px;
+  align-items: center;
+  gap: 9px;
+  overflow: hidden;
+  padding: 7px 10px 7px 12px;
+  border: 1px solid var(--dash-rule-strong);
+  border-radius: 12px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--dash-panel-strong) 92%, transparent),
+      color-mix(in srgb, var(--dash-panel) 88%, transparent)
+    ),
+    var(--dash-panel);
+  color: var(--dash-black);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 66%, transparent),
+    0 18px 40px color-mix(in srgb, var(--dash-black-soft) 22%, transparent);
+  font-weight: 650;
+  pointer-events: auto;
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.souqna-admin-mobile-dock-trigger::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  background-image:
+    radial-gradient(circle, var(--dash-black) 0.58px, transparent 0.72px),
+    radial-gradient(circle, var(--dash-important) 0.52px, transparent 0.68px);
+  background-size:
+    8px 8px,
+    13px 13px;
+  background-position:
+    0 0,
+    7px 6px;
+}
+
+.souqna-admin-mobile-dock-trigger > * {
+  position: relative;
+  z-index: 1;
+}
+
+.souqna-admin-mobile-dock-meta {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--dash-ink-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.souqna-admin-dock::-webkit-scrollbar {
+  display: none;
+}
+
+.souqna-admin-dock::before,
+.souqna-admin-window::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.12;
+  background-image:
+    radial-gradient(circle, var(--dash-black) 0.58px, transparent 0.72px),
+    radial-gradient(circle, var(--dash-important) 0.52px, transparent 0.68px);
+  background-size:
+    8px 8px,
+    13px 13px;
+  background-position:
+    0 0,
+    7px 6px;
+  animation: souqna-dashboard-dither 20s linear infinite;
+  mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+}
+
+.souqna-admin-dock::after {
+  content: '';
+  position: absolute;
+  inset: -80% -24%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.42;
+  background: linear-gradient(
+    105deg,
+    transparent 34%,
+    color-mix(in srgb, var(--dash-important) 24%, transparent) 48%,
+    transparent 62%
+  );
+  transform: translateX(-44%) rotate(4deg);
+  animation: souqna-dashboard-scan 9.5s ease-in-out infinite;
+}
+
+.souqna-admin-dock > * {
+  position: relative;
+  z-index: 1;
+}
+
+.souqna-admin-dock-button {
+  min-width: 104px;
+  height: 42px;
+  justify-content: flex-start;
+  border-color: color-mix(in srgb, var(--dash-black) 14%, transparent);
+  background: color-mix(in srgb, var(--dash-panel-strong) 82%, transparent);
+  color: var(--dash-black);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 62%, transparent);
+}
+
+.souqna-admin-dock-button:hover {
+  background: var(--dash-important-soft);
+}
+
+.souqna-admin-dock-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--dash-ink-faint);
+  text-transform: uppercase;
+}
+
+.souqna-admin-dock-locale {
+  display: inline-flex;
+  height: 42px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 1px solid color-mix(in srgb, var(--dash-black) 14%, transparent);
+  border-radius: var(--dash-radius);
+  background: color-mix(in srgb, var(--dash-panel-strong) 78%, transparent);
+  color: var(--dash-black);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 56%, transparent);
+}
+
+.souqna-admin-window {
+  position: fixed;
+  z-index: 90;
+  overflow: hidden;
+  border-color: var(--dash-rule-strong);
+  border-radius: 12px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--dash-panel-strong) 96%, transparent),
+      var(--dash-panel)
+    ),
+    var(--dash-panel);
+  color: var(--dash-black);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 72%, transparent),
+    0 28px 78px color-mix(in srgb, var(--dash-black-soft) 30%, transparent);
+}
+
+body.souqna-admin-shell [data-slot='dialog-overlay'] {
+  z-index: 80;
+}
+
+body.souqna-admin-shell [data-slot='drawer-overlay'] {
+  z-index: 75;
+}
+
+.souqna-admin-mobile-panel {
+  z-index: 85;
+  overflow: hidden;
+  border-color: var(--dash-rule-strong);
+  border-radius: 16px 16px 0 0;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--dash-panel-strong) 94%, transparent),
+      var(--dash-panel)
+    ),
+    var(--dash-panel);
+  color: var(--dash-black);
+  box-shadow: 0 -24px 70px color-mix(in srgb, var(--dash-black-soft) 32%, transparent);
+}
+
+.souqna-admin-mobile-panel-header {
+  position: relative;
+  z-index: 1;
+  padding: 14px 18px 8px;
+  text-align: start;
+}
+
+.souqna-admin-mobile-panel-body {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 8px;
+  padding: 0 14px calc(14px + env(safe-area-inset-bottom));
+}
+
+.souqna-mobile-selector {
+  display: flex;
+  min-height: 46px;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--dash-rule);
+  border-radius: var(--dash-radius);
+  background: color-mix(in srgb, var(--dash-panel-strong) 76%, transparent);
+  color: var(--dash-black);
+  text-align: start;
+}
+
+.souqna-mobile-selector:active {
+  background: var(--dash-important-soft);
+}
+
+.souqna-mobile-selector-locale {
+  padding-block: 6px;
+}
+
+.souqna-admin-window::before {
+  opacity: 0.1;
+  mask-image: linear-gradient(180deg, black, transparent 82%);
+}
+
+.souqna-admin-window-scroll {
+  position: relative;
+  z-index: 1;
+  max-height: inherit;
+  overflow-y: auto;
+  padding: 22px;
+}
+
+.souqna-admin-window-header {
+  padding-inline-end: 34px;
+}
+
+.souqna-admin-window-tabs [data-slot='tabs-list'] {
+  width: 100%;
+  border: 1px solid var(--dash-rule);
+  background: color-mix(in srgb, var(--dash-black) 5%, transparent);
+}
+
+.souqna-theme-preset,
+.souqna-color-control {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--dash-rule);
+  border-radius: var(--dash-radius);
+  background: color-mix(in srgb, var(--dash-panel-strong) 72%, transparent);
+  color: var(--dash-black);
+  text-align: start;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.souqna-theme-preset {
+  padding: 12px;
+}
+
+.souqna-color-control {
+  padding: 11px 12px;
+}
+
+.souqna-theme-preset:hover,
+.souqna-color-control:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--dash-important) 42%, transparent);
+  background: var(--dash-important-soft);
+}
+
+.souqna-theme-preset[data-active='true'] {
+  border-color: color-mix(in srgb, var(--dash-important) 58%, transparent);
+  background: color-mix(in srgb, var(--dash-important) 18%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 60%, transparent);
+}
+
+.souqna-theme-swatches {
+  display: grid;
+  width: 56px;
+  height: 28px;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(3, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--dash-rule);
+  border-radius: 6px;
+}
+
+.souqna-theme-swatches span {
+  min-width: 0;
+}
+
+.souqna-color-control input[type='color'] {
+  width: 38px;
+  height: 30px;
+  flex: 0 0 auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--dash-rule-strong);
+  border-radius: 7px;
+  background: transparent;
+}
+
+.souqna-chart-preview {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--dash-rule);
+  border-radius: var(--dash-radius);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--dash-panel-strong) 70%, transparent),
+      color-mix(in srgb, var(--dash-beige) 80%, transparent)
+    ),
+    var(--dash-panel);
+}
+
+.souqna-chart-preview::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 58%;
+  pointer-events: none;
+  opacity: 0.3;
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--dash-black) 42%, transparent) 0.68px,
+    transparent 0.8px
+  );
+  background-size: 7px 7px;
+  mask-image: linear-gradient(180deg, transparent, black);
+}
+
+.souqna-chart-preview svg {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 160px;
+}
+
+.souqna-dock-badge {
+  border-color: color-mix(in srgb, var(--dash-important) 44%, transparent);
+  background: var(--dash-important-soft);
+  color: var(--dash-black);
+}
+
+.souqna-admin-shell .souqy-launcher {
+  bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 720px) {
+  .souqna-admin-dock-wrap {
+    justify-content: center;
+    padding-inline: 10px;
+  }
+
+  .souqna-admin-dock {
+    display: none;
+  }
+
+  .souqna-admin-mobile-dock-trigger {
+    display: inline-flex;
+    width: 100%;
+  }
+
+  .souqna-admin-window {
+    top: auto !important;
+    right: 10px !important;
+    bottom: calc(74px + env(safe-area-inset-bottom)) !important;
+    left: 10px !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: min(72dvh, 620px) !important;
+    translate: 0 0 !important;
+    transform: none !important;
+    border-radius: 14px;
+  }
+
+  .souqna-admin-window-scroll {
+    max-height: min(72dvh, 620px);
+    padding: 18px;
+  }
+
+  .souqna-admin-window-header {
+    padding-inline-end: 28px;
+  }
+}
+
+@media (max-width: 640px) {
+  .souqna-admin-shell .souqy-launcher {
+    bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer,
+  body.souqna-admin-shell::before,
+  .souqna-dashboard-dither::before,
+  .souqna-admin-search-trigger::after,
+  .souqna-admin-dock::before,
+  .souqna-admin-dock::after,
+  .souqna-admin-window::before {
+    animation: none !important;
+  }
+
+  .souqna-admin-shell [data-slot='button']:hover,
+  .souqna-admin-shell [data-slot='sidebar-menu-button']:hover,
+  .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover,
+  .souqna-theme-preset:hover,
+  .souqna-color-control:hover,
+  html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-button']:hover,
+  html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover {
+    transform: none;
   }
 }
 
