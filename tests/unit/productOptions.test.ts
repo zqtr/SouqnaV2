@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_PRODUCT_SIZE_OPTIONS,
   isAllowedHeightOption,
   isAllowedProductSizeOption,
   isAllowedSizeOption,
@@ -8,7 +7,9 @@ import {
   normalizeCustomInputValue,
   normalizeHeightOptions,
   normalizeHeightInputLabel,
+  normalizePricedOptions,
   normalizeSizeOptions,
+  optionPriceDeltaFor,
 } from '@/lib/productOptions';
 
 describe('product size options', () => {
@@ -22,14 +23,28 @@ describe('product size options', () => {
     ]);
   });
 
-  it('caps the saved option count and label length', () => {
-    const values = Array.from(
-      { length: MAX_PRODUCT_SIZE_OPTIONS + 5 },
-      (_, index) => `size-${index + 1}`,
-    );
+  it('keeps all unique options and caps only label length', () => {
+    const values = Array.from({ length: 80 }, (_, index) => `size-${index + 1}`);
 
-    expect(normalizeSizeOptions(values)).toHaveLength(MAX_PRODUCT_SIZE_OPTIONS);
+    expect(normalizeSizeOptions(values)).toHaveLength(80);
     expect(normalizeSizeOptions(['x'.repeat(80)])).toEqual(['x'.repeat(40)]);
+  });
+
+  it('normalizes priced option objects while keeping label-only compatibility', () => {
+    expect(
+      normalizePricedOptions([
+        'S',
+        { label: ' M ', priceDeltaQar: '10' },
+        { label: 'XL', priceAdjustmentQar: -5 },
+        { label: 'm', priceDeltaQar: 99 },
+      ]),
+    ).toEqual([
+      { label: 'S', priceDeltaQar: 0 },
+      { label: 'M', priceDeltaQar: 10 },
+      { label: 'XL', priceDeltaQar: -5 },
+    ]);
+    expect(optionPriceDeltaFor([{ label: 'XL', priceDeltaQar: 15 }], 'xl')).toBe(15);
+    expect(optionPriceDeltaFor([{ label: 'XL', priceDeltaQar: 15 }], 'L')).toBe(0);
   });
 
   it('requires a valid selected size when a product has size options', () => {

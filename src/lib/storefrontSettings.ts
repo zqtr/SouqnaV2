@@ -48,13 +48,87 @@ export const CONFIGURABLE_PAYMENT_METHODS = [
   'sadad',
   'pay_link',
 ] as const satisfies readonly PaymentMethod[];
+export const BASE_CHECKOUT_PAYMENT_METHODS = [
+  'cod',
+  'fawran',
+] as const satisfies readonly PaymentMethod[];
 export const ONLINE_PAYMENT_METHODS = [
   'bank_transfer',
-  'fawran',
   'skipcash',
   'sadad',
   'pay_link',
 ] as const satisfies readonly PaymentMethod[];
+
+export type CheckoutPaymentAvailabilityRule = {
+  method: PaymentMethod;
+  mode: 'allow_only';
+  cities: string[];
+};
+
+export type CheckoutPaymentAvailabilityInput = {
+  city?: string | null;
+  rules?: readonly CheckoutPaymentAvailabilityRule[] | null;
+  souqnaCity?: SouqnaCitySettings | null;
+};
+
+export type SouqnaCityRegion = 'northern' | 'western' | 'eastern' | 'southern' | 'central' | 'custom';
+
+export type SouqnaCityRule = {
+  id: string;
+  city: string;
+  region: SouqnaCityRegion;
+  enabled: boolean;
+  paymentMethods: PaymentMethod[];
+  deliveryFeeQar: number | null;
+};
+
+export type SouqnaCitySettings = {
+  enabled: boolean;
+  autoMatchNearest: boolean;
+  rules: SouqnaCityRule[];
+};
+
+export const SOUQNA_CITY_REGIONS = [
+  'northern',
+  'western',
+  'eastern',
+  'southern',
+  'central',
+  'custom',
+] as const satisfies readonly SouqnaCityRegion[];
+
+export const SOUQNA_CITY_PRESETS: readonly SouqnaCityRule[] = [
+  {
+    id: 'souqna-city-al-khor',
+    city: 'Al Khor',
+    region: 'northern',
+    enabled: true,
+    paymentMethods: ['cod', 'fawran'],
+    deliveryFeeQar: null,
+  },
+  {
+    id: 'souqna-city-al-wakrah',
+    city: 'Al Wakrah',
+    region: 'southern',
+    enabled: true,
+    paymentMethods: ['cod'],
+    deliveryFeeQar: null,
+  },
+  {
+    id: 'souqna-city-al-thumamah',
+    city: 'Al Thumamah',
+    region: 'central',
+    enabled: true,
+    paymentMethods: ['cod', 'fawran'],
+    deliveryFeeQar: null,
+  },
+] as const;
+
+export const DEFAULT_SOUQNA_CITY_SETTINGS: SouqnaCitySettings = {
+  enabled: false,
+  autoMatchNearest: true,
+  rules: SOUQNA_CITY_PRESETS.map((rule) => ({ ...rule, paymentMethods: [...rule.paymentMethods] })),
+};
 
 export function isOnlinePaymentMethod(method: PaymentMethod): boolean {
   return (ONLINE_PAYMENT_METHODS as readonly PaymentMethod[]).includes(method);
@@ -64,13 +138,160 @@ export function checkoutPaymentMethodsForPlan(
   methods: readonly PaymentMethod[],
   canAcceptOnlinePayments: boolean,
 ): PaymentMethod[] {
-  if (!canAcceptOnlinePayments) return ['cod'];
+  const allowed = canAcceptOnlinePayments ? PAYMENT_METHODS : BASE_CHECKOUT_PAYMENT_METHODS;
   const unique = methods.filter(
     (method, index, all) =>
-      (PAYMENT_METHODS as readonly PaymentMethod[]).includes(method) &&
+      (allowed as readonly PaymentMethod[]).includes(method) &&
       all.indexOf(method) === index,
   );
   return unique.length > 0 ? unique : ['cod'];
+}
+
+export function checkoutPaymentMethodsForBuyer(
+  methods: readonly PaymentMethod[],
+  canAcceptOnlinePayments: boolean,
+  availability?: CheckoutPaymentAvailabilityInput,
+): PaymentMethod[] {
+  const allowed = canAcceptOnlinePayments ? PAYMENT_METHODS : BASE_CHECKOUT_PAYMENT_METHODS;
+  const cityRule = matchSouqnaCityRule(availability?.city, availability?.souqnaCity);
+  const cityAllowedMethods = cityRule?.paymentMethods;
+  return methods.filter(
+    (method, index, all) =>
+      (allowed as readonly PaymentMethod[]).includes(method) &&
+      all.indexOf(method) === index &&
+      paymentMethodAvailableForCheckout(method, availability) &&
+      (!cityAllowedMethods || cityAllowedMethods.includes(method)),
+  );
+}
+
+export function paymentMethodAvailableForCheckout(
+  method: PaymentMethod,
+  availability?: CheckoutPaymentAvailabilityInput,
+): boolean {
+  const rules = availability?.rules?.filter((rule) => rule.method === method) ?? [];
+  if (rules.length === 0) return true;
+  const city = normalizeCheckoutCity(availability?.city);
+  return rules.some((rule) => {
+    if (rule.mode !== 'allow_only') return true;
+    if (!city) return false;
+    return rule.cities.map(normalizeCheckoutCity).includes(city);
+  });
+}
+
+function normalizeCheckoutCity(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+export function checkoutDeliveryFeeForBuyer(
+  fallbackFeeQar: number,
+  city: string | null | undefined,
+  souqnaCity?: SouqnaCitySettings | null,
+): number {
+  const rule = matchSouqnaCityRule(city, souqnaCity);
+  if (!rule || rule.deliveryFeeQar === null) return fallbackFeeQar;
+  return Math.max(0, Math.floor(rule.deliveryFeeQar));
+}
+
+export function matchSouqnaCityRule(
+  city: string | null | undefined,
+  souqnaCity?: SouqnaCitySettings | null,
+): SouqnaCityRule | null {
+  if (!souqnaCity?.enabled) return null;
+  const normalizedCity = normalizeCheckoutCity(city);
+  if (!normalizedCity) return null;
+  const enabledRules = souqnaCity.rules.filter((rule) => rule.enabled && rule.city.trim());
+  const exact = enabledRules.find((rule) => normalizeCheckoutCity(rule.city) === normalizedCity);
+  if (exact) return exact;
+  if (!souqnaCity.autoMatchNearest) return null;
+  const inferredRegion = souqnaCityRegionForCity(normalizedCity);
+  if (!inferredRegion) return null;
+  return enabledRules.find((rule) => rule.region === inferredRegion) ?? null;
+}
+
+export function souqnaCityRegionForCity(city: string | null | undefined): SouqnaCityRegion | null {
+  const normalized = normalizeCheckoutCity(city);
+  if (!normalized) return null;
+  if (
+    [
+      'al khor',
+      'alkhor',
+      'al shamal',
+      'shamal',
+      'madinat ash shamal',
+      'umm salal',
+      'lusail',
+      'al daayen',
+      'سميسمة',
+      'الشمال',
+      'الخور',
+    ].includes(normalized)
+  ) {
+    return 'northern';
+  }
+  if (
+    [
+      'al shahaniya',
+      'shahaniya',
+      'dukhan',
+      'al rayyan',
+      'rayyan',
+      'abu samra',
+      'الشحانية',
+      'دخان',
+      'الريان',
+    ].includes(normalized)
+  ) {
+    return 'western';
+  }
+  if (
+    ['the pearl', 'pearl', 'west bay', 'lusail marina', 'old airport', 'الؤلؤة', 'الخليج الغربي'].includes(
+      normalized,
+    )
+  ) {
+    return 'eastern';
+  }
+  if (
+    [
+      'al wakrah',
+      'wakrah',
+      'al wukair',
+      'wukair',
+      'mesaieed',
+      'mesaieed',
+      'al thumamah',
+      'thumamah',
+      'الوكرة',
+      'الوكير',
+      'مسيعيد',
+      'الثمامة',
+    ].includes(normalized)
+  ) {
+    return 'southern';
+  }
+  if (
+    [
+      'doha',
+      'msheireb',
+      'musherib',
+      'bin mahmoud',
+      'najma',
+      'muntazah',
+      'al sadd',
+      'madinat khalifa',
+      'الدوجة',
+      'الدوحة',
+      'مشيرب',
+      'السد',
+      'نجمة',
+    ].includes(normalized)
+  ) {
+    return 'central';
+  }
+  return null;
 }
 
 export type BankDetails = {
@@ -94,6 +315,116 @@ export type ThankYouSettings = {
   showOrderSummary: boolean;
 };
 
+export type CheckoutAddressDesign = 'qatar_plate' | 'soft_card' | 'classic';
+export const CHECKOUT_ADDRESS_DESIGNS = [
+  'qatar_plate',
+  'soft_card',
+  'classic',
+] as const satisfies readonly CheckoutAddressDesign[];
+
+export type CheckoutButtonStyle = 'solid' | 'maroon' | 'gold' | 'outline';
+export const CHECKOUT_BUTTON_STYLES = [
+  'solid',
+  'maroon',
+  'gold',
+  'outline',
+] as const satisfies readonly CheckoutButtonStyle[];
+
+export type CheckoutTrustBadge =
+  | 'secure_checkout'
+  | 'fast_confirmation'
+  | 'whatsapp_support'
+  | 'local_delivery';
+export const CHECKOUT_TRUST_BADGES = [
+  'secure_checkout',
+  'fast_confirmation',
+  'whatsapp_support',
+  'local_delivery',
+] as const satisfies readonly CheckoutTrustBadge[];
+
+export type CheckoutCustomTrustBadge = {
+  labelEn: string;
+  labelAr: string;
+};
+
+export type CheckoutBackgroundPreset = 'sand' | 'pearl' | 'midnight' | 'plate' | 'custom';
+export const CHECKOUT_BACKGROUND_PRESETS = [
+  'sand',
+  'pearl',
+  'midnight',
+  'plate',
+  'custom',
+] as const satisfies readonly CheckoutBackgroundPreset[];
+
+export type CheckoutCustomColors = {
+  background: string | null;
+  surface: string | null;
+  accent: string | null;
+  text: string | null;
+  buttonText: string | null;
+};
+
+export type CheckoutPaymentCardStyle = 'soft' | 'bordered' | 'compact';
+export const CHECKOUT_PAYMENT_CARD_STYLES = [
+  'soft',
+  'bordered',
+  'compact',
+] as const satisfies readonly CheckoutPaymentCardStyle[];
+
+export type CheckoutOrderSummaryLayout = 'side' | 'bottom' | 'compact';
+export const CHECKOUT_ORDER_SUMMARY_LAYOUTS = [
+  'side',
+  'bottom',
+  'compact',
+] as const satisfies readonly CheckoutOrderSummaryLayout[];
+
+export type CheckoutThankYouStyle = 'warm' | 'minimal' | 'celebration';
+export const CHECKOUT_THANK_YOU_STYLES = [
+  'warm',
+  'minimal',
+  'celebration',
+] as const satisfies readonly CheckoutThankYouStyle[];
+
+export type CheckoutExperienceSettings = {
+  heroTitle: string | null;
+  heroSubtitle: string | null;
+  backgroundPreset: CheckoutBackgroundPreset;
+  customColors: CheckoutCustomColors;
+  customCss: string | null;
+  buttonStyle: CheckoutButtonStyle;
+  trustBadges: CheckoutTrustBadge[];
+  customTrustBadges: CheckoutCustomTrustBadge[];
+  deliveryNotes: string | null;
+  paymentCardStyle: CheckoutPaymentCardStyle;
+  orderSummaryLayout: CheckoutOrderSummaryLayout;
+  thankYouStyle: CheckoutThankYouStyle;
+  paymentAvailabilityRules: CheckoutPaymentAvailabilityRule[];
+  souqnaCity: SouqnaCitySettings;
+};
+
+export const DEFAULT_CHECKOUT_EXPERIENCE: CheckoutExperienceSettings = {
+  heroTitle: null,
+  heroSubtitle: null,
+  backgroundPreset: 'sand',
+  customColors: {
+    background: null,
+    surface: null,
+    accent: null,
+    text: null,
+    buttonText: null,
+  },
+  customCss: null,
+  buttonStyle: 'solid',
+  trustBadges: ['secure_checkout', 'whatsapp_support'],
+  customTrustBadges: [],
+  deliveryNotes: null,
+  paymentCardStyle: 'soft',
+  orderSummaryLayout: 'side',
+  thankYouStyle: 'warm',
+  paymentAvailabilityRules: [],
+  souqnaCity: { ...DEFAULT_SOUQNA_CITY_SETTINGS, rules: DEFAULT_SOUQNA_CITY_SETTINGS.rules.map((rule) => ({ ...rule, paymentMethods: [...rule.paymentMethods] })) },
+};
+
 export type SkipCashSettings = {
   hasCredentials: boolean;
   clientIdHint: string | null;
@@ -111,6 +442,7 @@ export type SadadSettings = {
 };
 
 export type CheckoutSettings = {
+  enabled: boolean;
   paymentMethods: PaymentMethod[];
   bankDetails: BankDetails | null;
   payLink: PayLink | null;
@@ -120,6 +452,8 @@ export type CheckoutSettings = {
   currency: string;
   minOrderQar: number | null;
   shippingFlatQar: number | null;
+  addressDesign: CheckoutAddressDesign;
+  experience: CheckoutExperienceSettings;
   thankYou: ThankYouSettings;
 };
 
@@ -131,7 +465,8 @@ export const EMPTY_POLICIES: StorefrontPolicies = {
 };
 
 export const DEFAULT_CHECKOUT_SETTINGS: CheckoutSettings = {
-  paymentMethods: ['cod', 'bank_transfer'],
+  enabled: true,
+  paymentMethods: ['cod'],
   bankDetails: null,
   payLink: null,
   skipCash: null,
@@ -140,6 +475,8 @@ export const DEFAULT_CHECKOUT_SETTINGS: CheckoutSettings = {
   currency: 'QAR',
   minOrderQar: null,
   shippingFlatQar: null,
+  addressDesign: 'qatar_plate',
+  experience: { ...DEFAULT_CHECKOUT_EXPERIENCE },
   thankYou: {
     title: null,
     message: null,
@@ -196,6 +533,10 @@ export async function writeStorefrontCheckoutSettings(
 ): Promise<void> {
   const bankJson = patch.bankDetails ? JSON.stringify(patch.bankDetails) : null;
   const thankYouJson = JSON.stringify(patch.thankYou);
+  const experienceJson = JSON.stringify({
+    ...patch.experience,
+    enabled: true,
+  });
   await db()`
     update briefs set
       checkout_payment_methods   = ${patch.paymentMethods as unknown as string},
@@ -206,6 +547,8 @@ export async function writeStorefrontCheckoutSettings(
       checkout_currency          = ${patch.currency},
       checkout_min_order_qar     = ${patch.minOrderQar},
       checkout_shipping_flat_qar = ${patch.shippingFlatQar},
+      checkout_address_design    = ${patch.addressDesign},
+      checkout_experience        = ${experienceJson}::jsonb,
       checkout_thank_you         = ${thankYouJson}::jsonb
     where slug = ${slug} and expires_at > now()
   `;

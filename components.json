@@ -31,6 +31,12 @@
         "Authorization": "Bearer ${REACTBITS_LICENSE_KEY}"
       }
     },
-    "@react-bits": "https://reactbits.dev/r/{name}.json"
+    "@react-bits": "https://reactbits.dev/r/{name}.json",
+    "@shadcnblocks": {
+      "url": "https://shadcnblocks.com/r/{name}",
+      "headers": {
+        "Authorization": "Bearer ${SHADCNBLOCKS_API_KEY}"
+      }
+    }
   }
 }

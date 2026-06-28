@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Listing } from '@/lib/apps/souqnasource/types';

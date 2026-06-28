@@ -259,6 +259,93 @@
 [data-theme='light'][data-admin-accent='warm'] { --admin-accent: #a8893f; --admin-accent-soft: color-mix(in srgb, #a8893f 14%, transparent); }
 [data-theme='dark'][data-admin-accent='warm']  { --admin-accent: #c8a14a; --admin-accent-soft: color-mix(in srgb, #c8a14a 18%, transparent); }
 
+/* Midnight — premium dark-first operator mode with a cool commerce signal. */
+[data-theme='light'][data-admin-accent='midnight'] {
+  --surface-bg: #eff6ff;
+  --surface-elevated: #f8fbff;
+  --surface-overlay: #ffffff;
+  --surface-sunken: #dbeafe;
+  --surface-rule: rgba(15, 23, 42, 0.10);
+  --surface-rule-strong: rgba(15, 23, 42, 0.20);
+  --ink-strong: #0f172a;
+  --ink-muted: rgba(15, 23, 42, 0.64);
+  --ink-faint: rgba(15, 23, 42, 0.42);
+  --admin-accent: #2563eb;
+  --admin-accent-soft: rgba(37, 99, 235, 0.12);
+}
+[data-theme='dark'][data-admin-accent='midnight'] {
+  --surface-bg: #030712;
+  --surface-elevated: #0b1020;
+  --surface-overlay: #111827;
+  --surface-sunken: #020617;
+  --surface-rule: rgba(191, 219, 254, 0.12);
+  --surface-rule-strong: rgba(191, 219, 254, 0.24);
+  --ink-strong: #f8fafc;
+  --ink-muted: rgba(248, 250, 252, 0.68);
+  --ink-faint: rgba(248, 250, 252, 0.42);
+  --admin-accent: #60a5fa;
+  --admin-accent-soft: rgba(96, 165, 250, 0.14);
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.04), 0 18px 44px rgba(0,0,0,0.42);
+}
+
+/* Pearl — light editorial calm, still works as a warm dark admin. */
+[data-theme='light'][data-admin-accent='pearl'] {
+  --surface-bg: #f7f3ea;
+  --surface-elevated: #fffaf0;
+  --surface-overlay: #ffffff;
+  --surface-sunken: #eee5d4;
+  --surface-rule: rgba(47, 39, 26, 0.11);
+  --surface-rule-strong: rgba(47, 39, 26, 0.22);
+  --ink-strong: #221f1a;
+  --ink-muted: rgba(34, 31, 26, 0.64);
+  --ink-faint: rgba(34, 31, 26, 0.42);
+  --admin-accent: #9f7445;
+  --admin-accent-soft: rgba(159, 116, 69, 0.13);
+}
+[data-theme='dark'][data-admin-accent='pearl'] {
+  --surface-bg: #11100d;
+  --surface-elevated: #1c1914;
+  --surface-overlay: #272218;
+  --surface-sunken: #090806;
+  --surface-rule: rgba(247, 243, 234, 0.12);
+  --surface-rule-strong: rgba(247, 243, 234, 0.22);
+  --ink-strong: #f7f3ea;
+  --ink-muted: rgba(247, 243, 234, 0.68);
+  --ink-faint: rgba(247, 243, 234, 0.42);
+  --admin-accent: #d8bd82;
+  --admin-accent-soft: rgba(216, 189, 130, 0.14);
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.04), 0 18px 42px rgba(0,0,0,0.44);
+}
+
+/* Graphite — dense neutral workspace with stronger dark-card lift. */
+[data-theme='light'][data-admin-accent='graphite'] {
+  --surface-bg: #f4f4f5;
+  --surface-elevated: #ffffff;
+  --surface-overlay: #ffffff;
+  --surface-sunken: #e4e4e7;
+  --surface-rule: rgba(24, 24, 27, 0.10);
+  --surface-rule-strong: rgba(24, 24, 27, 0.20);
+  --ink-strong: #18181b;
+  --ink-muted: rgba(24, 24, 27, 0.64);
+  --ink-faint: rgba(24, 24, 27, 0.42);
+  --admin-accent: #3f3f46;
+  --admin-accent-soft: rgba(63, 63, 70, 0.12);
+}
+[data-theme='dark'][data-admin-accent='graphite'] {
+  --surface-bg: #09090b;
+  --surface-elevated: #18181b;
+  --surface-overlay: #27272a;
+  --surface-sunken: #030304;
+  --surface-rule: rgba(244, 244, 245, 0.12);
+  --surface-rule-strong: rgba(244, 244, 245, 0.24);
+  --ink-strong: #fafafa;
+  --ink-muted: rgba(250, 250, 250, 0.66);
+  --ink-faint: rgba(250, 250, 250, 0.42);
+  --admin-accent: #e4e4e7;
+  --admin-accent-soft: rgba(228, 228, 231, 0.12);
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.04), 0 20px 48px rgba(0,0,0,0.46);
+}
+
 /* ─── Base ──────────────────────────────────────────────────────────
    No CSS reset beyond Tailwind preflight. Body anchors to the active
    theme's surface tokens.

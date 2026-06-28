@@ -32,6 +32,8 @@ type Plan = {
   categoryCreates?: unknown[];
   productCreates?: unknown[];
   productUpdates?: unknown[];
+  categoryAssignments?: unknown[];
+  checkoutPaymentRules?: unknown[];
   seo?: unknown;
 };
 
@@ -310,6 +312,8 @@ function MessageBubble({
         productsCreated?: number;
         productsUpdated?: number;
         categoriesCreated?: number;
+        categoryAssignmentsApplied?: number;
+        checkoutRulesUpdated?: boolean;
         seoUpdated?: boolean;
       }
     | undefined;
@@ -344,6 +348,10 @@ function MessageBubble({
                 applied.productsCreated ? `${applied.productsCreated} created` : '',
                 applied.productsUpdated ? `${applied.productsUpdated} updated` : '',
                 applied.categoriesCreated ? `${applied.categoriesCreated} categories` : '',
+                applied.categoryAssignmentsApplied
+                  ? `${applied.categoryAssignmentsApplied} assigned`
+                  : '',
+                applied.checkoutRulesUpdated ? 'checkout updated' : '',
                 applied.seoUpdated ? 'SEO updated' : '',
               ]
                 .filter(Boolean)
@@ -395,6 +403,8 @@ function PlanCard({
     (plan.categoryCreates?.length ?? 0) +
     (plan.productCreates?.length ?? 0) +
     (plan.productUpdates?.length ?? 0) +
+    (plan.categoryAssignments?.length ?? 0) +
+    (plan.checkoutPaymentRules?.length ?? 0) +
     (plan.seo ? 1 : 0);
   const questions = plan.questions ?? [];
   const hasChanges = changeCount > 0;
@@ -631,6 +641,10 @@ function parsePlan(value: unknown): Plan | null {
     categoryCreates: Array.isArray(plan.categoryCreates) ? plan.categoryCreates : [],
     productCreates: Array.isArray(plan.productCreates) ? plan.productCreates : [],
     productUpdates: Array.isArray(plan.productUpdates) ? plan.productUpdates : [],
+    categoryAssignments: Array.isArray(plan.categoryAssignments) ? plan.categoryAssignments : [],
+    checkoutPaymentRules: Array.isArray(plan.checkoutPaymentRules)
+      ? plan.checkoutPaymentRules
+      : [],
     seo: plan.seo ?? null,
   };
 }

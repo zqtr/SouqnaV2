@@ -47,6 +47,10 @@ import { listDrops } from '@/lib/apps/drop-manager';
 import { listKits } from '@/lib/apps/lookbook';
 import { getMawidSettings } from '@/lib/apps/mawid';
 import { getTaqimSettings } from '@/lib/apps/taqim';
+import {
+  getReviewsSettings,
+  listReviewsForAdmin,
+} from '@/lib/apps/reviews';
 
 /**
  * Single shape returned to the builder's AppSettingsModal so it can
@@ -89,6 +93,8 @@ export type AppConfigContext = {
   kits?: unknown;
   mawidSettings?: unknown;
   taqimSettings?: unknown;
+  reviewsSettings?: unknown;
+  reviews?: unknown;
 };
 
 export type LoadAppConfigContextResult =
@@ -207,6 +213,10 @@ export async function loadAppConfigContext(
       break;
     case 'taqim':
       context.taqimSettings = await getTaqimSettings(storefrontSlug);
+      break;
+    case 'reviews':
+      context.reviewsSettings = await getReviewsSettings(storefrontSlug);
+      context.reviews = await listReviewsForAdmin(storefrontSlug);
       break;
     default:
       break;

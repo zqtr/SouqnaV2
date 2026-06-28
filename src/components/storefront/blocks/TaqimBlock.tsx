@@ -3,6 +3,7 @@ import type { BlockRenderProps } from './BlockContext';
 import type { TaqimBlockProps } from '@/lib/blocks/types';
 import { COMPONENT_SHOWCASE_BUNDLE_ID } from '@/lib/blocks/componentShowcase';
 import { getInstalledApp } from '@/lib/apps/installed';
+import { TaqimBundleCart } from './TaqimBundleCart';
 import {
   getTaqimSettings,
   getBundleById,
@@ -12,6 +13,8 @@ import {
   type TaqimSettings,
 } from '@/lib/apps/taqim';
 import type { Product } from '@/lib/products';
+import { isVideoMediaUrl } from '@/lib/media';
+import type { CSSProperties } from 'react';
 
 /**
  * Server-rendered Taqim (bundles & complete-the-look) block.
@@ -31,6 +34,9 @@ export async function TaqimBlock({ block, ctx }: BlockRenderProps<TaqimBlockProp
   const slug = ctx.storefront.slug;
   if (block.props.bundleId === COMPONENT_SHOWCASE_BUNDLE_ID) {
     return <TaqimShowcaseCard block={block} ctx={ctx} />;
+  }
+  if (block.props.bundle?.items?.length) {
+    return <ControlledTaqimBundle block={block} ctx={ctx} />;
   }
 
   const installed = await getInstalledApp(slug, 'taqim').catch(() => null);
@@ -216,6 +222,182 @@ export async function TaqimBlock({ block, ctx }: BlockRenderProps<TaqimBlockProp
   );
 }
 
+function ControlledTaqimBundle({ block, ctx }: BlockRenderProps<TaqimBlockProps>) {
+  const bundle = block.props.bundle;
+  if (!bundle?.items?.length) return null;
+
+  const isAr = ctx.isRtl;
+  const productMap = new Map(ctx.products.map((product) => [product.id, product]));
+  const orderedProducts = bundle.items
+    .map((item) => productMap.get(item.productId))
+    .filter((product): product is Product => Boolean(product));
+  if (orderedProducts.length === 0) {
+    return ctx.isPreview ? (
+      <TaqimSetupCard
+        title="Choose bundle products"
+        body="Pick real products from the Builder inspector before publishing this bundle block."
+      />
+    ) : null;
+  }
+
+  const bundleItems = bundle.items
+    .map((item) => {
+      const product = productMap.get(item.productId);
+      if (!product || product.priceQar === null || product.status === 'sold_out' || product.stock <= 0) {
+        return null;
+      }
+      return {
+        productId: product.id,
+        title: product.title,
+        priceQar: product.priceQar,
+        imageUrl: product.imageUrl,
+        required: item.required !== false,
+        selected: item.required !== false,
+        defaultOptionValue: item.defaultOptionValue ?? null,
+        buyerCanChooseOption: item.buyerCanChooseOption,
+        sizeOptions: product.sizeOptions,
+        sizeOptionPrices: product.sizeOptionPrices,
+        badge: isAr ? item.badgeAr || item.badgeEn : item.badgeEn || item.badgeAr,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const subtotal = bundleItems.reduce((sum, item) => sum + item.priceQar, 0);
+  const pricing = bundle.pricing;
+  const pricingMode = pricing?.mode ?? 'auto_total';
+  const displayTotal = computeControlledBundleTotal(subtotal, pricing);
+  const savings = Math.max(0, subtotal - displayTotal);
+  const displayOnlyDiscount = pricingMode !== 'auto_total';
+  const badgeLabel = isAr ? bundle.badge?.labelAr || bundle.badge?.labelEn : bundle.badge?.labelEn || bundle.badge?.labelAr;
+  const heading =
+    block.props.heading?.trim() ||
+    (isAr ? bundle.titleAr || bundle.titleEn : bundle.titleEn || bundle.titleAr) ||
+    (isAr ? 'عرض باقة' : 'Bundle offer');
+  const ctaLabel =
+    (isAr ? bundle.cta?.labelAr || bundle.cta?.labelEn : bundle.cta?.labelEn || bundle.cta?.labelAr) ||
+    (isAr ? 'أضف الباقة للسلة' : 'Add bundle to cart');
+  const layout = block.props.variant ?? 'cards';
+  const radiusPx = 14;
+
+  return (
+    <section
+      style={{
+        display: 'grid',
+        gap: 18,
+        padding: 'clamp(18px, 3vw, 28px)',
+        borderRadius: 18,
+        border: '1px solid color-mix(in srgb, var(--sf-accent) 24%, transparent)',
+        background: 'color-mix(in srgb, var(--sf-accent) 7%, transparent)',
+      }}
+    >
+      <header style={{ display: 'grid', gap: 8 }}>
+        <span
+          style={{
+            width: 'fit-content',
+            borderRadius: 999,
+            padding: '5px 11px',
+            background: 'color-mix(in srgb, var(--sf-accent) 18%, transparent)',
+            color: 'var(--sf-accent)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {badgeLabel || (isAr ? 'باقة متجر' : 'Bundle deal')}
+        </span>
+        <h2
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-serif, var(--font-sans))',
+            fontWeight: 'var(--sf-heading-weight, 400)' as unknown as number,
+            fontSize: 'clamp(24px, 3vw, 36px)',
+            color: 'var(--sf-ink)',
+          }}
+        >
+          {heading}
+        </h2>
+      </header>
+
+      <BundleItems
+        items={orderedProducts}
+        layout={layout}
+        radiusPx={radiusPx}
+        plusGlyph="+"
+        accentCss="var(--sf-accent)"
+      />
+
+      <footer
+        style={{
+          display: 'grid',
+          gap: 12,
+          borderTop: '1px solid color-mix(in srgb, var(--sf-ink) 10%, transparent)',
+          paddingTop: 14,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span
+            style={{
+              fontFamily: 'var(--font-serif, var(--font-sans))',
+              fontSize: 24,
+              color: 'var(--sf-ink)',
+            }}
+          >
+            {displayTotal.toFixed(2)} QAR
+          </span>
+          {subtotal > displayTotal ? (
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                color: 'color-mix(in srgb, var(--sf-ink) 55%, transparent)',
+                textDecoration: 'line-through',
+              }}
+            >
+              {subtotal.toFixed(2)} QAR
+            </span>
+          ) : null}
+          {pricing?.showSavings !== false && savings > 0 ? (
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--sf-ground)',
+                background: 'var(--sf-accent)',
+                padding: '4px 10px',
+                borderRadius: 999,
+              }}
+            >
+              {isAr ? `وفر ${savings.toFixed(0)} ر.ق` : `Save QAR ${savings.toFixed(0)}`}
+            </span>
+          ) : null}
+        </div>
+        {displayOnlyDiscount ? (
+          <p
+            style={{
+              margin: 0,
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: 'color-mix(in srgb, var(--sf-ink) 64%, transparent)',
+            }}
+          >
+            {isAr
+              ? 'توفير الباقة ظاهر فقط حاليا. الدفع سيحسب أسعار المنتجات حتى يتم تفعيل خصم الباقات في الخلفية.'
+              : 'Bundle savings are display-only for now. Checkout charges item prices until backend bundle discounts are enabled.'}
+          </p>
+        ) : null}
+        <TaqimBundleCart
+          items={bundleItems}
+          mode={bundle.cta?.mode ?? 'add_all'}
+          label={ctaLabel}
+          showPerProductButtons={bundle.cta?.showPerProductButtons}
+          isRtl={isAr}
+          radiusPx={radiusPx}
+        />
+      </footer>
+    </section>
+  );
+}
+
 function TaqimShowcaseCard({ block, ctx }: BlockRenderProps<TaqimBlockProps>) {
   const isAr = ctx.isRtl;
   const products = ctx.products.slice(0, 2);
@@ -299,14 +481,12 @@ function TaqimShowcaseCard({ block, ctx }: BlockRenderProps<TaqimBlockProps>) {
             }}
           >
             {item.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={item.imageUrl}
-                alt={item.title}
+              <TaqimProductMedia
+                url={item.imageUrl}
+                title={item.title}
                 style={{
                   width: '100%',
                   aspectRatio: '4 / 3',
-                  objectFit: 'cover',
                   borderRadius: 10,
                   display: 'block',
                 }}
@@ -406,6 +586,23 @@ function resolveBundle(settings: TaqimSettings, props: TaqimBlockProps): TaqimBu
   return settings.bundles.find((b) => b.enabled) ?? null;
 }
 
+function computeControlledBundleTotal(
+  subtotal: number,
+  pricing: NonNullable<TaqimBlockProps['bundle']>['pricing'],
+) {
+  const mode = pricing?.mode ?? 'auto_total';
+  if (mode === 'percent_discount' && typeof pricing?.percentOff === 'number') {
+    return Math.max(0, subtotal * (1 - pricing.percentOff / 100));
+  }
+  if (mode === 'fixed_discount' && typeof pricing?.fixedDiscountQar === 'number') {
+    return Math.max(0, subtotal - pricing.fixedDiscountQar);
+  }
+  if (mode === 'fixed_bundle_price' && typeof pricing?.fixedBundlePriceQar === 'number') {
+    return Math.max(0, pricing.fixedBundlePriceQar);
+  }
+  return subtotal;
+}
+
 function BundleItems({
   items,
   layout,
@@ -445,11 +642,10 @@ function BundleItems({
             }}
           >
             {p.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={p.imageUrl}
-                alt={p.title}
-                style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: radiusPx / 2 }}
+              <TaqimProductMedia
+                url={p.imageUrl}
+                title={p.title}
+                style={{ width: 56, height: 56, borderRadius: radiusPx / 2 }}
               />
             ) : (
               <div
@@ -532,11 +728,10 @@ function BundleItems({
               </span>
             ) : null}
             {p.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={p.imageUrl}
-                alt={p.title}
-                style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover' }}
+              <TaqimProductMedia
+                url={p.imageUrl}
+                title={p.title}
+                style={{ width: '100%', aspectRatio: '4 / 5' }}
               />
             ) : (
               <div
@@ -598,14 +793,12 @@ function BundleItems({
             }}
           >
             {p.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={p.imageUrl}
-                alt={p.title}
+              <TaqimProductMedia
+                url={p.imageUrl}
+                title={p.title}
                 style={{
                   width: '100%',
                   aspectRatio: '4 / 5',
-                  objectFit: 'cover',
                   display: 'block',
                 }}
               />
@@ -664,4 +857,38 @@ function BundleItems({
       ))}
     </div>
   );
+}
+
+function TaqimProductMedia({
+  url,
+  title,
+  style,
+}: {
+  url: string;
+  title: string;
+  style: CSSProperties;
+}) {
+  const mediaStyle: CSSProperties = {
+    objectFit: 'contain',
+    objectPosition: 'center',
+    background: 'color-mix(in srgb, var(--sf-ink) 6%, transparent)',
+    ...style,
+  };
+
+  if (isVideoMediaUrl(url)) {
+    return (
+      <video
+        src={url}
+        aria-label={title}
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        style={mediaStyle}
+      />
+    );
+  }
+
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={title} style={mediaStyle} />;
 }

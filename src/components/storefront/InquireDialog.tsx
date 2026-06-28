@@ -274,7 +274,7 @@ function InquireModal({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   style={inputStyle}
-                  placeholder="you@example.com"
+                  placeholder="name@store.qa"
                   autoComplete="email"
                 />
               </Field>

@@ -48,6 +48,10 @@ import { listKits } from '@/lib/apps/lookbook';
 import { getMawidSettings } from '@/lib/apps/mawid';
 import { getTaqimSettings } from '@/lib/apps/taqim';
 import {
+  getReviewsSettings,
+  listReviewsForAdmin,
+} from '@/lib/apps/reviews';
+import {
   normaliseSettings as normaliseWhatsApp,
   whatsappDigits,
 } from '@/lib/apps/whatsapp';
@@ -74,6 +78,7 @@ import { AramexSettingsForm } from '@/components/admin/apps/AramexSettings';
 import { MawidSettingsForm } from '@/components/admin/apps/MawidSettings';
 import { TaqimSettingsForm } from '@/components/admin/apps/TaqimSettings';
 import { WhatsAppBusinessSettingsForm } from '@/components/admin/apps/WhatsAppBusinessSettings';
+import { ReviewsSettingsForm } from '@/components/admin/apps/ReviewsSettings';
 import { AppMark } from '@/components/admin/apps/AppMark';
 
 export default async function AppConfigurePage({
@@ -135,6 +140,8 @@ export default async function AppConfigurePage({
   const kits = desc.id === 'lookbook' ? await listKits(slug) : null;
   const mawidSettings = desc.id === 'mawid' ? await getMawidSettings(slug) : null;
   const taqimSettings = desc.id === 'taqim' ? await getTaqimSettings(slug) : null;
+  const reviewsSettings = desc.id === 'reviews' ? await getReviewsSettings(slug) : null;
+  const reviews = desc.id === 'reviews' ? await listReviewsForAdmin(slug) : null;
   const whatsappSettings =
     desc.id === 'whatsapp-business'
       ? normaliseWhatsApp(installed.settings)
@@ -313,6 +320,13 @@ export default async function AppConfigurePage({
                   ? installed.providerAccount.displayPhoneNumber
                   : whatsappDigits(installed)
               }
+            />
+          ) : null}
+          {reviewsSettings && reviews ? (
+            <ReviewsSettingsForm
+              storefrontSlug={slug}
+              initial={reviewsSettings}
+              reviews={reviews}
             />
           ) : null}
 

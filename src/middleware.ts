@@ -90,6 +90,7 @@ const isNonLocalizedRoute = createRouteMatcher([
   '/(ar|en)/begin(.*)',
   '/souqna(.*)',
   '/pricing-preview(.*)',
+  '/template-showcase(.*)',
   '/account(.*)',
   '/brief(.*)',
   '/api/(.*)',

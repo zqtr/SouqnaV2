@@ -27,7 +27,7 @@ const planCopy = {
     eyebrow: 'Plans',
     title: 'Start free. Upgrade when growth tools matter.',
     muted:
-      'Souqna plans now match real storefront growth: product caps, AI credits, integrations, and support scale clearly by tier.',
+      'Free and Pro use Fawran plus cash on delivery. Pro+ and Max+ unlock SADAD, SkipCash, and Tap Payments.',
     plans: [
       {
         name: 'Free',
@@ -41,6 +41,8 @@ const planCopy = {
           '10 products',
           '1 template',
           '25 orders/month',
+          'Fawran + cash on delivery',
+          'Basic analytics',
           'Souqna branding locked',
           'Upgrade to unlock growth tools',
         ],
@@ -58,8 +60,10 @@ const planCopy = {
           'Unlimited products',
           'Custom domain',
           'Remove branding',
-          'Basic analytics',
+          'Basic analytics with more history',
+          'Analytics export ready',
           'WhatsApp, discounts, and SEO',
+          'Fawran + cash on delivery',
           '100 AI credits/month',
         ],
       },
@@ -67,7 +71,7 @@ const planCopy = {
         name: 'Pro+',
         price: '145 QAR',
         label: '/ mo',
-        description: 'Most chosen: AI, marketing, teams, and automation.',
+        description: 'Most chosen: AI, marketing, teams, automation, and providers.',
         cta: 'Choose Pro+',
         billingPlan: 'pro',
         href: '/account/settings/plan?plan=pro_plus',
@@ -77,16 +81,18 @@ const planCopy = {
           'AI branding assets',
           'EN + AR AI generation',
           'Marketing apps',
+          'Payment providers: SADAD, SkipCash, Tap Payments',
           'Meta/TikTok integrations',
           'Team and automation flows',
           'Advanced analytics',
+          'Funnels, behavior, attribution, and AI insights',
         ],
       },
       {
         name: 'Max+',
         price: '235 QAR',
         label: '/ mo',
-        description: 'For agencies, operators, and multi-brand sellers.',
+        description: 'For agencies, operators, multi-brand sellers, and every provider.',
         cta: 'Choose Max+',
         billingPlan: 'atelier',
         href: '/account/settings/plan?plan=max',
@@ -96,6 +102,9 @@ const planCopy = {
           'Client permissions',
           'White-label tools',
           'API access',
+          'All payment providers: SADAD, SkipCash, Tap Payments',
+          'Advanced analytics with forecasting',
+          'Multi-store reporting',
           'AI bulk operations',
           'Advanced SEO AI',
           'Dedicated support',
@@ -196,6 +205,7 @@ export function Pricing5({ locale }: { locale: Locale }) {
   const isRtl = locale === 'ar';
   const [pendingPlan, setPendingPlan] = useState<PaidPlan | null>(null);
   const [errorPlan, setErrorPlan] = useState<PaidPlan | null>(null);
+  const [checkoutError, setCheckoutError] = useState('');
   const [, startTransition] = useTransition();
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -215,6 +225,7 @@ export function Pricing5({ locale }: { locale: Locale }) {
 
   const beginCheckout = (billingPlan: PaidPlan) => {
     setErrorPlan(null);
+    setCheckoutError('');
     setPendingPlan(billingPlan);
     startTransition(async () => {
       const res = await startCheckout({ plan: billingPlan, cycle: 'monthly' });
@@ -224,6 +235,7 @@ export function Pricing5({ locale }: { locale: Locale }) {
       }
       setPendingPlan(null);
       setErrorPlan(billingPlan);
+      setCheckoutError(res.message);
     });
   };
 
@@ -399,9 +411,10 @@ export function Pricing5({ locale }: { locale: Locale }) {
                 )}
                 {plan.billingPlan && errorPlan === plan.billingPlan ? (
                   <p className="mt-3 text-center text-xs text-[color:var(--color-maroon,#8b3a3a)]">
-                    {isRtl
-                      ? 'تعذر فتح دفع SkipCash. حاول مرة أخرى.'
-                      : 'Could not open SkipCash checkout. Please try again.'}
+                    {checkoutError ||
+                      (isRtl
+                        ? 'تعذر فتح دفع SkipCash. حاول مرة أخرى.'
+                        : 'Could not open SkipCash checkout. Please try again.')}
                   </p>
                 ) : null}
               </motion.article>

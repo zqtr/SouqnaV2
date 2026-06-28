@@ -3,6 +3,10 @@ import type { Product } from '@/lib/products';
 import type { ThemeOverrides, Block } from '@/lib/blocks/types';
 import type { getCopy } from '@/content/copy';
 import type { getVocabulary } from '@/lib/storefront-vocabulary';
+import type {
+  ChromeLegalPolicy,
+  ChromeNavPage,
+} from '@/components/storefront/StorefrontChrome';
 
 /**
  * Read-only context every block component receives. Built once per page
@@ -27,6 +31,9 @@ export type BlockContext = {
    *  helpful setup placeholders without leaking placeholders publicly. */
   isPreview?: boolean;
   categoriesBySlug: Map<string, Set<string>>;
+  navPages: ChromeNavPage[];
+  legalPolicies: ChromeLegalPolicy[];
+  installedAppIds?: string[];
 };
 
 export type BlockRenderProps<P> = {

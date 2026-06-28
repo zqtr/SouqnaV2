@@ -1,7 +1,17 @@
 import { notFound } from 'next/navigation';
 import { getStorefront } from '@/lib/brief';
+import { getInstalledApp, type InstalledApp } from '@/lib/apps/installed';
+import { normaliseSettings as normaliseWhatsApp, whatsappDigits } from '@/lib/apps/whatsapp';
 import { getOrderForThankYou, type PaymentMethod } from '@/lib/checkout-orders';
-import { getStorefrontCheckoutSettings, type CheckoutSettings } from '@/lib/storefrontSettings';
+import {
+  getStorefrontCheckoutSettings,
+  type CheckoutSettings,
+  type CheckoutThankYouStyle,
+} from '@/lib/storefrontSettings';
+import {
+  buildOrderWhatsAppUrl,
+  shouldShowOrderWhatsAppButton,
+} from '@/lib/whatsappLinks';
 import { palettes, paletteCssVars, type PaletteId } from '@/lib/palettes';
 import type { Theme } from '@/lib/theme';
 import { getServerTheme } from '@/components/theme/ServerThemeScript';
@@ -31,11 +41,12 @@ export default async function ThankYouPage({ params, searchParams }: Props) {
   const sp = (await searchParams) ?? {};
   const sadadResult = Array.isArray(sp.sadad) ? sp.sadad[0] : sp.sadad;
   const skipcashResult = Array.isArray(sp.skipcash) ? sp.skipcash[0] : sp.skipcash;
-  const [storefront, order, checkout, visitorTheme] = await Promise.all([
+  const [storefront, order, checkout, visitorTheme, whatsapp] = await Promise.all([
     getStorefront(slug),
     getOrderForThankYou(orderId, slug),
     getStorefrontCheckoutSettings(slug),
     getServerTheme(),
+    getInstalledApp(slug, 'whatsapp-business').catch(() => null),
   ]);
   if (!storefront || !order) notFound();
 
@@ -57,6 +68,17 @@ export default async function ThankYouPage({ params, searchParams }: Props) {
   };
 
   const shortRef = shortenOrderId(order.id);
+  const showWhatsAppContact = shouldShowOrderWhatsAppButton(order);
+  const storeWhatsAppPhone = resolveStoreWhatsAppPhone(storefront.phone, whatsapp);
+  const whatsAppHref = showWhatsAppContact
+    ? buildOrderWhatsAppUrl({
+        phone: storeWhatsAppPhone,
+        storeName: storefront.businessName,
+        orderDisplayCode: shortRef,
+        paymentMethod: order.paymentMethod,
+        locale: storefront.locale,
+      })
+    : null;
   const formatter = new Intl.DateTimeFormat(isAr ? 'ar-QA' : 'en-GB', {
     day: '2-digit',
     month: 'short',
@@ -106,6 +128,7 @@ export default async function ThankYouPage({ params, searchParams }: Props) {
     customThankYouEnabled && checkout.thankYou.ctaLabel && checkout.thankYou.ctaUrl
       ? { href: checkout.thankYou.ctaUrl, label: checkout.thankYou.ctaLabel }
       : null;
+  const thankYouStyle = checkout.experience.thankYouStyle;
   const defaultCtaHref = onlinePaymentFailed || onlinePaymentPending ? '/checkout' : '/';
   const defaultCtaLabel =
     onlinePaymentFailed || onlinePaymentPending
@@ -132,7 +155,7 @@ export default async function ThankYouPage({ params, searchParams }: Props) {
           padding: 'clamp(28px, 5vw, 56px) clamp(20px, 4vw, 32px) 96px',
         }}
       >
-        <header style={{ marginBottom: 24 }}>
+        <header style={thankYouHeroStyle(thankYouStyle)}>
           <div
             style={{
               fontFamily: 'var(--font-mono)',
@@ -204,6 +227,10 @@ export default async function ThankYouPage({ params, searchParams }: Props) {
           shortRef={shortRef}
           isAr={isAr}
         />
+
+        {showWhatsAppContact ? (
+          <WhatsAppOrderContact href={whatsAppHref} isAr={isAr} />
+        ) : null}
 
         {showOrderDetails ? (
           <>
@@ -367,6 +394,39 @@ export default async function ThankYouPage({ params, searchParams }: Props) {
   );
 }
 
+function thankYouHeroStyle(style: CheckoutThankYouStyle): React.CSSProperties {
+  const base: React.CSSProperties = {
+    marginBottom: 24,
+    borderRadius: 18,
+  };
+  if (style === 'minimal') {
+    return {
+      ...base,
+      padding: '0 0 8px',
+      borderRadius: 0,
+      borderBottom: '1px solid color-mix(in srgb, currentColor 12%, transparent)',
+    };
+  }
+  if (style === 'celebration') {
+    return {
+      ...base,
+      padding: 22,
+      color: '#fff7ec',
+      background:
+        'linear-gradient(135deg, color-mix(in srgb, var(--color-maroon, #8b3a3a) 92%, #15100d), color-mix(in srgb, var(--sf-accent, #b8892d) 78%, #3b2416))',
+      border: '1px solid color-mix(in srgb, #fff7ec 24%, transparent)',
+      boxShadow: '0 22px 56px color-mix(in srgb, var(--sf-accent, #b8892d) 18%, transparent)',
+    };
+  }
+  return {
+    ...base,
+    padding: 20,
+    background:
+      'linear-gradient(135deg, color-mix(in srgb, var(--sf-accent, #b8892d) 12%, transparent), color-mix(in srgb, var(--color-maroon, #8b3a3a) 7%, transparent))',
+    border: '1px solid color-mix(in srgb, var(--sf-accent, #b8892d) 18%, transparent)',
+  };
+}
+
 function Surface({ heading, children }: { heading?: string; children: React.ReactNode }) {
   return (
     <section
@@ -470,6 +530,42 @@ function TotalRow({ label, value, strong }: { label: string; value: string; stro
         {value}
       </span>
     </div>
+  );
+}
+
+function WhatsAppOrderContact({ href, isAr }: { href: string | null; isAr: boolean }) {
+  return (
+    <Surface heading={isAr ? 'واتساب' : 'WhatsApp'}>
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: 44,
+            padding: '12px 18px',
+            borderRadius: 999,
+            background: '#25D366',
+            color: '#06130b',
+            fontSize: 14,
+            fontWeight: 700,
+            textDecoration: 'none',
+            boxShadow: '0 10px 24px color-mix(in srgb, #25D366 22%, transparent)',
+          }}
+        >
+          {isAr ? 'تواصل عبر واتساب 💬' : 'Chat on WhatsApp 💬'}
+        </a>
+      ) : (
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55 }}>
+          {isAr
+            ? 'رقم واتساب المتجر غير مضاف.'
+            : 'Store WhatsApp number not configured.'}
+        </p>
+      )}
+    </Surface>
   );
 }
 
@@ -702,4 +798,17 @@ function subtleStyle(): React.CSSProperties {
 
 function shortenOrderId(id: string): string {
   return id.slice(0, 8).toUpperCase();
+}
+
+function resolveStoreWhatsAppPhone(
+  storefrontPhone: string | null,
+  whatsapp: InstalledApp | null,
+): string | null {
+  if (whatsapp?.enabled) {
+    const settings = normaliseWhatsApp(whatsapp.settings);
+    if (settings.storefrontInquiryMode === 'whatsapp') {
+      return whatsappDigits(whatsapp) ?? storefrontPhone;
+    }
+  }
+  return storefrontPhone;
 }

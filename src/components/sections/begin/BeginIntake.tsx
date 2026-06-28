@@ -1646,6 +1646,7 @@ function TemplateStep({
 }
 
 function TemplateTierBadge({ plan }: { plan: Plan }) {
+  if (plan === 'free') return null;
   const limits = PLAN_LIMITS[plan];
   return (
     <span
@@ -1658,10 +1659,7 @@ function TemplateTierBadge({ plan }: { plan: Plan }) {
         padding: '4px 8px',
         borderRadius: 999,
         border: '1px solid rgba(241,233,215,0.30)',
-        background:
-          plan === 'free'
-            ? 'rgba(22,21,18,0.44)'
-            : 'linear-gradient(135deg, rgba(201,169,97,0.95), rgba(91,39,31,0.92))',
+        background: 'linear-gradient(135deg, rgba(201,169,97,0.95), rgba(91,39,31,0.92))',
         color: '#fff',
         fontFamily: 'var(--font-mono)',
         fontSize: 10,

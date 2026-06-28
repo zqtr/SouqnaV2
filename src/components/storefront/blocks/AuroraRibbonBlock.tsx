@@ -1,6 +1,6 @@
 'use client';
 
-import AuroraBlur from '@/components/react-bits/aurora-blur';
+import AuroraBlur from '@/components/souqna-motion/aurora-blur';
 import type { BlockRenderProps } from './BlockContext';
 import type { AuroraRibbonProps } from '@/lib/blocks/types';
 

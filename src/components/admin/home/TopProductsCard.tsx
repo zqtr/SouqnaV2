@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import Link from 'next/link';
 import { Surface } from '@/components/admin/primitives';
 import { topProductsByOrders } from '@/lib/products';

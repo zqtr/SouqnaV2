@@ -1,4 +1,4 @@
--- Migration 042 - Souqna 2026 plan catalog, platform fee ledgers,
+-- Migration 042 - Souqna 2026 plan catalog, no-fee checkout ledgers,
 -- manual payout tracking, and account updates inbox.
 
 begin;
@@ -6,8 +6,8 @@ begin;
 create extension if not exists pgcrypto;
 
 -- -----------------------------------------------------------------------
--- Checkout fee snapshots. Values are copied at order creation time so a
--- later plan change never rewrites historical platform fees.
+-- Checkout snapshots. Values are copied at order creation time so a
+-- later plan change never rewrites historical checkout accounting.
 -- -----------------------------------------------------------------------
 alter table checkout_orders
   add column if not exists plan_snapshot       text not null default 'free',
@@ -128,12 +128,12 @@ insert into updates (
 ) values (
   '28e3de2c-7d8e-46d5-9fc2-320e1e116f1f',
   'New Souqna growth plans are live',
-  'Souqna now includes clearer Free, Pro, Pro+, and Max+ tiers with storefront limits, AI credits, platform fees, and growth tools matched to how merchants scale.',
+  'Souqna now includes clearer Free, Pro, Pro+, and Max+ tiers with storefront limits, AI credits, no Souqna transaction fees, and growth tools matched to how merchants scale.',
   'feature',
   'plans-2026-05-growth-tools',
   50,
   now(),
-  'Plan limits, transaction fees, and AI credits now match the new Souqna catalog.',
+  'Plan limits, no-fee checkout rules, and AI credits now match the new Souqna catalog.',
   'Plans',
   'View plan',
   '/account/settings/plan',
@@ -199,22 +199,22 @@ insert into plan_tiers (
   (
     'free', 0, 'Free', 'مجاني',
     0, 0, 1, 1,
-    '{"productCap":10,"monthlyOrderCap":25,"transactionFeeBps":500,"aiCreditsMonthly":0,"analytics":"none","integrations":"none","support":"community","brandingLocked":true,"customDomain":false,"discounts":false,"seo":false}'::jsonb
+    '{"productCap":10,"monthlyOrderCap":25,"aiCreditsMonthly":0,"analytics":"none","integrations":"none","support":"community","brandingLocked":true,"customDomain":false,"discounts":false,"seo":false,"checkoutMethods":["cod","fawran"]}'::jsonb
   ),
   (
     'starter', 1, 'Pro', 'برو',
     49, 32, 2, 5,
-    '{"productCap":null,"monthlyOrderCap":null,"transactionFeeBps":300,"aiCreditsMonthly":100,"analytics":"basic","integrations":"basic","support":"email","brandingLocked":false,"customDomain":true,"discounts":true,"seo":true,"whatsapp":true}'::jsonb
+    '{"productCap":null,"monthlyOrderCap":null,"aiCreditsMonthly":100,"analytics":"basic","integrations":"basic","support":"email","brandingLocked":false,"customDomain":true,"discounts":true,"seo":true,"whatsapp":true,"checkoutMethods":["cod","fawran"]}'::jsonb
   ),
   (
     'pro', 2, 'Pro+', 'برو+',
     145, 94, 8, 8,
-    '{"productCap":null,"monthlyOrderCap":null,"transactionFeeBps":100,"aiCreditsMonthly":null,"analytics":"advanced","integrations":"growth","support":"priority","souqy":true,"aiBrandingAssets":true,"marketingApps":true,"metaTikTok":true,"teamMembers":true,"automationFlows":true,"premiumBlocks":true}'::jsonb
+    '{"productCap":null,"monthlyOrderCap":null,"aiCreditsMonthly":null,"analytics":"advanced","integrations":"growth","support":"priority","souqy":true,"aiBrandingAssets":true,"marketingApps":true,"metaTikTok":true,"teamMembers":true,"automationFlows":true,"premiumBlocks":true,"paymentProviders":["sadad","skipcash","tap_payments"]}'::jsonb
   ),
   (
     'atelier', 3, 'Max+', 'ماكس+',
     235, 153, null, 11,
-    '{"productCap":null,"monthlyOrderCap":null,"transactionFeeBps":0,"aiCreditsMonthly":null,"analytics":"advanced","integrations":"advanced","support":"dedicated","workspace":true,"clientPermissions":true,"whiteLabel":true,"api":true,"bulkOperations":true,"advancedSeoAi":true,"earlyAccess":true}'::jsonb
+    '{"productCap":null,"monthlyOrderCap":null,"aiCreditsMonthly":null,"analytics":"advanced","integrations":"advanced","support":"dedicated","workspace":true,"clientPermissions":true,"whiteLabel":true,"api":true,"bulkOperations":true,"advancedSeoAi":true,"earlyAccess":true,"paymentProviders":["sadad","skipcash","tap_payments"]}'::jsonb
   )
 on conflict (id) do update
   set rank               = excluded.rank,

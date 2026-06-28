@@ -13,7 +13,8 @@ import { getStorefront } from '@/lib/brief';
 import { assertStorefrontOwner } from '@/lib/products';
 import { bumpCustomerOrder, upsertCustomer } from '@/lib/customers';
 import {
-  checkoutPaymentMethodsForPlan,
+  checkoutDeliveryFeeForBuyer,
+  checkoutPaymentMethodsForBuyer,
   getStorefrontCheckoutSettings,
   isOnlinePaymentMethod,
   POLICY_KEYS,
@@ -42,6 +43,7 @@ import { createSkipCashPaymentForMerchant, newSkipCashTransactionId } from '@/li
 import { getStorefrontSkipCashCredentials } from '@/lib/storefrontSkipcash';
 import { getStorefrontSadadCredentials } from '@/lib/storefrontSadad';
 import { recordPlatformPayoutForPaidOrder } from '@/lib/platformPayouts';
+import { recordEvent } from '@/lib/analytics';
 import {
   incrementDiscountUsage,
   normalizeDiscountCode,
@@ -53,10 +55,13 @@ import {
   DEFAULT_PRODUCT_HEIGHT_OPTIONS,
   isAllowedHeightOption,
   isAllowedProductSizeOption,
+  isAllowedSizeOption,
   normalizeCustomInputValue,
   normalizeCustomSizeValue,
   normalizeHeightInputLabel,
   normalizeHeightOptions,
+  optionPriceDeltaFor,
+  normalizeSizeOptions,
   normalizeVariantOptions,
 } from '@/lib/productOptions';
 
@@ -66,6 +71,8 @@ const ItemSchema = z.object({
   variantLabel: z.string().trim().max(40).optional().nullable(),
   customInputs: z
     .object({
+      variant: z.string().trim().max(80).optional().nullable(),
+      variantLabel: z.string().trim().max(40).optional().nullable(),
       height: z.string().trim().max(80).optional().nullable(),
       heightLabel: z.string().trim().max(40).optional().nullable(),
     })
@@ -196,6 +203,7 @@ export async function applyDiscountCode(
     subtotalQar: preview.subtotalQar,
     fallbackShippingQar: settings.shippingFlatQar ?? 0,
     address: data.address,
+    souqnaCity: settings.experience.souqnaCity,
   });
   const result = await validateCheckoutDiscount({
     storefrontSlug: data.slug,
@@ -281,15 +289,26 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     return orderCapError;
   }
 
-  const effectivePaymentMethods = checkoutPaymentMethodsForPlan(
-    settings.paymentMethods,
+  const readyPaymentMethods = settings.paymentMethods.filter(
+    (method) =>
+      (method !== 'pay_link' || settings.payLink) &&
+      (method !== 'skipcash' || settings.skipCash?.enabled) &&
+      (method !== 'sadad' || settings.sadad?.enabled),
+  );
+  const effectivePaymentMethods = checkoutPaymentMethodsForBuyer(
+    readyPaymentMethods,
     canAcceptOnlinePayments,
+    {
+      city: data.address.city,
+      rules: settings.experience.paymentAvailabilityRules,
+      souqnaCity: settings.experience.souqnaCity,
+    },
   );
   if (!canAcceptOnlinePayments && isOnlinePaymentMethod(data.paymentMethod)) {
     return {
       status: 'error',
       message:
-        'Online payments are available on Pro+ and Max+. This store can receive cash-on-delivery orders and WhatsApp notifications on Pro.',
+        'Provider payments are available on Pro+ and Max+. This store can receive cash-on-delivery and Fawran orders on Free and Pro.',
       field: 'paymentMethod',
     };
   }
@@ -364,20 +383,31 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     category: string | null;
     size_options?: unknown;
     allow_custom_size?: boolean | null;
+    variant_options?: unknown;
     requires_height_input?: boolean | null;
     height_input_label?: string | null;
     height_options?: unknown;
     status: 'active' | 'draft' | 'sold_out';
+    stock?: number | string | null;
+    track_inventory?: boolean | null;
+    continue_selling_when_out_of_stock?: boolean | null;
+    min_order_quantity?: number | string | null;
+    max_order_quantity?: number | string | null;
   };
   const productRows = (await db()`
     select
-      id, title, price_qar, pricing_mode, monthly_price_qar, size_options,
-      category, allow_custom_size, requires_height_input, height_input_label, height_options, status
+      id, title, price_qar, pricing_mode, monthly_price_qar, size_options, variant_options,
+      category, allow_custom_size, requires_height_input, height_input_label, height_options, status,
+      stock, track_inventory, continue_selling_when_out_of_stock, min_order_quantity, max_order_quantity
     from products
     where storefront_slug = ${data.slug}
       and id = any(${productIds as unknown as string}::uuid[])
   `) as unknown as ProductRow[];
   const byId = new Map(productRows.map((p) => [p.id, p]));
+  const requestedByProduct = new Map<string, number>();
+  for (const item of data.items) {
+    requestedByProduct.set(item.productId, (requestedByProduct.get(item.productId) ?? 0) + item.quantity);
+  }
 
   for (const it of data.items) {
     const p = byId.get(it.productId);
@@ -395,15 +425,59 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         field: 'items',
       };
     }
-    const sizeOptions = normalizeVariantOptions(p.size_options);
+    const requestedQuantity = requestedByProduct.get(it.productId) ?? it.quantity;
+    const minOrderQuantity = Math.max(1, Math.floor(Number(p.min_order_quantity ?? 1)));
+    const maxOrderQuantity =
+      p.max_order_quantity !== null && p.max_order_quantity !== undefined
+        ? Math.max(1, Math.floor(Number(p.max_order_quantity)))
+        : null;
+    if (requestedQuantity < minOrderQuantity) {
+      return {
+        status: 'error',
+        message: `"${p.title}" requires at least ${minOrderQuantity} per order.`,
+        field: 'items',
+      };
+    }
+    if (maxOrderQuantity !== null && requestedQuantity > maxOrderQuantity) {
+      return {
+        status: 'error',
+        message: `"${p.title}" allows up to ${maxOrderQuantity} per order.`,
+        field: 'items',
+      };
+    }
+    if (p.track_inventory === true && p.continue_selling_when_out_of_stock !== true) {
+      const stock = Math.max(0, Math.floor(Number(p.stock ?? 0)));
+      if (requestedQuantity > stock) {
+        return {
+          status: 'error',
+          message:
+            stock > 0
+              ? `"${p.title}" only has ${stock} available.`
+              : `"${p.title}" is out of stock.`,
+          field: 'items',
+        };
+      }
+    }
+    const sizeOptions = normalizeSizeOptions(p.size_options);
     if (!isAllowedProductSizeOption(sizeOptions, it.variantLabel, p.allow_custom_size === true)) {
       return {
         status: 'error',
         message:
           sizeOptions.length > 0
             ? p.allow_custom_size === true
-              ? `Choose or enter an option for "${p.title}".`
-              : `Choose an option for "${p.title}".`
+              ? `Choose or enter a size for "${p.title}".`
+              : `Choose a size for "${p.title}".`
+            : `"${p.title}" does not use size options.`,
+        field: 'items',
+      };
+    }
+    const variantOptions = normalizeVariantOptions(p.variant_options);
+    if (!isAllowedSizeOption(variantOptions, it.customInputs.variant)) {
+      return {
+        status: 'error',
+        message:
+          variantOptions.length > 0
+            ? `Choose a variant for "${p.title}".`
             : `"${p.title}" does not use variant options.`,
         field: 'items',
       };
@@ -447,7 +521,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     hasMonthlyPaymentItem ||= monthly;
     const rawUnit = monthly ? product.monthly_price_qar : product.price_qar;
     if (rawUnit === null) throw new Error('product missing price after validation');
-    const unit = Math.round(Number(rawUnit));
+    const unit = unitPriceForSelection(product, it);
     const lineTotal = unit * it.quantity;
     subtotalQar += lineTotal;
     discountLines.push({
@@ -455,18 +529,21 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       category: product.category ?? null,
       lineTotalQar: lineTotal,
     });
-    const customInputs: Record<string, string> =
-      product.requires_height_input === true
-        ? {
-            height: normalizeCustomInputValue(it.customInputs.height) ?? '',
-            heightLabel: normalizeHeightInputLabel(product.height_input_label) ?? 'Height',
-          }
-        : {};
+    const customInputs: Record<string, string> = {};
+    const variantOptions = normalizeVariantOptions(product.variant_options);
+    if (variantOptions.length > 0) {
+      customInputs.variant = normalizeCustomInputValue(it.customInputs.variant) ?? '';
+      customInputs.variantLabel = 'Variant';
+    }
+    if (product.requires_height_input === true) {
+      customInputs.height = normalizeCustomInputValue(it.customInputs.height) ?? '';
+      customInputs.heightLabel = normalizeHeightInputLabel(product.height_input_label) ?? 'Height';
+    }
     return {
       productId: product.id,
       titleSnapshot: product.title,
       variantLabel:
-        normalizeVariantOptions(product.size_options).length > 0 ||
+        normalizeSizeOptions(product.size_options).length > 0 ||
         product.allow_custom_size === true
           ? normalizeCustomSizeValue(it.variantLabel)
           : null,
@@ -481,6 +558,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     subtotalQar,
     fallbackShippingQar: settings.shippingFlatQar ?? 0,
     address: data.address,
+    souqnaCity: settings.experience.souqnaCity,
   });
 
   if (settings.minOrderQar !== null && subtotalQar < settings.minOrderQar) {
@@ -649,6 +727,14 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     totalQar,
   });
 
+  await recordCheckoutOrderPlacedEvent({
+    slug: data.slug,
+    orderId: order.id,
+    paymentMethod: data.paymentMethod,
+    totalQar,
+    currency: settings.currency,
+  });
+
   let redirectUrl: string | undefined;
   if (data.paymentMethod === 'skipcash') {
     try {
@@ -705,6 +791,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     }
     redirectUrl = `/api/checkout/sadad-redirect?slug=${encodeURIComponent(data.slug)}&orderId=${encodeURIComponent(order.id)}`;
   }
+  if (data.paymentMethod === 'pay_link' && settings.payLink) {
+    redirectUrl = settings.payLink.url;
+  }
 
   const instructions = buildPaymentInstructions(data.paymentMethod, settings);
 
@@ -735,6 +824,50 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
   revalidatePath('/account/orders');
   return { status: 'success', orderId: order.id, redirectUrl };
+}
+
+async function recordCheckoutOrderPlacedEvent(input: {
+  slug: string;
+  orderId: string;
+  paymentMethod: PaymentMethod;
+  totalQar: number;
+  currency: string;
+}) {
+  try {
+    await recordEvent({
+      storefrontSlug: input.slug,
+      kind: 'order_placed',
+      meta: {
+        orderId: input.orderId,
+        paymentProvider: paymentProviderFromMethod(input.paymentMethod),
+        paymentMethod: input.paymentMethod,
+        totalQar: input.totalQar,
+        currency: input.currency,
+      },
+    });
+  } catch (err) {
+    Sentry.captureException(err, {
+      tags: { area: 'checkout-analytics', slug: input.slug },
+      extra: { orderId: input.orderId, paymentMethod: input.paymentMethod },
+    });
+  }
+}
+
+function paymentProviderFromMethod(method: PaymentMethod): string {
+  switch (method) {
+    case 'skipcash':
+      return 'skipcash';
+    case 'sadad':
+      return 'sadad';
+    case 'pay_link':
+      return 'pay_link';
+    case 'bank_transfer':
+      return 'bank_transfer';
+    case 'fawran':
+      return 'fawran';
+    case 'cod':
+      return 'cod';
+  }
 }
 
 async function syncCheckoutCustomer(input: {
@@ -996,6 +1129,43 @@ function labelMethod(method: PaymentMethod): string {
   }
 }
 
+type CheckoutProductPriceRow = {
+  price_qar: string | null;
+  pricing_mode: 'one_time' | 'monthly_payment';
+  monthly_price_qar: string | null;
+  size_options?: unknown;
+  allow_custom_size?: boolean | null;
+  variant_options?: unknown;
+};
+
+function unitPriceForSelection(
+  product: CheckoutProductPriceRow,
+  item: z.infer<typeof ItemSchema>,
+): number {
+  const rawUnit =
+    product.pricing_mode === 'monthly_payment' ? product.monthly_price_qar : product.price_qar;
+  if (rawUnit === null) throw new Error('product missing price after validation');
+
+  const baseUnit = Math.round(Number(rawUnit));
+  const sizeOptions = normalizeSizeOptions(product.size_options);
+  const selectedSize =
+    sizeOptions.length > 0 || product.allow_custom_size === true
+      ? normalizeCustomSizeValue(item.variantLabel)
+      : null;
+  const sizeDelta =
+    selectedSize && sizeOptions.length > 0
+      ? optionPriceDeltaFor(product.size_options, selectedSize)
+      : 0;
+  const variantOptions = normalizeVariantOptions(product.variant_options);
+  const selectedVariant =
+    variantOptions.length > 0 ? normalizeCustomInputValue(item.customInputs.variant) : null;
+  const variantDelta = selectedVariant
+    ? optionPriceDeltaFor(product.variant_options, selectedVariant)
+    : 0;
+
+  return Math.max(0, Math.round(baseUnit + sizeDelta + variantDelta));
+}
+
 async function buildDiscountPreviewLines(
   slug: string,
   items: z.infer<typeof ItemSchema>[],
@@ -1011,15 +1181,30 @@ async function buildDiscountPreviewLines(
     pricing_mode: 'one_time' | 'monthly_payment';
     monthly_price_qar: string | null;
     category: string | null;
+    size_options?: unknown;
+    allow_custom_size?: boolean | null;
+    variant_options?: unknown;
     status: 'active' | 'draft' | 'sold_out';
+    stock?: number | string | null;
+    track_inventory?: boolean | null;
+    continue_selling_when_out_of_stock?: boolean | null;
+    min_order_quantity?: number | string | null;
+    max_order_quantity?: number | string | null;
   };
   const productRows = (await db()`
-    select id, title, price_qar, pricing_mode, monthly_price_qar, category, status
+    select
+      id, title, price_qar, pricing_mode, monthly_price_qar,
+      category, size_options, allow_custom_size, variant_options, status,
+      stock, track_inventory, continue_selling_when_out_of_stock, min_order_quantity, max_order_quantity
     from products
     where storefront_slug = ${slug}
       and id = any(${productIds as unknown as string}::uuid[])
   `) as unknown as DiscountProductRow[];
   const byId = new Map(productRows.map((p) => [p.id, p]));
+  const requestedByProduct = new Map<string, number>();
+  for (const item of items) {
+    requestedByProduct.set(item.productId, (requestedByProduct.get(item.productId) ?? 0) + item.quantity);
+  }
   let subtotalQar = 0;
   const lines: CheckoutDiscountLine[] = [];
 
@@ -1034,6 +1219,45 @@ async function buildDiscountPreviewLines(
         },
       };
     }
+    const requestedQuantity = requestedByProduct.get(item.productId) ?? item.quantity;
+    const minOrderQuantity = Math.max(1, Math.floor(Number(product.min_order_quantity ?? 1)));
+    const maxOrderQuantity =
+      product.max_order_quantity !== null && product.max_order_quantity !== undefined
+        ? Math.max(1, Math.floor(Number(product.max_order_quantity)))
+        : null;
+    if (requestedQuantity < minOrderQuantity) {
+      return {
+        error: {
+          status: 'error',
+          message: `"${product.title}" requires at least ${minOrderQuantity} per order.`,
+          field: 'items',
+        },
+      };
+    }
+    if (maxOrderQuantity !== null && requestedQuantity > maxOrderQuantity) {
+      return {
+        error: {
+          status: 'error',
+          message: `"${product.title}" allows up to ${maxOrderQuantity} per order.`,
+          field: 'items',
+        },
+      };
+    }
+    if (product.track_inventory === true && product.continue_selling_when_out_of_stock !== true) {
+      const stock = Math.max(0, Math.floor(Number(product.stock ?? 0)));
+      if (requestedQuantity > stock) {
+        return {
+          error: {
+            status: 'error',
+            message:
+              stock > 0
+                ? `"${product.title}" only has ${stock} available.`
+                : `"${product.title}" is out of stock.`,
+            field: 'items',
+          },
+        };
+      }
+    }
     const rawUnit =
       product.pricing_mode === 'monthly_payment' ? product.monthly_price_qar : product.price_qar;
     if (rawUnit === null) {
@@ -1045,7 +1269,7 @@ async function buildDiscountPreviewLines(
         },
       };
     }
-    const lineTotalQar = Math.round(Number(rawUnit)) * item.quantity;
+    const lineTotalQar = unitPriceForSelection(product, item) * item.quantity;
     subtotalQar += lineTotalQar;
     lines.push({
       productId: product.id,
@@ -1062,11 +1286,13 @@ async function calculateShippingQar({
   subtotalQar,
   fallbackShippingQar,
   address,
+  souqnaCity,
 }: {
   slug: string;
   subtotalQar: number;
   fallbackShippingQar: number;
   address?: { city?: string | null; country?: string | null } | null;
+  souqnaCity?: Awaited<ReturnType<typeof getStorefrontCheckoutSettings>>['experience']['souqnaCity'];
 }): Promise<number> {
   let shippingQar = fallbackShippingQar;
 
@@ -1107,7 +1333,7 @@ async function calculateShippingQar({
     Sentry.captureException(err, { tags: { area: 'checkout-shipping', slug } });
   }
 
-  return shippingQar;
+  return checkoutDeliveryFeeForBuyer(shippingQar, address?.city, souqnaCity);
 }
 
 async function calculateTaxAndTotal({

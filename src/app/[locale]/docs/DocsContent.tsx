@@ -97,14 +97,24 @@ const APPS: AppDoc[] = [
 const PLANS_TABLE = [
   {
     id: 'free',
-    en: { name: 'Free', price: '0 QAR', stores: '1 storefront', tpl: '10 products, 1 template, 25 orders/month, 5% fee' },
+    en: {
+      name: 'Free',
+      price: '0 QAR',
+      stores: '1 storefront',
+      tpl: '10 products, 1 template, 25 orders/month, Fawran + COD',
+    },
     ar: { name: 'مجاني', price: '٠ ر.ق', stores: 'متجر واحد', tpl: '٣ قوالب بدائية' },
     en_tag: 'For getting your first hundred sales.',
     ar_tag: 'لأول مئة عملية بيع.',
   },
   {
     id: 'starter',
-    en: { name: 'Pro', price: '49 QAR / mo', stores: '2 storefronts', tpl: 'Unlimited products, 5 templates, 100 AI credits, 3% fee' },
+    en: {
+      name: 'Pro',
+      price: '49 QAR / mo',
+      stores: '2 storefronts',
+      tpl: 'Unlimited products, 5 templates, 100 AI credits, Fawran + COD',
+    },
     ar: { name: 'برو', price: '١٩٠ ر.ق / شهر', stores: '٣ متاجر', tpl: '٦ قوالب كلاسيكية' },
     en_tag: 'A small portfolio of brands.',
     ar_tag: 'محفظة صغيرة من العلامات.',
@@ -115,7 +125,7 @@ const PLANS_TABLE = [
       name: 'Pro+',
       price: '145 QAR / mo',
       stores: '8 storefronts',
-      tpl: 'Souqy AI, marketing apps, team, automation, advanced analytics, 1% fee',
+      tpl: 'Souqy AI, marketing apps, team, automation, advanced analytics, provider payments (SADAD, SkipCash, Tap Payments)',
     },
     ar: {
       name: 'برو +',
@@ -132,7 +142,7 @@ const PLANS_TABLE = [
       name: 'Max+',
       price: '235 QAR / mo',
       stores: 'Unlimited storefronts',
-      tpl: 'White-label tools, API access, bulk operations, dedicated support, 0% fee',
+      tpl: 'White-label tools, API access, bulk operations, dedicated support, all payment providers',
     },
     ar: {
       name: 'ماكس +',
@@ -922,6 +932,10 @@ const SECTIONS: Section[] = [
             time from
             <code> /account/settings/plan</code>. Downgrades never delete content — premium block
             variants quietly fall back to their classic equivalents.
+          </p>
+          <p>
+            Free and Pro can use Fawran and cash on delivery. Pro+ and Max+ unlock provider
+            payments: SADAD, SkipCash, and Tap Payments.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">

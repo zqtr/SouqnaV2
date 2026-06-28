@@ -1,6 +1,8 @@
-'use client';
+﻿'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import { CalendarDays, Sparkles } from 'lucide-react';
+import Image from 'next/image';
 import type { AccountUpdateView } from './types';
 
 type UpdateCardProps = {
@@ -26,10 +28,10 @@ const typeLabels: Record<'en' | 'ar', Record<AccountUpdateView['type'], string>>
     warning: 'Important',
   },
   ar: {
-    feature: 'ميزة',
-    billing: 'الفوترة',
-    system: 'النظام',
-    warning: 'مهم',
+    feature: 'Ù…ÙŠØ²Ø©',
+    billing: 'Ø§Ù„ÙÙˆØªØ±Ø©',
+    system: 'Ø§Ù„Ù†Ø¸Ø§Ù…',
+    warning: 'Ù…Ù‡Ù…',
   },
 };
 
@@ -44,23 +46,24 @@ const cardCopy = {
     account: 'Account inbox',
   },
   ar: {
-    unread: 'غير مقروء',
-    preview: 'معاينة سوقنا',
-    builder: 'إجراءات البناء',
-    products: 'خيارات المنتجات',
-    plans: 'أدوات النمو',
-    push: 'تحديث سوقنا',
-    account: 'صندوق الحساب',
+    unread: 'ØºÙŠØ± Ù…Ù‚Ø±ÙˆØ¡',
+    preview: 'Ù…Ø¹Ø§ÙŠÙ†Ø© Ø³ÙˆÙ‚Ù†Ø§',
+    builder: 'Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø§Ù„Ø¨Ù†Ø§Ø¡',
+    products: 'Ø®ÙŠØ§Ø±Ø§Øª Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª',
+    plans: 'Ø£Ø¯ÙˆØ§Øª Ø§Ù„Ù†Ù…Ùˆ',
+    push: 'ØªØ­Ø¯ÙŠØ« Ø³ÙˆÙ‚Ù†Ø§',
+    account: 'ØµÙ†Ø¯ÙˆÙ‚ Ø§Ù„Ø­Ø³Ø§Ø¨',
   },
 } as const;
 
 export function UpdateCard({ update, locale = 'en', titleId }: UpdateCardProps) {
   const copy = cardCopy[locale];
-  const badge = update.badge ?? typeLabels[locale][update.type];
+  const localizedUpdate = localizeUpdate(update, locale);
+  const badge = localizedUpdate.badge ?? typeLabels[locale][update.type];
 
   return (
     <article className="overflow-hidden rounded-lg border border-[#29252a] bg-[#141316] shadow-[0_34px_95px_rgba(0,0,0,0.42)]">
-      <UpdateVisual update={update} locale={locale} />
+      <UpdateVisual update={localizedUpdate} locale={locale} />
 
       <div className="mx-auto flex max-w-2xl flex-col items-center px-5 pb-6 pt-5 text-center sm:px-8 sm:pb-7">
         <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
@@ -82,18 +85,20 @@ export function UpdateCard({ update, locale = 'en', titleId }: UpdateCardProps) 
           dir="auto"
           className="text-2xl font-semibold leading-tight tracking-normal text-[#f8efdf] sm:text-3xl"
         >
-          {update.title}
+          {localizedUpdate.title}
         </h2>
         <p dir="auto" className="mt-3 max-w-xl text-sm leading-7 text-[#a9a1aa] sm:text-base">
-          {update.summary ?? update.body}
+          {localizedUpdate.summary ?? localizedUpdate.body}
         </p>
 
-        {update.body && update.summary && update.body !== update.summary ? (
+        {localizedUpdate.body &&
+        localizedUpdate.summary &&
+        localizedUpdate.body !== localizedUpdate.summary ? (
           <p
             dir="auto"
             className="mt-5 max-w-2xl rounded-lg border border-[#2b262b] bg-[#0f0e10] px-5 py-3 text-sm leading-7 text-[#d8cec0]"
           >
-            {update.body}
+            {localizedUpdate.body}
           </p>
         ) : null}
       </div>
@@ -101,15 +106,33 @@ export function UpdateCard({ update, locale = 'en', titleId }: UpdateCardProps) 
   );
 }
 
-function UpdateVisual({
-  update,
-  locale,
-}: {
-  update: AccountUpdateView;
-  locale: 'en' | 'ar';
-}) {
+function localizeUpdate(update: AccountUpdateView, locale: 'en' | 'ar'): AccountUpdateView {
+  const i18n = update.previewPayload.i18n;
+  if (!i18n || typeof i18n !== 'object' || Array.isArray(i18n)) return update;
+  const localized = (i18n as Record<string, unknown>)[locale];
+  if (!localized || typeof localized !== 'object' || Array.isArray(localized)) return update;
+  const copy = localized as Record<string, unknown>;
+  return {
+    ...update,
+    title: localizedText(copy.title) ?? update.title,
+    body: localizedText(copy.body) ?? update.body,
+    summary: localizedText(copy.summary) ?? update.summary,
+    badge: localizedText(copy.badge) ?? update.badge,
+  };
+}
+
+function localizedText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function UpdateVisual({ update, locale }: { update: AccountUpdateView; locale: 'en' | 'ar' }) {
   const mediaAlt = update.summary ?? update.title;
   const kind = typeof update.previewPayload.kind === 'string' ? update.previewPayload.kind : '';
+  const screenshots = getScreenshotSources(update.previewPayload);
+
+  if (screenshots.length > 1) {
+    return <ScreenshotCollageVisual screenshots={screenshots} alt={mediaAlt} />;
+  }
 
   if (update.imageUrl) {
     return (
@@ -137,11 +160,62 @@ function UpdateVisual({
   return <SouqnaVisual update={update} locale={locale} />;
 }
 
+function getScreenshotSources(payload: Record<string, unknown>) {
+  const value = payload.screenshots;
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === 'string' && item.trim().startsWith('/'))
+    .map((item) => item.trim())
+    .slice(0, 3);
+}
+
+function ScreenshotCollageVisual({ screenshots, alt }: { screenshots: string[]; alt: string }) {
+  const primary = screenshots[0]!;
+  const secondary = screenshots.slice(1);
+
+  return (
+    <div className="relative aspect-[16/6] overflow-hidden border-b border-[#29252a] bg-[#080709] p-3 sm:p-4">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_6%,rgba(216,181,107,0.16),transparent_34%),radial-gradient(circle_at_78%_10%,rgba(95,124,255,0.18),transparent_32%)]" />
+      <div className="relative grid h-full grid-cols-[1.25fr_0.95fr] gap-2 overflow-hidden rounded-lg border border-[#3a3238] bg-[#0f0e10] p-2 shadow-[0_22px_90px_rgba(0,0,0,0.46)] sm:gap-3 sm:p-3">
+        <ScreenshotFrame src={primary} alt={`${alt} KPI dashboard`} />
+        <div
+          className={`grid min-h-0 gap-2 sm:gap-3 ${secondary.length > 1 ? 'grid-rows-2' : 'grid-rows-1'}`}
+        >
+          {secondary.map((src, index) => (
+            <ScreenshotFrame key={src} src={src} alt={`${alt} preview ${index + 2}`} />
+          ))}
+        </div>
+      </div>
+      <VisualShade />
+    </div>
+  );
+}
+
+function ScreenshotFrame({ src, alt }: { src: string; alt: string }) {
+  return (
+    <div className="relative min-h-0 overflow-hidden rounded-md border border-[#2b272c] bg-[#171619]">
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        sizes="(min-width: 768px) 440px, 90vw"
+        className="object-contain"
+      />
+    </div>
+  );
+}
+
 function BuilderMenuVisual({ locale }: { locale: 'en' | 'ar' }) {
   const isAr = locale === 'ar';
   const menuItems = isAr
-    ? ['عرض المتجر ↗', 'المنتجات', 'ملف المتجر', 'إرجاع القالب الافتراضي', 'إلغاء المسودّة']
-    : ['View live ↗', 'Products', 'Storefront profile', 'Reset to template defaults', 'Discard draft'];
+    ? ['Ø¹Ø±Ø¶ Ø§Ù„Ù…ØªØ¬Ø± â†—', 'Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª', 'Ù…Ù„Ù Ø§Ù„Ù…ØªØ¬Ø±', 'Ø¥Ø±Ø¬Ø§Ø¹ Ø§Ù„Ù‚Ø§Ù„Ø¨ Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠ', 'Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ù…Ø³ÙˆØ¯Ù‘Ø©']
+    : [
+        'View live â†—',
+        'Products',
+        'Storefront profile',
+        'Reset to template defaults',
+        'Discard draft',
+      ];
 
   return (
     <div className="relative aspect-[16/6] overflow-hidden border-b border-[#29252a] bg-[#080709] p-4 sm:p-5">
@@ -177,9 +251,7 @@ function BuilderMenuVisual({ locale }: { locale: 'en' | 'ar' }) {
                 <div
                   key={item}
                   className={`px-4 py-3 text-sm font-semibold ${
-                    index >= menuItems.length - 2
-                      ? 'text-[#e68a8a]'
-                      : 'text-[#f8efdf]'
+                    index >= menuItems.length - 2 ? 'text-[#e68a8a]' : 'text-[#f8efdf]'
                   } ${index === 0 ? 'bg-[#242329]' : ''}`}
                 >
                   {item}
@@ -207,7 +279,7 @@ function ProductOptionsVisual({ locale }: { locale: 'en' | 'ar' }) {
           <div className="flex flex-col justify-end gap-4" dir={isAr ? 'rtl' : 'ltr'}>
             <div>
               <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b6259]">
-                {isAr ? 'منتج' : 'Product'}
+                {isAr ? 'Ù…Ù†ØªØ¬' : 'Product'}
               </span>
               <div className="mt-2 h-6 w-36 rounded-full bg-[#471d24]" />
             </div>
@@ -215,13 +287,13 @@ function ProductOptionsVisual({ locale }: { locale: 'en' | 'ar' }) {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7b6259]">
-                    {isAr ? 'المقاس' : 'Size'}
+                    {isAr ? 'Ø§Ù„Ù…Ù‚Ø§Ø³' : 'Size'}
                   </span>
                   <div className="mt-1 h-9 rounded-lg border border-[#d8b56b] bg-white" />
                 </div>
                 <div>
                   <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7b6259]">
-                    {isAr ? 'الطول' : 'Height'}
+                    {isAr ? 'Ø§Ù„Ø·ÙˆÙ„' : 'Height'}
                   </span>
                   <div className="mt-1 h-9 rounded-lg border border-[#d8b56b] bg-white" />
                 </div>
@@ -250,7 +322,7 @@ function StorageVisual({ locale }: { locale: 'en' | 'ar' }) {
         <div className="flex flex-col justify-between rounded-lg border border-[#d8b56b]/25 bg-[#171619] p-4">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#d8b56b]">
-              {isAr ? 'تخزين سوقنا' : 'Souqna Storage'}
+              {isAr ? 'ØªØ®Ø²ÙŠÙ† Ø³ÙˆÙ‚Ù†Ø§' : 'Souqna Storage'}
             </div>
             <div className="mt-3 text-2xl font-semibold text-[#f8efdf]">1GB</div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#2b272c]">
@@ -271,10 +343,10 @@ function StorageVisual({ locale }: { locale: 'en' | 'ar' }) {
             +
           </div>
           <div className="text-center text-xs font-semibold uppercase tracking-[0.22em] text-[#d8b56b]">
-            {isAr ? 'صور مخصصة' : 'Custom pictures'}
+            {isAr ? 'ØµÙˆØ± Ù…Ø®ØµØµØ©' : 'Custom pictures'}
           </div>
           <div className="mx-auto mt-3 max-w-sm text-center text-xl font-semibold text-[#f8efdf]">
-            {isAr ? 'ارفع الصور واستخدمها في البنّاء' : 'Upload once and reuse in Builder'}
+            {isAr ? 'Ø§Ø±ÙØ¹ Ø§Ù„ØµÙˆØ± ÙˆØ§Ø³ØªØ®Ø¯Ù…Ù‡Ø§ ÙÙŠ Ø§Ù„Ø¨Ù†Ù‘Ø§Ø¡' : 'Upload once and reuse in Builder'}
           </div>
         </div>
       </div>
@@ -302,10 +374,13 @@ function SouqnaUpdateVisual({
           <div className="rounded-lg border border-[#2b272c] bg-[#111013] p-3">
             <div className="h-full rounded-md bg-[linear-gradient(135deg,rgba(216,181,107,0.2),rgba(95,124,255,0.16))]" />
           </div>
-          <div className="flex flex-col justify-center text-center" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
+          <div
+            className="flex flex-col justify-center text-center"
+            dir={locale === 'ar' ? 'rtl' : 'ltr'}
+          >
             <div className="mx-auto mb-4 h-12 w-12 rounded-2xl border border-[#d8b56b]/35 bg-[#d8b56b]/10" />
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-[#d8b56b]">
-              {locale === 'ar' ? 'تحديث سوقنا' : 'Souqna update'}
+              {locale === 'ar' ? 'ØªØ­Ø¯ÙŠØ« Ø³ÙˆÙ‚Ù†Ø§' : 'Souqna update'}
             </div>
             <div dir="auto" className="mx-auto mt-3 max-w-sm text-xl font-semibold text-[#f8efdf]">
               {update.badge ?? update.title}
@@ -318,13 +393,7 @@ function SouqnaUpdateVisual({
   );
 }
 
-function SouqnaVisual({
-  update,
-  locale,
-}: {
-  update: AccountUpdateView;
-  locale: 'en' | 'ar';
-}) {
+function SouqnaVisual({ update, locale }: { update: AccountUpdateView; locale: 'en' | 'ar' }) {
   return (
     <div className="relative aspect-[16/6] overflow-hidden border-b border-[#29252a] bg-[#080709] p-4 sm:p-5">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_24%_8%,rgba(216,181,107,0.16),transparent_32%),radial-gradient(circle_at_82%_0%,rgba(95,124,255,0.16),transparent_34%)]" />

@@ -75,15 +75,23 @@ function classifySubscriber(plan: Plan, meta: Record<string, unknown>): SouqnaSu
   const provider = metaString(meta, 'provider')?.toLowerCase();
   const status = metaString(meta, 'status', 'skipcashStatus')?.toLowerCase() ?? '';
   const source = metaString(meta, 'source')?.toLowerCase() ?? '';
-  const hasSkipCash = Boolean(metaString(meta, 'skipcashPaymentId', 'paymentId'));
+  const hasSkipCash = Boolean(
+    metaString(
+      meta,
+      'skipcashRecurringSubscriptionId',
+      'subscriptionId',
+      'skipcashPaymentId',
+      'paymentId',
+    ),
+  );
   const hasPaypal = Boolean(metaString(meta, 'paypalSubscriptionId'));
   const isAdminGrant =
     source === 'admin_grant' ||
     source === 'souqna_operator' ||
     meta.adminGrant === true ||
     meta.operatorUserId != null;
-  const failed = ['failed', 'cancelled', 'canceled', 'expired', 'declined', 'suspended'].some((word) =>
-    status.includes(word),
+  const failed = ['failed', 'cancelled', 'canceled', 'expired', 'declined', 'suspended'].some(
+    (word) => status.includes(word),
   );
   const paid = ['paid', 'success', 'succeeded', 'active', 'approved', 'captured'].some((word) =>
     status.includes(word),
@@ -177,6 +185,7 @@ export async function listSouqnaSubscribers(limit = 200): Promise<SouqnaSubscrib
       limit 1
     ) ph on true
     where up.plan <> 'free'
+       or up.meta ? 'skipcashRecurringSubscriptionId'
        or up.meta ? 'skipcashPaymentId'
        or up.meta ? 'skipcashPendingPlan'
        or up.meta ? 'paypalSubscriptionId'
@@ -193,11 +202,20 @@ export async function listSouqnaSubscribers(limit = 200): Promise<SouqnaSubscrib
     const plan = isPlan(row.plan) ? row.plan : 'free';
     const provider =
       metaString(meta, 'provider') ??
-      (metaString(meta, 'skipcashPaymentId', 'paymentId') ? 'skipcash' : null) ??
+      (metaString(
+        meta,
+        'skipcashRecurringSubscriptionId',
+        'subscriptionId',
+        'skipcashPaymentId',
+        'paymentId',
+      )
+        ? 'skipcash'
+        : null) ??
       (metaString(meta, 'paypalSubscriptionId') ? 'paypal' : null);
     const kind = classifySubscriber(plan, meta);
     const paymentId = metaString(
       meta,
+      'skipcashRecurringSubscriptionId',
       'skipcashPaymentId',
       'paymentId',
       'paypalSubscriptionId',

@@ -1,6 +1,6 @@
 'use client';
 
-import DepthCard from '@/components/react-bits/depth-card';
+import DepthCard from '@/components/souqna-motion/depth-card';
 import type { BlockRenderProps } from './BlockContext';
 import type { DepthShowcaseProps } from '@/lib/blocks/types';
 
@@ -11,7 +11,7 @@ const WIDTH_PX: Record<NonNullable<DepthShowcaseProps['width']>, number> = {
 };
 
 /**
- * React Bits depth-card as a storefront block. One parallax card;
+ * Premium depth-card as a storefront block. One parallax card;
  * constrain to portfolio / hero-adjacent use — Souqy prompts should emit
  * at most one per page.
  */

@@ -1,18 +1,27 @@
 ﻿'use client';
 
 import { useId, useMemo, useState, useTransition } from 'react';
+/* eslint-disable @next/next/no-img-element */
 import { useLocale } from 'next-intl';
 import { Surface } from '@/components/admin/primitives';
 import { Field, inputStyle, textareaStyle } from '@/components/admin/SettingsForm';
 import { adminPhrase } from '@/components/admin/adminLocale';
 import { updateCheckoutSettings, type CheckoutActionState } from '@/app/actions/storefrontSettings';
 import {
+  CHECKOUT_ADDRESS_DESIGNS,
   CONFIGURABLE_PAYMENT_METHODS,
   POLICY_KEYS,
+  SOUQNA_CITY_PRESETS,
+  SOUQNA_CITY_REGIONS,
+  checkoutPaymentMethodsForPlan,
   isOnlinePaymentMethod,
+  type CheckoutAddressDesign,
   type CheckoutSettings as CheckoutSettingsValue,
   type PaymentMethod,
   type PolicyKey,
+  type SouqnaCityRegion,
+  type SouqnaCityRule,
+  type SouqnaCitySettings,
 } from '@/lib/storefrontSettings';
 
 type OnlineProviderId = 'skipcash' | 'sadad' | 'tap' | 'myfatoorah' | 'paytabs' | 'hyperpay';
@@ -164,7 +173,54 @@ const CURRENCIES: ReadonlyArray<{ code: string; label: string }> = [
   { code: 'KWD', label: 'KWD · Kuwaiti Dinar' },
 ];
 
+const ADDRESS_DESIGN_META: Record<
+  CheckoutAddressDesign,
+  { titleEn: string; titleAr: string; bodyEn: string; bodyAr: string }
+> = {
+  qatar_plate: {
+    titleEn: 'Qatar address plate',
+    titleAr: 'لوحة عنوان قطر',
+    bodyEn: 'Blue plate layout for house/building number, zone, and street.',
+    bodyAr: 'تصميم اللوحة الزرقاء لرقم المنزل أو المبنى والمنطقة والشارع.',
+  },
+  soft_card: {
+    titleEn: 'Souqna soft card',
+    titleAr: 'بطاقة سوقنا الهادئة',
+    bodyEn: 'Minimal grouped fields with the same Qatar address order.',
+    bodyAr: 'حقول هادئة ومجمعة بنفس ترتيب عنوان قطر.',
+  },
+  classic: {
+    titleEn: 'Classic checkout fields',
+    titleAr: 'حقول الدفع التقليدية',
+    bodyEn: 'Standard address form for stores that prefer a neutral layout.',
+    bodyAr: 'نموذج العنوان المعتاد للمتاجر التي تفضل شكلا محايدا.',
+  },
+};
+
 const IBAN_HINT = 'Two-letter country code + up to 32 alphanumerics. Spaces are stripped on save.';
+
+function cloneSouqnaCitySettings(value: SouqnaCitySettings): SouqnaCitySettings {
+  return {
+    enabled: value.enabled,
+    autoMatchNearest: value.autoMatchNearest,
+    rules: value.rules.map((rule) => ({
+      ...rule,
+      paymentMethods: [...rule.paymentMethods],
+    })),
+  };
+}
+
+function createCityRule(city = ''): SouqnaCityRule {
+  const cleanCity = city.trim();
+  return {
+    id: `souqna-city-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    city: cleanCity,
+    region: 'custom',
+    enabled: true,
+    paymentMethods: ['cod'],
+    deliveryFeeQar: null,
+  };
+}
 
 export function CheckoutSettings({
   slug,
@@ -177,13 +233,10 @@ export function CheckoutSettings({
   canAcceptOnlinePayments,
 }: Props) {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(
-    (canAcceptOnlinePayments && initial.paymentMethods.length > 0
-      ? initial.paymentMethods
-      : (['cod'] as PaymentMethod[])
-    ).filter(
-      (method) =>
-        (canAcceptOnlinePayments || !isOnlinePaymentMethod(method)) &&
-        (method !== 'skipcash' || skipCashEligible),
+    checkoutPaymentMethodsForPlan(
+      (initial.paymentMethods.length > 0 ? initial.paymentMethods : (['cod'] as PaymentMethod[]))
+        .filter((method) => method !== 'skipcash' || skipCashEligible),
+      canAcceptOnlinePayments,
     ),
   );
   const [bankAccountName, setBankAccountName] = useState(initial.bankDetails?.accountName ?? '');
@@ -220,6 +273,12 @@ export function CheckoutSettings({
   const [shippingFlatQar, setShippingFlatQar] = useState<string>(
     initial.shippingFlatQar == null ? '' : String(initial.shippingFlatQar),
   );
+  const [souqnaCity, setSouqnaCity] = useState<SouqnaCitySettings>(() =>
+    cloneSouqnaCitySettings(initial.experience.souqnaCity),
+  );
+  const [addressDesign, setAddressDesign] = useState<CheckoutAddressDesign>(
+    initial.addressDesign ?? 'qatar_plate',
+  );
   const [thankYouTitle, setThankYouTitle] = useState(initial.thankYou.title ?? '');
   const [thankYouMessage, setThankYouMessage] = useState(initial.thankYou.message ?? '');
   const [thankYouCtaLabel, setThankYouCtaLabel] = useState(initial.thankYou.ctaLabel ?? '');
@@ -230,6 +289,8 @@ export function CheckoutSettings({
 
   const [pending, startTransition] = useTransition();
   const [state, setState] = useState<CheckoutActionState>({ status: 'idle' });
+  const locale = useLocale();
+  const t = (text: string) => adminPhrase(locale, text);
 
   const bankSelected = paymentMethods.includes('bank_transfer');
   const payLinkSelected = paymentMethods.includes('pay_link');
@@ -273,9 +334,10 @@ export function CheckoutSettings({
     if (noneSelected) return;
     setState({ status: 'idle' });
     startTransition(async () => {
-      const submittedPaymentMethods = canAcceptOnlinePayments
-        ? paymentMethods
-        : (['cod'] as PaymentMethod[]);
+      const submittedPaymentMethods = checkoutPaymentMethodsForPlan(
+        paymentMethods,
+        canAcceptOnlinePayments,
+      );
       const result = await updateCheckoutSettings({
         slug,
         paymentMethods: submittedPaymentMethods,
@@ -318,6 +380,10 @@ export function CheckoutSettings({
         currency,
         minOrderQar: parseIntOrNull(minOrderQar),
         shippingFlatQar: parseIntOrNull(shippingFlatQar),
+        addressDesign,
+        experience: {
+          souqnaCity,
+        },
         thankYou: {
           title: thankYouTitle,
           message: thankYouMessage,
@@ -335,6 +401,12 @@ export function CheckoutSettings({
   const topLevelError = errorState && !errorField ? errorState.message : null;
   const fieldErrorMessage = (field: string): string | null =>
     errorState && errorState.field === field ? errorState.message : null;
+  const skipCashDraftCredentialsReady = Boolean(
+    skipCashClientId.trim() && skipCashKeyId.trim() && skipCashKeySecret.trim(),
+  );
+  const skipCashHasUsableCredentials = Boolean(
+    initial.skipCash?.hasCredentials || skipCashDraftCredentialsReady,
+  );
 
   return (
     <form
@@ -357,9 +429,25 @@ export function CheckoutSettings({
         }}
       >
         {canAcceptOnlinePayments
-          ? 'Configure how customers pay you and which policies they accept. Online providers only reveal their credential setup after you click their logo.'
-          : 'Pro receives orders and WhatsApp notifications with cash on delivery. Upgrade to Pro+ or Max+ to unlock online payment methods and provider credentials.'}
+          ? t(
+              'Configure how customers pay you and which policies they accept. Online providers only reveal their credential setup after you click their logo.',
+            )
+          : t(
+              'Free and Pro can use cash on delivery and Fawran. Upgrade to Pro+ or Max+ to unlock SADAD, SkipCash, Tap Payments, and provider credentials.',
+            )}
       </p>
+
+      <CheckoutReadinessPanel
+        paymentMethods={paymentMethods}
+        canAcceptOnlinePayments={canAcceptOnlinePayments}
+        currency={currency}
+        shippingFlatQar={shippingFlatQar}
+        minOrderQar={minOrderQar}
+        crNumber={crNumber}
+        skipCashCrConfirmed={skipCashCrConfirmed}
+        skipCashHasCredentials={skipCashHasUsableCredentials}
+        skipCashCurrentlyLive={Boolean(initial.skipCash?.enabled)}
+      />
 
       <PaymentMethodsSection
         selected={paymentMethods}
@@ -465,6 +553,15 @@ export function CheckoutSettings({
         setShippingFlatQar={setShippingFlatQar}
       />
 
+      <SouqnaCitySection
+        value={souqnaCity}
+        onChange={setSouqnaCity}
+        currency={currency}
+        enabledPaymentMethods={paymentMethods}
+      />
+
+      <AddressDesignSection selected={addressDesign} onSelect={setAddressDesign} />
+
       <ThankYouSection
         title={thankYouTitle}
         setTitle={setThankYouTitle}
@@ -566,6 +663,156 @@ function SectionHeading({ title, description }: { title: string; description?: s
   );
 }
 
+function CheckoutReadinessPanel({
+  paymentMethods,
+  canAcceptOnlinePayments,
+  currency,
+  shippingFlatQar,
+  minOrderQar,
+  crNumber,
+  skipCashCrConfirmed,
+  skipCashHasCredentials,
+  skipCashCurrentlyLive,
+}: {
+  paymentMethods: PaymentMethod[];
+  canAcceptOnlinePayments: boolean;
+  currency: string;
+  shippingFlatQar: string;
+  minOrderQar: string;
+  crNumber: string | null;
+  skipCashCrConfirmed: boolean;
+  skipCashHasCredentials: boolean;
+  skipCashCurrentlyLive: boolean;
+}) {
+  const locale = useLocale();
+  const t = (text: string) => adminPhrase(locale, text);
+  const skipCashSelected = paymentMethods.includes('skipcash');
+  const deliveryFee = shippingFlatQar.trim() === '' ? 0 : Number.parseInt(shippingFlatQar, 10);
+  const minimumOrder = minOrderQar.trim() === '' ? null : Number.parseInt(minOrderQar, 10);
+  const deliveryLabel =
+    Number.isFinite(deliveryFee) && deliveryFee > 0
+      ? `${currency} ${deliveryFee}`
+      : t('Free delivery fee');
+  const minimumLabel =
+    minimumOrder !== null && Number.isFinite(minimumOrder) && minimumOrder > 0
+      ? `${currency} ${minimumOrder}`
+      : t('No minimum');
+  const skipCashStatus = skipCashReadinessLabel({
+    selected: skipCashSelected,
+    canAcceptOnlinePayments,
+    hasCr: Boolean(crNumber),
+    crConfirmed: skipCashCrConfirmed,
+    hasCredentials: skipCashHasCredentials,
+    currentlyLive: skipCashCurrentlyLive,
+  });
+  const liveMethods = paymentMethods.map((method) => PAYMENT_LABELS[method]?.title ?? method);
+
+  return (
+    <Surface padding={18}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <SectionHeading
+          title="Checkout readiness"
+          description="Confirm what buyers will actually see before saving changes."
+        />
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+            gap: 10,
+          }}
+        >
+          <ReadinessMetric
+            label="Buyer methods"
+            value={liveMethods.length > 0 ? liveMethods.join(', ') : 'None selected'}
+            tone={liveMethods.length > 0 ? 'ready' : 'warning'}
+          />
+          <ReadinessMetric
+            label="SkipCash"
+            value={skipCashStatus.label}
+            tone={skipCashStatus.tone}
+          />
+          <ReadinessMetric label="Delivery fee" value={deliveryLabel} tone="ready" />
+          <ReadinessMetric label="Minimum order" value={minimumLabel} tone="neutral" />
+        </div>
+        <p
+          style={{
+            margin: 0,
+            fontSize: 12.5,
+            lineHeight: 1.55,
+            color: 'var(--ink-muted)',
+          }}
+        >
+          {t(
+            'After saving, open the storefront checkout to confirm the payment method and delivery fee shown to buyers.',
+          )}
+        </p>
+      </div>
+    </Surface>
+  );
+}
+
+function skipCashReadinessLabel(input: {
+  selected: boolean;
+  canAcceptOnlinePayments: boolean;
+  hasCr: boolean;
+  crConfirmed: boolean;
+  hasCredentials: boolean;
+  currentlyLive: boolean;
+}): { label: string; tone: 'ready' | 'warning' | 'neutral' } {
+  if (!input.selected) return { label: 'Not selected', tone: 'neutral' };
+  if (!input.canAcceptOnlinePayments) return { label: 'Pro+ required', tone: 'warning' };
+  if (!input.hasCr) return { label: 'Add CR number', tone: 'warning' };
+  if (!input.crConfirmed) return { label: 'Confirm CR ownership', tone: 'warning' };
+  if (!input.hasCredentials) return { label: 'Add merchant keys', tone: 'warning' };
+  if (input.currentlyLive) return { label: 'Live on checkout', tone: 'ready' };
+  return { label: 'Ready after saving', tone: 'ready' };
+}
+
+function ReadinessMetric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: 'ready' | 'warning' | 'neutral';
+}) {
+  const locale = useLocale();
+  const t = (text: string) => adminPhrase(locale, text);
+  const color =
+    tone === 'ready'
+      ? 'var(--admin-accent, #8a6a2a)'
+      : tone === 'warning'
+        ? 'var(--color-maroon, #8b3a3a)'
+        : 'var(--ink-muted)';
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gap: 6,
+        padding: 12,
+        borderRadius: 12,
+        border: '1px solid color-mix(in srgb, var(--ink-strong) 12%, transparent)',
+        background: 'color-mix(in srgb, var(--surface-overlay) 82%, transparent)',
+        minHeight: 84,
+      }}
+    >
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10.5,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: 'var(--ink-muted)',
+        }}
+      >
+        {t(label)}
+      </span>
+      <strong style={{ color, fontSize: 14, lineHeight: 1.35 }}>{t(value)}</strong>
+    </div>
+  );
+}
+
 function PaymentMethodsSection({
   selected,
   onToggle,
@@ -582,7 +829,7 @@ function PaymentMethodsSection({
   return (
     <SectionCard
       title="Payment methods"
-      description="Pick at least one checkout method. Hosted payment links work for Tap, bank invoice, or manual gateway pages."
+      description="Pick at least one checkout method. Free and Pro keep cash on delivery and Fawran; provider payment links unlock on Pro+ and Max+."
       legend
     >
       <ul
@@ -655,7 +902,7 @@ function OnlineProvidersSection({
       description={
         canAcceptOnlinePayments
           ? 'Click a provider logo to reveal its credential setup. Only live integrations can be enabled at checkout.'
-          : 'Online payment providers unlock on Pro+ and Max+. Pro stays order-only with WhatsApp notifications.'
+          : 'Payment providers unlock on Pro+ and Max+. Free and Pro stay on Fawran, cash on delivery, and WhatsApp notifications.'
       }
     >
       <div
@@ -1496,10 +1743,17 @@ function OrderRulesSection({
     () => CURRENCIES.some((c) => c.code === currency.toUpperCase()),
     [currency],
   );
+  const quickDeliveryFees = [0, 10, 15, 20, 25, 30];
+  const parsedDeliveryFee =
+    shippingFlatQar.trim() === '' ? 0 : Number.parseInt(shippingFlatQar, 10);
+  const deliveryPreview =
+    Number.isFinite(parsedDeliveryFee) && parsedDeliveryFee > 0
+      ? `${currency} ${parsedDeliveryFee}`
+      : 'Free';
   return (
     <SectionCard
-      title="Order rules"
-      description="Currency the storefront prices in, plus optional thresholds applied at checkout."
+      title="Order rules and delivery fee"
+      description="Set the buyer currency, minimum order, and the delivery fee shown in checkout."
     >
       <div
         style={{
@@ -1536,7 +1790,10 @@ function OrderRulesSection({
             aria-label="Minimum order amount in QAR"
           />
         </Field>
-        <Field label="Flat shipping (QAR)" hint="Optional. Add to every order at checkout.">
+        <Field
+          label="Delivery fee (QAR)"
+          hint={`Current buyer preview: ${deliveryPreview}. Use 0 or blank for free delivery.`}
+        >
           <input
             type="number"
             inputMode="numeric"
@@ -1546,12 +1803,616 @@ function OrderRulesSection({
             onChange={(e) => setShippingFlatQar(e.target.value)}
             style={inputStyle}
             placeholder="25"
-            aria-label="Flat shipping fee in QAR"
+            aria-label="Delivery fee in QAR"
           />
         </Field>
       </div>
+      <div
+        aria-label="Quick delivery fee presets"
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+        }}
+      >
+        {quickDeliveryFees.map((fee) => {
+          const active = (shippingFlatQar.trim() === '' ? 0 : Number(shippingFlatQar)) === fee;
+          return (
+            <button
+              key={fee}
+              type="button"
+              onClick={() => setShippingFlatQar(fee === 0 ? '' : String(fee))}
+              style={{
+                padding: '7px 10px',
+                borderRadius: 999,
+                border: active
+                  ? '1px solid var(--admin-accent, #8a6a2a)'
+                  : '1px solid color-mix(in srgb, var(--ink-strong) 14%, transparent)',
+                background: active
+                  ? 'color-mix(in srgb, var(--admin-accent, #8a6a2a) 12%, transparent)'
+                  : 'var(--surface-bg)',
+                color: active ? 'var(--admin-accent, #8a6a2a)' : 'var(--ink-strong)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                cursor: 'pointer',
+              }}
+            >
+              {fee === 0 ? 'Free' : `QAR ${fee}`}
+            </button>
+          );
+        })}
+      </div>
+      <p
+        style={{
+          margin: 0,
+          fontSize: 12.5,
+          lineHeight: 1.55,
+          color: 'var(--ink-muted)',
+        }}
+      >
+        Delivery fee and minimum order apply after you press Save changes. The confirmation below
+        shows when checkout settings are saved.
+      </p>
     </SectionCard>
   );
+}
+
+function SouqnaCitySection({
+  value,
+  onChange,
+  currency,
+  enabledPaymentMethods,
+}: {
+  value: SouqnaCitySettings;
+  onChange: (next: SouqnaCitySettings) => void;
+  currency: string;
+  enabledPaymentMethods: PaymentMethod[];
+}) {
+  const locale = useLocale();
+  const t = (text: string) => adminPhrase(locale, text);
+  const paymentCandidates =
+    enabledPaymentMethods.length > 0 ? enabledPaymentMethods : (['cod'] as PaymentMethod[]);
+
+  function patch(patchValue: Partial<SouqnaCitySettings>) {
+    onChange({ ...value, ...patchValue });
+  }
+
+  function patchRule(id: string, patchValue: Partial<SouqnaCityRule>) {
+    onChange({
+      ...value,
+      rules: value.rules.map((rule) => (rule.id === id ? { ...rule, ...patchValue } : rule)),
+    });
+  }
+
+  function toggleRulePayment(rule: SouqnaCityRule, method: PaymentMethod) {
+    const current = rule.paymentMethods;
+    const next = current.includes(method)
+      ? current.length > 1
+        ? current.filter((item) => item !== method)
+        : current
+      : [...current, method];
+    patchRule(rule.id, { paymentMethods: next });
+  }
+
+  function addPreset(preset: SouqnaCityRule) {
+    const existing = value.rules.find(
+      (rule) => rule.city.trim().toLowerCase() === preset.city.trim().toLowerCase(),
+    );
+    if (existing) {
+      patchRule(existing.id, { enabled: true });
+      return;
+    }
+    onChange({
+      ...value,
+      rules: [...value.rules, { ...preset, paymentMethods: [...preset.paymentMethods] }],
+    });
+  }
+
+  function addCustomCity() {
+    onChange({
+      ...value,
+      rules: [...value.rules, createCityRule('Custom city')],
+    });
+  }
+
+  function removeRule(id: string) {
+    onChange({
+      ...value,
+      rules: value.rules.filter((rule) => rule.id !== id),
+    });
+  }
+
+  return (
+    <SectionCard
+      title="Souqna City"
+      description="City-specific checkout controls for payment methods and delivery amounts. Exact city matches win; nearest region fallback can cover northern, western, eastern, southern, and central areas."
+    >
+      <div style={{ display: 'grid', gap: 12 }}>
+        <CheckboxRow
+          id="souqna-city-enabled"
+          checked={value.enabled}
+          onChange={() => patch({ enabled: !value.enabled })}
+          title="Enable Souqna City"
+          description="Apply city payment and delivery rules during buyer checkout."
+        />
+        <CheckboxRow
+          id="souqna-city-nearest"
+          checked={value.autoMatchNearest}
+          onChange={() => patch({ autoMatchNearest: !value.autoMatchNearest })}
+          title="Automatically pick nearest region"
+          description="If the buyer types a city without an exact rule, use the first matching regional rule."
+          disabled={!value.enabled}
+        />
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {SOUQNA_CITY_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            onClick={() => addPreset(preset)}
+            style={chipButtonStyle()}
+          >
+            {t('Add')} {cityDisplayName(preset.city, locale)}
+          </button>
+        ))}
+        <button type="button" onClick={addCustomCity} style={chipButtonStyle()}>
+          {t('Add custom city')}
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gap: 12 }}>
+        {value.rules.length === 0 ? (
+          <p style={{ margin: 0, color: 'var(--ink-muted)', fontSize: 13 }}>
+            {t('No city rules yet. Add a preset or custom city.')}
+          </p>
+        ) : null}
+        {value.rules.map((rule) => {
+          const effectiveFee =
+            rule.deliveryFeeQar === null ? t('Default delivery fee') : `${currency} ${rule.deliveryFeeQar}`;
+          return (
+            <section
+              key={rule.id}
+              style={{
+                display: 'grid',
+                gap: 12,
+                padding: 14,
+                borderRadius: 10,
+                border: '1px solid color-mix(in srgb, var(--ink-strong) 12%, transparent)',
+                background: rule.enabled
+                  ? 'color-mix(in srgb, var(--admin-accent, #8a6a2a) 5%, var(--surface-bg))'
+                  : 'color-mix(in srgb, var(--ink-strong) 3%, var(--surface-bg))',
+              }}
+            >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(160px, 1.2fr) minmax(140px, .8fr) minmax(140px, .8fr) auto',
+                  gap: 10,
+                  alignItems: 'end',
+                }}
+                className="checkout-city-rule-grid"
+              >
+                <Field label="City" hint={effectiveFee}>
+                  <input
+                    value={rule.city}
+                    onChange={(event) => patchRule(rule.id, { city: event.target.value })}
+                    style={inputStyle}
+                    placeholder={cityDisplayName('Al Wakrah', locale)}
+                    disabled={!value.enabled}
+                  />
+                </Field>
+                <Field label="Region" hint="Used for nearest fallback.">
+                  <select
+                    value={rule.region}
+                    onChange={(event) =>
+                      patchRule(rule.id, { region: event.target.value as SouqnaCityRegion })
+                    }
+                    style={inputStyle}
+                    disabled={!value.enabled}
+                  >
+                    {SOUQNA_CITY_REGIONS.map((region) => (
+                      <option key={region} value={region}>
+                        {t(regionLabel(region))}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Delivery amount" hint="Blank uses the default fee.">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    value={rule.deliveryFeeQar ?? ''}
+                    onChange={(event) =>
+                      patchRule(rule.id, {
+                        deliveryFeeQar:
+                          event.target.value.trim() === ''
+                            ? null
+                            : Math.max(0, Number.parseInt(event.target.value, 10) || 0),
+                      })
+                    }
+                    style={inputStyle}
+                    placeholder={t('Default')}
+                    disabled={!value.enabled}
+                  />
+                </Field>
+                <button
+                  type="button"
+                  onClick={() => removeRule(rule.id)}
+                  style={removeButtonStyle()}
+                >
+                  {t('Remove')}
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <label style={miniToggleStyle(!value.enabled)}>
+                  <input
+                    type="checkbox"
+                    checked={rule.enabled}
+                    onChange={() => patchRule(rule.id, { enabled: !rule.enabled })}
+                    disabled={!value.enabled}
+                  />
+                  {t('Active')}
+                </label>
+                {paymentCandidates.map((method) => {
+                  const checked = rule.paymentMethods.includes(method);
+                  const title = PAYMENT_LABELS[method]?.title ?? method;
+                  return (
+                    <button
+                      key={`${rule.id}:${method}`}
+                      type="button"
+                      onClick={() => toggleRulePayment(rule, method)}
+                      disabled={!value.enabled || !rule.enabled}
+                      aria-pressed={checked}
+                      style={paymentChipStyle(checked, !value.enabled || !rule.enabled)}
+                    >
+                      {t(title)}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      <style>{`
+        @media (max-width: 760px) {
+          .checkout-city-rule-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+        }
+      `}</style>
+    </SectionCard>
+  );
+}
+
+function cityDisplayName(city: string, locale: string | undefined): string {
+  if (locale !== 'ar') return city;
+  const names: Record<string, string> = {
+    'Al Khor': 'الخور',
+    'Al Wakrah': 'الوكرة',
+    'Al Thumamah': 'الثمامة',
+    'Custom city': 'مدينة مخصصة',
+  };
+  return names[city] ?? city;
+}
+
+function regionLabel(region: SouqnaCityRegion): string {
+  switch (region) {
+    case 'northern':
+      return 'Northern areas';
+    case 'western':
+      return 'Western areas';
+    case 'eastern':
+      return 'Eastern areas';
+    case 'southern':
+      return 'Southern areas';
+    case 'central':
+      return 'Central areas';
+    case 'custom':
+      return 'Custom';
+  }
+}
+
+function chipButtonStyle(): React.CSSProperties {
+  return {
+    border: '1px solid color-mix(in srgb, var(--ink-strong) 14%, transparent)',
+    borderRadius: 999,
+    background: 'var(--surface-bg)',
+    color: 'var(--ink-strong)',
+    padding: '7px 11px',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+  };
+}
+
+function removeButtonStyle(): React.CSSProperties {
+  return {
+    border: '1px solid color-mix(in srgb, var(--color-maroon, #8b3a3a) 30%, transparent)',
+    borderRadius: 8,
+    background: 'transparent',
+    color: 'var(--color-maroon, #8b3a3a)',
+    padding: '10px 12px',
+    fontSize: 12.5,
+    fontWeight: 600,
+    cursor: 'pointer',
+  };
+}
+
+function miniToggleStyle(disabled: boolean): React.CSSProperties {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    color: 'var(--ink-muted)',
+    fontSize: 12,
+    opacity: disabled ? 0.55 : 1,
+  };
+}
+
+function paymentChipStyle(checked: boolean, disabled: boolean): React.CSSProperties {
+  return {
+    border: checked
+      ? '1px solid var(--admin-accent, #8a6a2a)'
+      : '1px solid color-mix(in srgb, var(--ink-strong) 14%, transparent)',
+    borderRadius: 999,
+    background: checked
+      ? 'color-mix(in srgb, var(--admin-accent, #8a6a2a) 12%, transparent)'
+      : 'transparent',
+    color: checked ? 'var(--admin-accent, #8a6a2a)' : 'var(--ink-strong)',
+    padding: '7px 10px',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.55 : 1,
+  };
+}
+
+function AddressDesignSection({
+  selected,
+  onSelect,
+}: {
+  selected: CheckoutAddressDesign;
+  onSelect: (design: CheckoutAddressDesign) => void;
+}) {
+  const locale = useLocale();
+  const isAr = locale === 'ar';
+  return (
+    <SectionCard
+      title={isAr ? 'تصميم عنوان التوصيل' : 'Delivery address design'}
+      description={
+        isAr
+          ? 'اختر شكل حقول رقم المنزل والمنطقة والشارع في صفحة الدفع.'
+          : 'Choose how house number, zone, and street appear during buyer checkout.'
+      }
+      legend
+    >
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+          gap: 12,
+        }}
+      >
+        {CHECKOUT_ADDRESS_DESIGNS.map((design) => {
+          const meta = ADDRESS_DESIGN_META[design];
+          const active = selected === design;
+          return (
+            <button
+              key={design}
+              type="button"
+              onClick={() => onSelect(design)}
+              aria-pressed={active}
+              style={{
+                display: 'grid',
+                gridTemplateRows: 'auto 1fr',
+                gap: 12,
+                minHeight: 224,
+                padding: 12,
+                borderRadius: 14,
+                border: active
+                  ? '1.5px solid color-mix(in srgb, var(--color-maroon, #8b3a3a) 70%, var(--color-gold, #c7a45b))'
+                  : '1px solid color-mix(in srgb, var(--ink-strong) 12%, transparent)',
+                background: active
+                  ? 'linear-gradient(135deg, color-mix(in srgb, var(--color-gold, #c7a45b) 13%, var(--surface-bg)), var(--surface-bg))'
+                  : 'var(--surface-bg)',
+                color: 'var(--ink-strong)',
+                cursor: 'pointer',
+                textAlign: isAr ? 'right' : 'left',
+                boxShadow: active
+                  ? '0 16px 34px color-mix(in srgb, var(--color-maroon, #8b3a3a) 16%, transparent)'
+                  : '0 10px 24px color-mix(in srgb, #000 5%, transparent)',
+                transition:
+                  'border-color 180ms ease, box-shadow 180ms ease, background 180ms ease, transform 180ms ease',
+              }}
+            >
+              <AddressDesignPreview design={design} active={active} />
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <strong style={{ fontSize: 14.5, fontWeight: 650 }}>
+                  {isAr ? meta.titleAr : meta.titleEn}
+                </strong>
+                <span style={{ color: 'var(--ink-muted)', fontSize: 12.5, lineHeight: 1.5 }}>
+                  {isAr ? meta.bodyAr : meta.bodyEn}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
+function AddressDesignPreview({
+  design,
+  active,
+}: {
+  design: CheckoutAddressDesign;
+  active: boolean;
+}) {
+  if (design === 'classic') {
+    return (
+      <span
+        aria-hidden
+        style={{
+          display: 'grid',
+          gap: 7,
+          padding: 12,
+          borderRadius: 12,
+          border: '1px solid color-mix(in srgb, var(--ink-strong) 12%, transparent)',
+          background: 'color-mix(in srgb, var(--surface-bg) 82%, var(--ink-strong) 4%)',
+        }}
+      >
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            style={{
+              height: 24,
+              borderRadius: 8,
+              background:
+                i === 0
+                  ? 'color-mix(in srgb, var(--ink-strong) 15%, transparent)'
+                  : 'color-mix(in srgb, var(--ink-strong) 9%, transparent)',
+            }}
+          />
+        ))}
+      </span>
+    );
+  }
+
+  if (design === 'soft_card') {
+    return (
+      <span
+        aria-hidden
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 6,
+          padding: 10,
+          borderRadius: 12,
+          border: '1px solid color-mix(in srgb, var(--color-gold, #c7a45b) 28%, transparent)',
+          background:
+            'linear-gradient(135deg, color-mix(in srgb, var(--color-gold, #c7a45b) 18%, var(--surface-bg)), var(--surface-bg))',
+        }}
+      >
+        {[
+          ['House', '4'],
+          ['Zone', '38'],
+          ['Street', '856'],
+        ].map(([label, value], i) => (
+          <span
+            key={label}
+            style={{
+              gridColumn: i === 0 ? '1 / -1' : undefined,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              minHeight: 30,
+              padding: '7px 8px',
+              borderRadius: 9,
+              background: 'color-mix(in srgb, var(--surface-bg) 88%, var(--color-gold, #c7a45b) 10%)',
+              color: 'var(--ink-strong)',
+              fontSize: 11,
+            }}
+          >
+            <span>{label}</span>
+            <strong style={{ fontSize: 15, fontFamily: 'var(--font-mono)' }}>{value}</strong>
+          </span>
+        ))}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      aria-hidden
+      style={{
+        position: 'relative',
+        display: 'grid',
+        gap: 4,
+        padding: 8,
+        borderRadius: 12,
+        background: '#d8c59d',
+        border: '1px solid #8f7f61',
+        boxShadow: active ? 'inset 0 0 0 1px rgba(255,255,255,0.45)' : undefined,
+      }}
+    >
+      <span style={addressPreviewScrewStyle('start', 'start')} />
+      <span style={addressPreviewScrewStyle('end', 'start')} />
+      <span style={addressPreviewScrewStyle('start', 'end')} />
+      <span style={addressPreviewScrewStyle('end', 'end')} />
+      <span
+        style={{
+          display: 'grid',
+          placeItems: 'center',
+          minHeight: 70,
+          borderRadius: 8,
+          background: 'linear-gradient(180deg, #07539c, #043b75)',
+          color: '#fff',
+          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.25)',
+        }}
+      >
+        <span style={{ fontSize: 11, opacity: 0.92 }}>رقم المنزل</span>
+        <strong style={{ fontSize: 30, lineHeight: 1, fontFamily: 'var(--font-serif)' }}>4</strong>
+        <span style={{ fontSize: 10, opacity: 0.86 }}>House No.</span>
+      </span>
+      <span
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '0.85fr 1.15fr',
+          gap: 4,
+        }}
+      >
+        {[
+          ['Zone', 'منطقة', '38'],
+          ['Street', 'شارع', '856'],
+        ].map(([en, ar, value]) => (
+          <span
+            key={en}
+            style={{
+              display: 'grid',
+              gap: 2,
+              padding: '7px 8px',
+              borderRadius: 7,
+              background: '#06488a',
+              color: '#fff',
+              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.2)',
+            }}
+          >
+            <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8.5 }}>
+              <span>{en}</span>
+              <span>{ar}</span>
+            </span>
+            <strong style={{ fontSize: 17, lineHeight: 1, fontFamily: 'var(--font-mono)' }}>
+              {value}
+            </strong>
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+function addressPreviewScrewStyle(
+  inline: 'start' | 'end',
+  block: 'start' | 'end',
+): React.CSSProperties {
+  return {
+    position: 'absolute',
+    [inline === 'start' ? 'left' : 'right']: 8,
+    [block === 'start' ? 'top' : 'bottom']: 8,
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    background: '#6f6656',
+    boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.35)',
+  };
 }
 
 function ThankYouSection({
@@ -1783,11 +2644,20 @@ function SaveBar({
   return (
     <footer
       style={{
+        position: 'sticky',
+        bottom: 16,
+        zIndex: 4,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'flex-end',
         gap: 12,
         marginTop: 8,
+        padding: 12,
+        borderRadius: 14,
+        border: '1px solid color-mix(in srgb, var(--ink-strong) 12%, transparent)',
+        background: 'color-mix(in srgb, var(--surface-overlay) 92%, transparent)',
+        boxShadow: '0 14px 38px color-mix(in srgb, #000 14%, transparent)',
+        backdropFilter: 'blur(16px)',
       }}
     >
       {topLevelError ? (

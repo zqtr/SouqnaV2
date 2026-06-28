@@ -2,6 +2,7 @@ import type { BlockRenderProps } from './BlockContext';
 import type { MenuItem, MenuProps } from '@/lib/blocks/types';
 import { AddToCartButton } from '../cart/AddToCartButton';
 import { formatPrice, pickProducts } from './helpers';
+import { isVideoMediaUrl } from '@/lib/media';
 
 /**
  * Cafe / restaurant menu: category-grouped rows with a dotted leader between
@@ -191,9 +192,12 @@ export function MenuBlock({ block, ctx }: BlockRenderProps<MenuProps>) {
                       productId={row.cartProductId}
                       title={row.title}
                       priceQar={row.priceQar}
-                      imageUrl={row.imageUrl}
+                      imageUrl={row.imageUrl && !isVideoMediaUrl(row.imageUrl) ? row.imageUrl : null}
                       sizeOptions={row.sizeOptions}
+                      sizeOptionPrices={row.sizeOptionPrices}
                       allowCustomSize={row.allowCustomSize}
+                      variantOptions={row.variantOptions}
+                      variantOptionPrices={row.variantOptionPrices}
                       requiresHeightInput={row.requiresHeightInput}
                       heightInputLabel={row.heightInputLabel}
                       heightOptions={row.heightOptions}
@@ -227,7 +231,10 @@ type NormalizedRow = {
   cartProductId?: string;
   imageUrl?: string | null;
   sizeOptions?: string[];
+  sizeOptionPrices?: unknown;
   allowCustomSize?: boolean;
+  variantOptions?: string[];
+  variantOptionPrices?: unknown;
   requiresHeightInput?: boolean;
   heightInputLabel?: string | null;
   heightOptions?: string[];
@@ -258,7 +265,10 @@ function normalizeFromProduct(
     cartProductId: p.id,
     imageUrl: p.imageUrl,
     sizeOptions: p.sizeOptions,
+    sizeOptionPrices: p.sizeOptionPrices,
     allowCustomSize: p.allowCustomSize,
+    variantOptions: p.variantOptions,
+    variantOptionPrices: p.variantOptionPrices,
     requiresHeightInput: p.requiresHeightInput,
     heightInputLabel: p.heightInputLabel,
     heightOptions: p.heightOptions,

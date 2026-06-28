@@ -11,6 +11,8 @@ import { updateStorefront, type Storefront, type UpdateStorefrontInput } from '@
 import { recordAudit } from '@/lib/audit';
 import { encryptToken } from '@/lib/apps/crypto';
 import {
+  CHECKOUT_ADDRESS_DESIGNS,
+  DEFAULT_CHECKOUT_EXPERIENCE,
   checkoutPaymentMethodsForPlan,
   isOnlinePaymentMethod,
   PAYMENT_METHODS,
@@ -19,6 +21,7 @@ import {
   writeStorefrontSadadSetup,
   writeStorefrontSkipCashSetup,
   type BankDetails,
+  type CheckoutAddressDesign,
   type CheckoutSettings,
   type PaymentMethod,
   type PolicyKey,
@@ -144,6 +147,9 @@ const PatchSchema = z.object({
     .transform((value) => (value ? value.toUpperCase() : undefined)),
   shippingFlatQar: z.number().int().min(0).max(1_000_000).nullable().optional(),
   minOrderQar: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  addressDesign: z
+    .enum(CHECKOUT_ADDRESS_DESIGNS as unknown as [CheckoutAddressDesign, ...CheckoutAddressDesign[]])
+    .optional(),
   thankYou: ThankYouSchema.optional(),
 });
 
@@ -210,7 +216,6 @@ export async function PATCH(req: Request): Promise<Response> {
       parsed.data.enableSkipCash === true ||
       parsed.data.skipCash ||
       parsed.data.sadad ||
-      parsed.data.fawran ||
       parsed.data.bankDetails ||
       parsed.data.payLink,
   );
@@ -218,7 +223,7 @@ export async function PATCH(req: Request): Promise<Response> {
     return mobileError(
       402,
       'online_payments_plan_required',
-      'Online payments require Pro+ or Max+. Pro can receive orders and WhatsApp notifications with cash on delivery.',
+      'Provider payments require Pro+ or Max+. Free and Pro can receive orders with cash on delivery and Fawran.',
     );
   }
   const shouldEnableSkipCash = canAcceptOnlinePayments
@@ -402,6 +407,8 @@ export async function PATCH(req: Request): Promise<Response> {
       parsed.data.shippingFlatQar === undefined
         ? workingStorefront.checkout.shippingFlatQar
         : parsed.data.shippingFlatQar,
+    addressDesign: parsed.data.addressDesign ?? workingStorefront.checkout.addressDesign,
+    experience: workingStorefront.checkout.experience ?? { ...DEFAULT_CHECKOUT_EXPERIENCE },
     thankYou: parsed.data.thankYou
       ? { ...workingStorefront.checkout.thankYou, ...parsed.data.thankYou }
       : workingStorefront.checkout.thankYou,
@@ -569,6 +576,7 @@ function toPayload(storefront: Storefront, canAcceptOnlinePayments: boolean) {
   );
   return {
     checkout: {
+      enabled: true,
       paymentMethods,
       bankDetails: checkout.bankDetails,
       payLink: checkout.payLink,
@@ -576,6 +584,8 @@ function toPayload(storefront: Storefront, canAcceptOnlinePayments: boolean) {
       currency: checkout.currency,
       minOrderQar: checkout.minOrderQar,
       shippingFlatQar: checkout.shippingFlatQar,
+      addressDesign: checkout.addressDesign,
+      experience: checkout.experience ?? DEFAULT_CHECKOUT_EXPERIENCE,
       thankYou: checkout.thankYou,
       skipCash: {
         hasCredentials: skipCash.hasCredentials,

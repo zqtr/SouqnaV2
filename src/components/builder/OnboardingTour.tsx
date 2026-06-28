@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useBuilderCopy } from './BuilderCopyContext';
 
 const STORAGE_KEY = 'souqna:builder:tour-seen';
 const REPLAY_EVENT = 'souqna:tour:replay';
@@ -36,7 +37,7 @@ type Step = {
  * If a future refactor moves an anchor, update both sides here so the
  * spotlight still lands on the right region.
  */
-const STEPS: Step[] = [
+const EN_STEPS: Step[] = [
   {
     title: 'Welcome to your studio.',
     body: 'A short tour of the builder — 13 quick steps. Use ←/→ or Skip at any time.',
@@ -99,6 +100,72 @@ const STEPS: Step[] = [
   {
     title: 'You\u2019re ready.',
     body: 'Start with the hero — pick a block on the canvas and edit it on the right.',
+  },
+];
+
+const AR_STEPS: Step[] = [
+  {
+    title: 'مرحباً بك في الاستوديو.',
+    body: 'جولة قصيرة في المحرّر عبر 13 خطوة سريعة. استخدم الأسهم أو تخطَّ الجولة في أي وقت.',
+  },
+  {
+    title: 'الصفحات.',
+    body: 'كل صفحة هنا هي مسار في المتجر. اضغط للتنقل بين صفحات المتجر.',
+    target: '[data-tour="pages-tab"]',
+  },
+  {
+    title: 'المكتبة.',
+    body: 'اسحب أي كتلة من هنا إلى الصفحة: أبطال، معارض، شبكات منتجات، والمزيد.',
+    target: '[data-tour="library-tab"]',
+  },
+  {
+    title: 'المخطّط.',
+    body: 'اعرض كل كتل الصفحة وأعد ترتيبها، خصوصاً في الصفحات الطويلة والغنية بالمحتوى.',
+    target: '[data-tour="outline-tab"]',
+  },
+  {
+    title: 'لوحة المعاينة.',
+    body: 'هذه معاينة مباشرة للمتجر. اضغط على أي كتلة لبدء تعديلها.',
+    target: '[data-tour="canvas"]',
+  },
+  {
+    title: 'شريط التحديد.',
+    body: 'بعد تحديد كتلة، يظهر هذا الشريط العائم لاختصارات التحرير السريعة.',
+    target: '[data-tour="selection-toolbar"]',
+  },
+  {
+    title: 'محرّر الكتلة.',
+    body: 'عدّل محتوى الكتلة المحددة وتنسيقها وصورها من هذا التبويب.',
+    target: '[data-tour="inspector-block"]',
+  },
+  {
+    title: 'محرّر الموقع.',
+    body: 'إعدادات القالب، الألوان، والثيم موجودة في تبويب الموقع.',
+    target: '[data-tour="inspector-site"]',
+  },
+  {
+    title: 'تبديل الجهاز.',
+    body: 'عاين الصفحة على الكمبيوتر أو التابلت أو الهاتف.',
+    target: '[data-tour="device-toggle"]',
+  },
+  {
+    title: 'حالة الحفظ.',
+    body: 'التعديلات تُحفظ تلقائياً. هذه الشارة توضّح هل المسودة محفوظة أو منشورة.',
+    target: '[data-tour="save-chip"]',
+  },
+  {
+    title: 'النشر.',
+    body: 'انشر المسودة مباشرة بنقرة واحدة. يمكنك دائماً إلغاء المسودة للرجوع.',
+    target: '[data-tour="publish"]',
+  },
+  {
+    title: 'لوحة الأوامر.',
+    body: 'استخدم ⌘K أو Ctrl+K على ويندوز للانتقال السريع داخل المحرّر.',
+    target: '[data-tour="cmdk-hint"]',
+  },
+  {
+    title: 'أنت جاهز.',
+    body: 'ابدأ بالهيدر: اختر كتلة من المعاينة وعدّلها من اللوحة اليمنى.',
   },
 ];
 
@@ -196,11 +263,35 @@ function useTargetRect(target: string | undefined, open: boolean): DOMRect | nul
  * `replayBuilderTour()` from anywhere else).
  */
 export function OnboardingTour() {
+  const { dir, locale } = useBuilderCopy();
+  const steps = locale === 'ar' ? AR_STEPS : EN_STEPS;
+  const tourText =
+    locale === 'ar'
+      ? {
+          region: 'جولة المحرّر',
+          controls: 'أزرار الجولة',
+          step: (current: number, total: number) => `◈ الخطوة ${current} من ${total}`,
+          kicker: '⌘ جولة المحرّر',
+          skip: 'تخطي',
+          back: 'رجوع',
+          next: 'التالي ←',
+          start: 'ابدأ البناء ←',
+        }
+      : {
+          region: 'Builder tour',
+          controls: 'Tour controls',
+          step: (current: number, total: number) => `◈ Step ${current} of ${total}`,
+          kicker: '⌘ Builder tour',
+          skip: 'Skip',
+          back: 'Back',
+          next: 'Next →',
+          start: 'Start building →',
+        };
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
   const reduced = usePrefersReducedMotion();
 
-  const current = STEPS[step];
+  const current = steps[step];
   const rect = useTargetRect(current?.target, open);
   const barRef = useRef<HTMLDivElement | null>(null);
   const nextBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -238,14 +329,14 @@ export function OnboardingTour() {
   }, []);
 
   const next = useCallback(() => {
-    setStep((s) => (s + 1 >= STEPS.length ? s : s + 1));
-  }, []);
+    setStep((s) => (s + 1 >= steps.length ? s : s + 1));
+  }, [steps.length]);
 
   const back = useCallback(() => {
     setStep((s) => (s > 0 ? s - 1 : 0));
   }, []);
 
-  const finalStep = step + 1 >= STEPS.length;
+  const finalStep = step + 1 >= steps.length;
 
   // Keyboard: Esc closes, Right/Left navigate. We also trap focus in the
   // bar so screen-reader / keyboard users can move through controls
@@ -257,11 +348,11 @@ export function OnboardingTour() {
       if (e.key === 'Escape') {
         e.preventDefault();
         close();
-      } else if (e.key === 'ArrowRight') {
+      } else if (e.key === (dir === 'rtl' ? 'ArrowLeft' : 'ArrowRight')) {
         e.preventDefault();
         if (finalStep) close();
         else next();
-      } else if (e.key === 'ArrowLeft') {
+      } else if (e.key === (dir === 'rtl' ? 'ArrowRight' : 'ArrowLeft')) {
         e.preventDefault();
         back();
       } else if (e.key === 'Tab' && barRef.current) {
@@ -286,7 +377,7 @@ export function OnboardingTour() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, finalStep, next, back, close]);
+  }, [open, finalStep, next, back, close, dir]);
 
   // On step change, send focus to the Next / Start-building button so
   // keyboard users can keep advancing without re-tabbing.
@@ -318,7 +409,8 @@ export function OnboardingTour() {
   return (
     <div
       role="region"
-      aria-label="Builder tour"
+      aria-label={tourText.region}
+      dir={dir}
       style={{ position: 'fixed', inset: 0, zIndex: 1000, pointerEvents: 'none' }}
     >
       {/* Dim overlay with optional cutout. Pointer-events: auto so a
@@ -389,7 +481,7 @@ export function OnboardingTour() {
       <div
         ref={barRef}
         role="group"
-        aria-label="Tour controls"
+        aria-label={tourText.controls}
         style={{
           position: 'fixed',
           bottom: 'clamp(16px, 3vh, 28px)',
@@ -435,7 +527,7 @@ export function OnboardingTour() {
               textTransform: 'uppercase',
             }}
           >
-            ◈ Step {step + 1} of {STEPS.length}
+            {tourText.step(step + 1, steps.length)}
           </span>
           <span
             style={{
@@ -446,7 +538,7 @@ export function OnboardingTour() {
               textTransform: 'uppercase',
             }}
           >
-            ⌘ Builder tour
+            {tourText.kicker}
           </span>
         </div>
 
@@ -498,7 +590,7 @@ export function OnboardingTour() {
               padding: '6px 4px',
             }}
           >
-            Skip
+            {tourText.skip}
           </button>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button
@@ -519,7 +611,7 @@ export function OnboardingTour() {
                 padding: '6px 4px',
               }}
             >
-              Back
+              {tourText.back}
             </button>
             <button
               ref={nextBtnRef}
@@ -537,7 +629,7 @@ export function OnboardingTour() {
                 cursor: 'pointer',
               }}
             >
-              {finalStep ? 'Start building →' : 'Next →'}
+              {finalStep ? tourText.start : tourText.next}
             </button>
           </div>
         </div>

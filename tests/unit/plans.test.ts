@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canAccessAdvancedAnalytics,
+  canAccessBasicAnalytics,
+  getAnalyticsAccessLevel,
+} from '@/lib/analytics/access';
+import {
   PLAN_LIMITS,
   PLANS,
   aiCreditsForPlan,
@@ -40,7 +45,11 @@ describe('Souqna plan catalog', () => {
   it('gates features at the intended tiers', () => {
     expect(planUnlocksCustomDomain('free')).toBe(false);
     expect(planUnlocksCustomDomain('starter')).toBe(true);
-    expect(planUnlocksAnalytics('free')).toBe(false);
+    expect(planUnlocksAnalytics('free')).toBe(true);
+    expect(canAccessBasicAnalytics('free')).toBe(true);
+    expect(canAccessAdvancedAnalytics('free')).toBe(false);
+    expect(getAnalyticsAccessLevel('starter')).toBe('basic');
+    expect(getAnalyticsAccessLevel('pro')).toBe('advanced');
     expect(planUnlocksIntegrations('starter')).toBe(true);
     expect(planUnlocksDiscounts('starter')).toBe(true);
     expect(planUnlocksSouqy('starter')).toBe(false);

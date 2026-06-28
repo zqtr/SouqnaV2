@@ -6,7 +6,9 @@ import type {
   BlockStyle,
   BlockVariant,
   CardEffect,
+  CommerceCardConfig,
   EcommerceCategory,
+  FilterableShopConfig,
   GalleryEffect,
   GalleryItem,
   Showcase1Item,
@@ -14,8 +16,19 @@ import type {
   Showcase3Item,
   Showcase4Project,
   Showcase5Tab,
+  TabbedProductsConfig,
+  TaqimBlockProps,
   TextEffect,
+  VisualCategoryTile,
+  VisualCategoryTilesConfig,
 } from '@/lib/blocks/types';
+import {
+  normalizeCommerceProductSource,
+  type CommerceFilterGroup,
+  type CommerceProductSource,
+  type CommerceProductSourceKind,
+  type CommerceProductSort,
+} from '@/lib/blocks/commerce';
 import { CARD_EFFECTS, GALLERY_EFFECTS, TEXT_EFFECTS, isVariantBlock } from '@/lib/blocks/types';
 import { BACKGROUND_EFFECT_PICKER_OPTIONS } from '@/lib/blocks/backgroundPicker';
 import type { Plan } from '@/lib/plans';
@@ -100,6 +113,18 @@ const BLOCK_CATEGORY: Record<
   ecommerce5: 'commerce',
   ecommerce6: 'commerce',
   ecommerce7: 'commerce',
+  shadcnNavbar: 'commerce',
+  shadcnHero: 'commerce',
+  shadcnTrustStrip: 'commerce',
+  shadcnCategories: 'commerce',
+  shadcnProductCard: 'commerce',
+  shadcnProductList: 'commerce',
+  shadcnProductDetail: 'commerce',
+  shadcnQuickView: 'commerce',
+  shadcnReviews: 'commerce',
+  shadcnOrderSummary: 'commerce',
+  shadcnOfferModal: 'commerce',
+  shadcnFooter: 'commerce',
   menu: 'commerce',
   serviceList: 'commerce',
   calendar: 'commerce',
@@ -114,6 +139,7 @@ const BLOCK_CATEGORY: Record<
   spotlightCard: 'motion',
   depthShowcase: 'motion',
   auroraRibbon: 'motion',
+  curvedLoop: 'motion',
   showcase1: 'motion',
   showcase2: 'motion',
   showcase3: 'motion',
@@ -129,6 +155,73 @@ const CATEGORY_COLOR: Record<'layout' | 'commerce' | 'contact' | 'motion' | 'spa
   contact: '#CFC2A7',
   motion: '#BDB19A',
   spacing: 'rgba(232,220,196,0.45)',
+};
+
+const INSPECTOR_INLINE_AR: Record<string, string> = {
+  'Describe the image': '\u0635\u0641 \u0627\u0644\u0635\u0648\u0631\u0629',
+  'Optional small line above': '\u0633\u0637\u0631 \u0635\u063a\u064a\u0631 \u0627\u062e\u062a\u064a\u0627\u0631\u064a \u0628\u0627\u0644\u0623\u0639\u0644\u0649',
+  Required: '\u0645\u0637\u0644\u0648\u0628',
+  'Optional supporting paragraph': '\u0641\u0642\u0631\u0629 \u0645\u0633\u0627\u0646\u062f\u0629 \u0627\u062e\u062a\u064a\u0627\u0631\u064a\u0629',
+  'Defaults to your storefront accent': '\u064a\u0633\u062a\u062e\u062f\u0645 \u0644\u0648\u0646 \u0627\u0644\u0644\u0645\u0633\u0629 \u0641\u064a \u0627\u0644\u0645\u062a\u062c\u0631 \u062a\u0644\u0642\u0627\u0626\u064a\u0627',
+  'See more': '\u0639\u0631\u0636 \u0627\u0644\u0645\u0632\u064a\u062f',
+  'https://… or # for none': 'https://... \u0623\u0648 # \u0628\u062f\u0648\u0646 \u0631\u0627\u0628\u0637',
+  'Describe the image for assistive tech': '\u0635\u0641 \u0627\u0644\u0635\u0648\u0631\u0629 \u0644\u0642\u0627\u0631\u0626\u0627\u062a \u0627\u0644\u0634\u0627\u0634\u0629',
+  'Optional overlay headline': '\u0639\u0646\u0648\u0627\u0646 \u0627\u062e\u062a\u064a\u0627\u0631\u064a \u0641\u0648\u0642 \u0627\u0644\u0635\u0648\u0631\u0629',
+  'Optional supporting line': '\u0633\u0637\u0631 \u0645\u0633\u0627\u0646\u062f \u0627\u062e\u062a\u064a\u0627\u0631\u064a',
+  "Falls back to the product's category": '\u064a\u0633\u062a\u062e\u062f\u0645 \u0641\u0626\u0629 \u0627\u0644\u0645\u0646\u062a\u062c \u0639\u0646\u062f \u062a\u0631\u0643\u0647 \u0641\u0627\u0631\u063a\u0627',
+  View: '\u0639\u0631\u0636',
+  Services: '\u0627\u0644\u062e\u062f\u0645\u0627\u062a',
+  'Visit us': '\u0632\u0631\u0646\u0627',
+  'From profile': '\u0645\u0646 \u0645\u0644\u0641 \u0627\u0644\u0645\u062a\u062c\u0631',
+  'From profile (handle without @)': '\u0645\u0646 \u0645\u0644\u0641 \u0627\u0644\u0645\u062a\u062c\u0631 (\u0627\u0644\u0645\u0639\u0631\u0641 \u0628\u062f\u0648\u0646 @)',
+  'Headline on the card': '\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0628\u0637\u0627\u0642\u0629',
+  'Main line': '\u0627\u0644\u0633\u0637\u0631 \u0627\u0644\u0631\u0626\u064a\u0633\u064a',
+  'Add Text Here': '\u0623\u0636\u0641 \u0627\u0644\u0646\u0635 \u0647\u0646\u0627',
+  'Featured paths': '\u0645\u0633\u0627\u0631\u0627\u062a \u0645\u0645\u064a\u0632\u0629',
+  'Featured Work': '\u0623\u0639\u0645\u0627\u0644 \u0645\u0645\u064a\u0632\u0629',
+  'Leave empty to use product + launch time': '\u0627\u062a\u0631\u0643\u0647 \u0641\u0627\u0631\u063a\u0627 \u0644\u0627\u0633\u062a\u062e\u062f\u0627\u0645 \u0627\u0644\u0645\u0646\u062a\u062c \u0648\u0648\u0642\u062a \u0627\u0644\u0625\u0637\u0644\u0627\u0642',
+  "Falls back to the event's bilingual label": '\u064a\u0633\u062a\u062e\u062f\u0645 \u062a\u0633\u0645\u064a\u0629 \u0627\u0644\u0641\u0639\u0627\u0644\u064a\u0629 \u0627\u0644\u062b\u0646\u0627\u0626\u064a\u0629 \u0639\u0646\u062f \u062a\u0631\u0643\u0647 \u0641\u0627\u0631\u063a\u0627',
+  'Optional app bundle id': '\u0645\u0639\u0631\u0641 \u0628\u0627\u0642\u0629 \u0627\u0644\u062a\u0637\u0628\u064a\u0642 \u0627\u062e\u062a\u064a\u0627\u0631\u064a',
+  "Falls back to the bundle's bilingual title": '\u064a\u0633\u062a\u062e\u062f\u0645 \u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0628\u0627\u0642\u0629 \u0627\u0644\u062b\u0646\u0627\u0626\u064a \u0639\u0646\u062f \u062a\u0631\u0643\u0647 \u0641\u0627\u0631\u063a\u0627',
+  'Category label': '\u062a\u0633\u0645\u064a\u0629 \u0627\u0644\u0641\u0626\u0629',
+  Tag: '\u0648\u0633\u0645',
+  'Item title': '\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0639\u0646\u0635\u0631',
+  'Card title': '\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0628\u0637\u0627\u0642\u0629',
+  'Project title': '\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0645\u0634\u0631\u0648\u0639',
+  Client: '\u0627\u0644\u0639\u0645\u064a\u0644',
+  Year: '\u0627\u0644\u0633\u0646\u0629',
+  'Tags, comma separated': '\u0648\u0633\u0648\u0645 \u0645\u0641\u0635\u0648\u0644\u0629 \u0628\u0641\u0648\u0627\u0635\u0644',
+  'Tab label': '\u062a\u0633\u0645\u064a\u0629 \u0627\u0644\u062a\u0628\u0648\u064a\u0628',
+  'Service name': '\u0627\u0633\u0645 \u0627\u0644\u062e\u062f\u0645\u0629',
+  'Price (QAR)': '\u0627\u0644\u0633\u0639\u0631 (QAR)',
+  All: '\u0627\u0644\u0643\u0644',
+  JUNE: '\u064a\u0648\u0646\u064a\u0648',
+  'Optional small caps line': '\u0633\u0637\u0631 \u0635\u063a\u064a\u0631 \u0628\u062d\u0631\u0648\u0641 \u0628\u0627\u0631\u0632\u0629 \u0627\u062e\u062a\u064a\u0627\u0631\u064a',
+  'Optional supporting copy': '\u0646\u0635 \u0645\u0633\u0627\u0646\u062f \u0627\u062e\u062a\u064a\u0627\u0631\u064a',
+  'Optional eyebrow': '\u0639\u0628\u0627\u0631\u0629 \u0639\u0644\u0648\u064a\u0629 \u0627\u062e\u062a\u064a\u0627\u0631\u064a\u0629',
+  'Optional caption': '\u062a\u0639\u0644\u064a\u0642 \u0627\u062e\u062a\u064a\u0627\u0631\u064a',
+  'Alt text (accessibility)': '\u0646\u0635 \u0628\u062f\u064a\u0644 (\u0644\u0625\u062a\u0627\u062d\u0629 \u0627\u0644\u0648\u0635\u0648\u0644)',
+  'Alt text': '\u0646\u0635 \u0628\u062f\u064a\u0644',
+  'Caption (optional)': '\u062a\u0639\u0644\u064a\u0642 (\u0627\u062e\u062a\u064a\u0627\u0631\u064a)',
+  Kicker: '\u0639\u0628\u0627\u0631\u0629 \u062a\u0645\u0647\u064a\u062f\u064a\u0629',
+  Link: '\u0631\u0627\u0628\u0637',
+  Shop: '\u062a\u0633\u0648\u0642',
+  Category: '\u0627\u0644\u0641\u0626\u0629',
+  'Future-ready tag or collection': '\u0648\u0633\u0645 \u0623\u0648 \u0645\u062c\u0645\u0648\u0639\u0629 \u0645\u0633\u062a\u0639\u062f\u0629',
+  'Search products': '\u0627\u0628\u062d\u062b \u0639\u0646 \u0645\u0646\u062a\u062c\u0627\u062a',
+  Value: '\u0627\u0644\u0642\u064a\u0645\u0629',
+  'Tab slug': '\u0631\u0627\u0628\u0637 \u0627\u0644\u062a\u0628\u0648\u064a\u0628',
+  'Page slug': '\u0631\u0627\u0628\u0637 \u0627\u0644\u0635\u0641\u062d\u0629',
+  'Tag / collection': '\u0648\u0633\u0645 / \u0645\u062c\u0645\u0648\u0639\u0629',
+  'Default option, if needed': '\u062e\u064a\u0627\u0631 \u0627\u0641\u062a\u0631\u0627\u0636\u064a \u0639\u0646\u062f \u0627\u0644\u062d\u0627\u062c\u0629',
+  'Product badge EN': '\u0634\u0627\u0631\u0629 \u0627\u0644\u0645\u0646\u062a\u062c EN',
+  'Product badge AR': '\u0634\u0627\u0631\u0629 \u0627\u0644\u0645\u0646\u062a\u062c AR',
+  'Add bundle to cart': '\u0623\u0636\u0641 \u0627\u0644\u0628\u0627\u0642\u0629 \u0644\u0644\u0633\u0644\u0629',
+  'All, Travel, Home, Gifts': '\u0627\u0644\u0643\u0644\u060c \u0633\u0641\u0631\u060c \u0645\u0646\u0632\u0644\u060c \u0647\u062f\u0627\u064a\u0627',
+  'Launch edit': '\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u0625\u0637\u0644\u0627\u0642',
+  NEW: '\u062c\u062f\u064a\u062f',
+  'bg colour': '\u0644\u0648\u0646 \u0627\u0644\u062e\u0644\u0641\u064a\u0629',
+  'text colour': '\u0644\u0648\u0646 \u0627\u0644\u0646\u0635',
 };
 
 const TITLES: Record<Block['type'], string> = {
@@ -163,8 +256,21 @@ const TITLES: Record<Block['type'], string> = {
   ecommerce5: 'Editorial shelf',
   ecommerce6: 'Category shop',
   ecommerce7: 'Category tiles',
+  shadcnNavbar: 'Premium navbar',
+  shadcnHero: 'Premium hero',
+  shadcnTrustStrip: 'Trust strip',
+  shadcnCategories: 'Premium categories',
+  shadcnProductCard: 'Premium product cards',
+  shadcnProductList: 'Premium product list',
+  shadcnProductDetail: 'Premium product detail',
+  shadcnQuickView: 'Quick view',
+  shadcnReviews: 'Souqna Reviews',
+  shadcnOrderSummary: 'Order summary',
+  shadcnOfferModal: 'Offer module',
+  shadcnFooter: 'Premium footer',
   depthShowcase: 'Depth showcase',
   auroraRibbon: 'Aurora ribbon',
+  curvedLoop: 'Curved loop',
   showcase1: 'Case switcher',
   showcase2: 'Image marquee',
   showcase3: '3D story wheel',
@@ -200,7 +306,7 @@ const VARIANT_OPTIONS: Array<{
   {
     id: 'pro-silk',
     label: 'Silk',
-    blurb: 'React Bits Pro silk-wave surface.',
+    blurb: 'Premium silk-wave surface.',
     pro: false,
   },
   {
@@ -1379,7 +1485,7 @@ function renderForm(
               lineHeight: 1.55,
             }}
           >
-            React Bits parallax depth. Prefer at most one per page; 3D is reduced on small screens
+            Premium parallax depth. Prefer at most one per page; 3D is reduced on small screens
             for visitors who prefer motion safety.
           </p>
         </Section>
@@ -1434,6 +1540,81 @@ function renderForm(
             }}
           >
             WebGL aurora strip. Use one short ribbon per page; heavy on mobile GPUs.
+          </p>
+        </Section>
+      );
+    case 'curvedLoop':
+      return (
+        <Section>
+          <Field label="Loop text">
+            <TextArea
+              value={str(p.marqueeText) || 'Add Text Here'}
+              onChange={(v) => set('marqueeText', v)}
+              rows={2}
+            />
+          </Field>
+          <Field label="Size">
+            <SegmentedControl
+              value={str(p.size) || 'standard'}
+              onChange={(v) => set('size', v)}
+              options={[
+                { value: 'compact', label: 'Compact' },
+                { value: 'standard', label: 'Standard' },
+                { value: 'hero', label: 'Hero' },
+              ]}
+            />
+          </Field>
+          <Field label="Tone">
+            <SegmentedControl
+              value={str(p.tone) || 'accent'}
+              onChange={(v) => set('tone', v)}
+              options={[
+                { value: 'accent', label: 'Accent' },
+                { value: 'ink', label: 'Ink' },
+                { value: 'gold', label: 'Gold' },
+                { value: 'muted', label: 'Muted' },
+              ]}
+            />
+          </Field>
+          <Field label="Direction">
+            <SegmentedControl
+              value={str(p.direction) || 'left'}
+              onChange={(v) => set('direction', v)}
+              options={[
+                { value: 'left', label: 'Left' },
+                { value: 'right', label: 'Right' },
+              ]}
+            />
+          </Field>
+          <Field label="Speed">
+            <NumberInput
+              min={0.2}
+              step={0.1}
+              value={num(p.speed)}
+              onChange={(v) => set('speed', v)}
+              placeholder="1.6"
+            />
+          </Field>
+          <Field label="Curve">
+            <NumberInput
+              min={120}
+              value={num(p.curveAmount)}
+              onChange={(v) => set('curveAmount', v)}
+              placeholder="360"
+            />
+          </Field>
+          <Field label="Draggable">
+            <Toggle checked={p.interactive !== false} onChange={(v) => set('interactive', v)} />
+          </Field>
+          <p
+            style={{
+              fontSize: 11,
+              color: 'var(--bld-text-muted)',
+              margin: '4px 0 0',
+              lineHeight: 1.55,
+            }}
+          >
+            Curved marquee. It automatically softens the curve on tablet and mobile.
           </p>
         </Section>
       );
@@ -1570,11 +1751,36 @@ function renderForm(
         <EcommerceBlockEditor
           props={p}
           onSet={set}
+          onSetMany={setMany}
           anchorTargets={anchorTargets}
           giphyStorefrontSlug={giphyStorefrontSlug}
           storefrontSlug={storefrontSlug}
-          showCategories={block.type === 'ecommerce7'}
+          blockType={block.type}
           productOptions={ctx.productOptions}
+          categoryOptions={ctx.categoryOptions}
+        />
+      );
+    case 'shadcnNavbar':
+    case 'shadcnHero':
+    case 'shadcnTrustStrip':
+    case 'shadcnCategories':
+    case 'shadcnProductCard':
+    case 'shadcnProductList':
+    case 'shadcnProductDetail':
+    case 'shadcnQuickView':
+    case 'shadcnReviews':
+    case 'shadcnOrderSummary':
+    case 'shadcnOfferModal':
+    case 'shadcnFooter':
+      return (
+        <ShadcnCommerceEditor
+          props={p}
+          onSet={set}
+          onSetMany={setMany}
+          anchorTargets={anchorTargets}
+          blockType={block.type}
+          productOptions={ctx.productOptions}
+          categoryOptions={ctx.categoryOptions}
         />
       );
     case 'animatedText':
@@ -1718,7 +1924,7 @@ function renderForm(
     case 'mawid':
       return (
         <Section>
-          <Field label="Design variant">
+          <Field label="Design style">
             <SegmentedControl
               value={(str(p.variant) || 'boxed') as 'boxed' | 'inline' | 'banner'}
               onChange={(v) => set('variant', v)}
@@ -1758,42 +1964,75 @@ function renderForm(
           </Field>
         </Section>
       );
-    case 'taqim':
+    case 'drop':
       return (
         <Section>
-          <Field label="Design variant">
-            <SegmentedControl
-              value={(str(p.variant) || 'cards') as 'stack' | 'cards' | 'carousel'}
-              onChange={(v) => set('variant', v)}
-              options={[
-                { value: 'stack', label: 'Stack' },
-                { value: 'cards', label: 'Cards' },
-                { value: 'carousel', label: 'Carousel' },
-              ]}
-            />
-          </Field>
-          <Field label="Bundle id (empty = auto-pick first enabled)">
+          <Field label="Drop ID">
             <TextInput
-              value={str(p.bundleId)}
-              onChange={(v) => set('bundleId', v)}
-              placeholder="Optional"
-            />
-          </Field>
-          <Field label="Anchor product">
-            <ProductPicker
-              value={str(p.anchorProductId)}
-              options={ctx.productOptions}
-              onChange={(v) => set('anchorProductId', v)}
+              value={str(p.dropId)}
+              onChange={(v) => set('dropId', v.trim() || 'component-showcase')}
+              placeholder="component-showcase"
             />
           </Field>
           <Field label="Heading override">
             <TextInput
               value={str(p.heading)}
               onChange={(v) => set('heading', v)}
-              placeholder="Falls back to the bundle's bilingual title"
+              placeholder="Falls back to the Drop Manager title"
             />
           </Field>
+          <Field label="Subheading">
+            <TextArea value={str(p.subheading)} onChange={(v) => set('subheading', v)} rows={2} />
+          </Field>
+          <p style={helpTextStyle()}>
+            Use <strong>component-showcase</strong> for a safe preview, then replace it with the
+            real Drop Manager ID before publishing a real launch.
+          </p>
         </Section>
+      );
+    case 'taqim':
+      return (
+        <>
+          <Section>
+            <Field label="Design style">
+              <SegmentedControl
+                value={(str(p.variant) || 'cards') as 'stack' | 'cards' | 'carousel'}
+                onChange={(v) => set('variant', v)}
+                options={[
+                  { value: 'stack', label: 'Stack' },
+                  { value: 'cards', label: 'Cards' },
+                  { value: 'carousel', label: 'Carousel' },
+                ]}
+              />
+            </Field>
+            <Field label="Bundle id (empty = Builder controlled)">
+              <TextInput
+                value={str(p.bundleId)}
+                onChange={(v) => set('bundleId', v)}
+                placeholder="Optional app bundle id"
+              />
+            </Field>
+            <Field label="Anchor product">
+              <ProductPicker
+                value={str(p.anchorProductId)}
+                options={ctx.productOptions}
+                onChange={(v) => set('anchorProductId', v)}
+              />
+            </Field>
+            <Field label="Heading override">
+              <TextInput
+                value={str(p.heading)}
+                onChange={(v) => set('heading', v)}
+                placeholder="Falls back to the bundle's bilingual title"
+              />
+            </Field>
+          </Section>
+          <TaqimBundleEditor
+            value={(p.bundle as TaqimBlockProps['bundle']) ?? {}}
+            onChange={(bundle) => set('bundle', bundle)}
+            productOptions={ctx.productOptions}
+          />
+        </>
       );
   }
 }
@@ -1832,6 +2071,7 @@ function IconChipGroup<T extends string>({
   /** When true the strip stretches to fill its container (one chip / col). */
   fill?: boolean;
 }) {
+  const text = useInspectorText();
   return (
     <div
       role="radiogroup"
@@ -1848,14 +2088,15 @@ function IconChipGroup<T extends string>({
     >
       {options.map((o) => {
         const active = o.id === value;
+        const label = text.option(o.label);
         return (
           <button
             key={o.id}
             type="button"
             role="radio"
             aria-checked={active}
-            aria-label={o.label}
-            title={o.label}
+            aria-label={label}
+            title={label}
             onClick={() => onChange(active ? undefined : o.id)}
             style={{
               height: 32,
@@ -2261,6 +2502,7 @@ function StyleControls({
   style: BlockStyle | undefined;
   onChange: (s: BlockStyle | undefined) => void;
 }) {
+  const text = useInspectorText();
   const s = style ?? {};
   const set = (patch: Partial<BlockStyle>) => {
     const next = { ...s, ...patch };
@@ -2326,7 +2568,7 @@ function StyleControls({
                   onClick={() => {
                     set({ variant: opt.id === 'classic' ? undefined : opt.id });
                   }}
-                  title={opt.blurb}
+                  title={text.option(opt.blurb)}
                   style={{
                     position: 'relative',
                     padding: '8px 10px',
@@ -2350,7 +2592,7 @@ function StyleControls({
                       color: active ? 'var(--bld-accent)' : 'var(--bld-input-text)',
                     }}
                   >
-                    {opt.label}
+                    {text.option(opt.label)}
                   </span>
                   <span
                     style={{
@@ -2359,7 +2601,7 @@ function StyleControls({
                       fontFamily: 'var(--font-sans)',
                     }}
                   >
-                    {opt.blurb}
+                    {text.option(opt.blurb)}
                   </span>
                 </button>
               );
@@ -2390,7 +2632,7 @@ function StyleControls({
                       backgroundCssSize: undefined,
                     })
                   }
-                  title={opt.blurb}
+                  title={text.option(opt.blurb)}
                   style={{
                     minHeight: 44,
                     padding: 8,
@@ -2407,7 +2649,7 @@ function StyleControls({
                     boxShadow: active ? '0 0 0 2px var(--bld-accent-soft)' : undefined,
                   }}
                 >
-                  <span style={{ fontWeight: 600 }}>{opt.label}</span>
+                  <span style={{ fontWeight: 600 }}>{text.option(opt.label)}</span>
                   <span
                     style={{
                       display: 'block',
@@ -2419,7 +2661,7 @@ function StyleControls({
                       opacity: 0.72,
                     }}
                   >
-                    {opt.group}
+                    {text.option(opt.group)}
                   </span>
                 </button>
               );
@@ -2530,9 +2772,9 @@ function StyleControls({
                   }
                   style={selectStyle()}
                 >
-                  <option value="nowrap">No wrap</option>
-                  <option value="wrap">Wrap</option>
-                  <option value="wrap-reverse">Wrap reverse</option>
+                  <option value="nowrap">{text.option('No wrap')}</option>
+                  <option value="wrap">{text.option('Wrap')}</option>
+                  <option value="wrap-reverse">{text.option('Wrap reverse')}</option>
                 </select>
               </Field>
             </>
@@ -2557,12 +2799,12 @@ function StyleControls({
                 }
                 style={selectStyle()}
               >
-                <option value="start">Start</option>
-                <option value="center">Center</option>
-                <option value="end">End</option>
-                <option value="between">Space between</option>
-                <option value="around">Space around</option>
-                <option value="evenly">Space evenly</option>
+                <option value="start">{text.option('Start')}</option>
+                <option value="center">{text.option('Center')}</option>
+                <option value="end">{text.option('End')}</option>
+                <option value="between">{text.option('Space between')}</option>
+                <option value="around">{text.option('Space around')}</option>
+                <option value="evenly">{text.option('Space evenly')}</option>
               </select>
             </Field>
             <Field label="Align items (cross axis)">
@@ -2578,11 +2820,11 @@ function StyleControls({
                 }
                 style={selectStyle()}
               >
-                <option value="stretch">Stretch</option>
-                <option value="start">Start</option>
-                <option value="center">Center</option>
-                <option value="end">End</option>
-                <option value="baseline">Baseline</option>
+                <option value="stretch">{text.option('Stretch')}</option>
+                <option value="start">{text.option('Start')}</option>
+                <option value="center">{text.option('Center')}</option>
+                <option value="end">{text.option('End')}</option>
+                <option value="baseline">{text.option('Baseline')}</option>
               </select>
             </Field>
           </>
@@ -3159,6 +3401,7 @@ function LogoModeField({
   onModeChange: (v: LogoMode) => void;
   onUrlChange: (v: string) => void;
 }) {
+  const inspectorText = useInspectorText();
   return (
     <Field label="Logo">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -3172,7 +3415,9 @@ function LogoModeField({
           />
         ) : null}
         {mode === 'default' ? (
-          <ModeHint>Uses the storefront logo (or auto monogram if none uploaded).</ModeHint>
+          <ModeHint>
+            {inspectorText.option('Uses the storefront logo (or auto monogram if none uploaded).')}
+          </ModeHint>
         ) : null}
       </div>
     </Field>
@@ -3196,6 +3441,7 @@ function GlyphModeField({
   onUrlChange: (v: string) => void;
   onTextChange: (v: string) => void;
 }) {
+  const inspectorText = useInspectorText();
   return (
     <Field label="Monogram">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -3218,7 +3464,7 @@ function GlyphModeField({
                   color: 'var(--bld-text-faint)',
                 }}
               >
-                Or letters (1–4)
+                {inspectorText.option('Or letters (1-4)')}
               </span>
               <TextInput
                 value={text}
@@ -3226,11 +3472,15 @@ function GlyphModeField({
                 placeholder="ZQ"
               />
             </div>
-            <ModeHint>An uploaded image takes precedence over letters.</ModeHint>
+            <ModeHint>
+              {inspectorText.option('An uploaded image takes precedence over letters.')}
+            </ModeHint>
           </>
         ) : null}
         {mode === 'default' ? (
-          <ModeHint>Uses the auto type-glyph for your business category.</ModeHint>
+          <ModeHint>
+            {inspectorText.option('Uses the auto type-glyph for your business category.')}
+          </ModeHint>
         ) : null}
       </div>
     </Field>
@@ -3269,6 +3519,7 @@ function CtaForm({
   onChange: (c: Cta) => void;
   anchorTargets: BlockOutlineEntry[];
 }) {
+  const text = useInspectorText();
   const label = cta?.label ?? '';
   const href = cta?.href ?? '';
   const scrollTo = cta?.scrollTo ?? '';
@@ -3302,7 +3553,7 @@ function CtaForm({
           onChange={(e) => onChange(buildNext({ label, href, scrollTo: e.target.value }))}
           style={selectStyle()}
         >
-          <option value="">— external link —</option>
+          <option value="">{text.option('External link')}</option>
           {anchorTargets.map((b) => (
             <option key={b.id} value={b.id}>
               {String(b.index + 1).padStart(2, '0')} · {b.label}
@@ -3321,9 +3572,9 @@ function CtaForm({
             lineHeight: 1.5,
           }}
         >
-          On the live storefront the button smooth-scrolls to that block. The Link field is ignored
-          while this is set. (In this preview, clicking selects the block instead — that's
-          expected.)
+          {text.option(
+            'On the live storefront the button smooth-scrolls to that block. The Link field is ignored while this is set. In this preview, clicking selects the block instead.',
+          )}
         </p>
       ) : null}
     </Section>
@@ -3471,23 +3722,340 @@ function Showcase1ItemsEditor({
   );
 }
 
-function EcommerceBlockEditor({
+const SHADCN_PRODUCT_SOURCE_BLOCKS = new Set<Block['type']>([
+  'shadcnHero',
+  'shadcnCategories',
+  'shadcnProductCard',
+  'shadcnProductList',
+  'shadcnProductDetail',
+  'shadcnQuickView',
+  'shadcnOrderSummary',
+  'shadcnOfferModal',
+]);
+
+function ShadcnCommerceEditor({
   props,
   onSet,
+  onSetMany,
   anchorTargets,
-  giphyStorefrontSlug,
-  storefrontSlug,
-  showCategories,
+  blockType,
   productOptions,
+  categoryOptions,
 }: {
   props: Record<string, unknown>;
   onSet: (key: string, value: unknown) => void;
+  onSetMany: (patch: Record<string, unknown>) => void;
+  anchorTargets: BlockOutlineEntry[];
+  blockType: Block['type'];
+  productOptions: ProductOption[];
+  categoryOptions: string[];
+}) {
+  const text = useInspectorText();
+  const legacyIds = Array.isArray(props.productIds) ? (props.productIds as string[]) : [];
+  const source = normalizeCommerceProductSource(props.productSource, legacyIds);
+  const setSource = (next: CommerceProductSource) => {
+    onSetMany({
+      productSource: next,
+      productIds: next.source === 'manual' && next.productIds?.length ? next.productIds : undefined,
+    });
+  };
+  const trustMetrics = Array.isArray(props.metrics)
+    ? (props.metrics as Array<Record<string, unknown>>)
+    : [];
+
+  return (
+    <>
+      <Section>
+        <Field label="Kicker">
+          <TextInput
+            value={str(props.kicker)}
+            onChange={(v) => onSet('kicker', v)}
+            placeholder="Souqna Max+"
+          />
+        </Field>
+        <Field label="Title">
+          <TextArea value={str(props.title)} onChange={(v) => onSet('title', v)} rows={3} />
+        </Field>
+        <Field label="Subtitle">
+          <TextArea value={str(props.subtitle)} onChange={(v) => onSet('subtitle', v)} rows={3} />
+        </Field>
+        <Field label="Note">
+          <TextArea value={str(props.note)} onChange={(v) => onSet('note', v)} rows={2} />
+        </Field>
+        <Field label="Density">
+          <SegmentedControl
+            value={str(props.density) || 'balanced'}
+            onChange={(v) => onSet('density', v)}
+            options={[
+              { value: 'compact', label: text.option('Compact') },
+              { value: 'balanced', label: text.option('Balanced') },
+              { value: 'editorial', label: text.option('Editorial') },
+            ]}
+          />
+        </Field>
+        <Field label="Tone">
+          <SegmentedControl
+            value={str(props.tone) || 'sand'}
+            onChange={(v) => onSet('tone', v)}
+            options={[
+              { value: 'sand', label: text.option('Sand') },
+              { value: 'maroon', label: text.option('Maroon') },
+              { value: 'charcoal', label: text.option('Charcoal') },
+              { value: 'gold', label: text.option('Gold') },
+            ]}
+          />
+        </Field>
+      </Section>
+      {blockType === 'shadcnNavbar' ? (
+        <Section label="Navigation">
+          <Field label="Sticky">
+            <Toggle checked={props.sticky !== false} onChange={(v) => onSet('sticky', v)} />
+          </Field>
+          <Field label="Announcement">
+            <TextInput
+              value={str(props.announcement)}
+              onChange={(v) => onSet('announcement', v)}
+              placeholder="Secure checkout and local delivery"
+            />
+          </Field>
+          <Field label="CTA label">
+            <TextInput
+              value={str(props.ctaLabel)}
+              onChange={(v) => onSet('ctaLabel', v)}
+              placeholder="Shop products"
+            />
+          </Field>
+          <Field label="CTA link">
+            <TextInput
+              value={str(props.ctaHref)}
+              onChange={(v) => onSet('ctaHref', v)}
+              placeholder="/products"
+            />
+          </Field>
+          <Field label="Search link">
+            <Toggle
+              checked={props.showSearch !== false}
+              onChange={(v) => onSet('showSearch', v)}
+            />
+          </Field>
+          <Field label="Policy links">
+            <Toggle
+              checked={props.showPolicyLinks !== false}
+              onChange={(v) => onSet('showPolicyLinks', v)}
+            />
+          </Field>
+          <Field label="Cart label">
+            <TextInput
+              value={str(props.cartLabel)}
+              onChange={(v) => onSet('cartLabel', v)}
+              placeholder="Cart"
+            />
+          </Field>
+          <p style={helpTextStyle()}>
+            {text.option(
+              'Uses the real storefront logo, store name, system pages, custom pages, policy links, and cart route.',
+            )}
+          </p>
+        </Section>
+      ) : null}
+      {blockType === 'shadcnFooter' ? (
+        <Section label="Footer behavior">
+          <Field label="Updates CTA">
+            <Toggle
+              checked={props.showNewsletter === true}
+              onChange={(v) => onSet('showNewsletter', v)}
+            />
+          </Field>
+          <p style={helpTextStyle()}>
+            {text.option(
+              'Uses real storefront pages, policies, and WhatsApp contact when the store phone is configured.',
+            )}
+          </p>
+        </Section>
+      ) : null}
+      {[
+        'shadcnHero',
+        'shadcnCategories',
+        'shadcnProductCard',
+        'shadcnProductList',
+        'shadcnOrderSummary',
+        'shadcnOfferModal',
+      ].includes(blockType) ? (
+        <CtaForm
+          cta={props.cta as Cta}
+          onChange={(v) => onSet('cta', v)}
+          anchorTargets={anchorTargets}
+        />
+      ) : null}
+      {SHADCN_PRODUCT_SOURCE_BLOCKS.has(blockType) ? (
+        <ProductSourceEditor
+          label="Product source"
+          source={source}
+          productOptions={productOptions}
+          categoryOptions={categoryOptions}
+          onChange={setSource}
+        />
+      ) : null}
+      {blockType === 'shadcnProductDetail' || blockType === 'shadcnQuickView' ? (
+        <Section label="Selected product">
+          <Field label="Product">
+            <ProductPicker
+              value={str(props.productId)}
+              options={productOptions}
+              onChange={(v) => onSet('productId', v)}
+            />
+          </Field>
+        </Section>
+      ) : null}
+      {blockType === 'shadcnOfferModal' ? (
+        <Section label="Offer">
+          <Field label="Offer label">
+            <TextInput
+              value={str(props.discountLabel)}
+              onChange={(v) => onSet('discountLabel', v)}
+              placeholder="Launch edit"
+            />
+          </Field>
+          <Field label="Delay (ms)">
+            <NumberInput
+              value={num(props.delayMs)}
+              min={0}
+              onChange={(v) => onSet('delayMs', v)}
+              placeholder="1200"
+            />
+          </Field>
+        </Section>
+      ) : null}
+      {blockType === 'shadcnTrustStrip' ? (
+        <Section label="Trust metrics">
+          <div style={{ display: 'grid', gap: 8 }}>
+            {trustMetrics.slice(0, 6).map((metric, index) => (
+              <div key={index} style={editorCardStyle()}>
+                <Field label="Value">
+                  <TextInput
+                    value={str(metric.value)}
+                    onChange={(value) =>
+                      onSet(
+                        'metrics',
+                        trustMetrics.map((item, idx) =>
+                          idx === index ? { ...item, value } : item,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+                <Field label="Label EN">
+                  <TextInput
+                    value={str(metric.labelEn)}
+                    onChange={(labelEn) =>
+                      onSet(
+                        'metrics',
+                        trustMetrics.map((item, idx) =>
+                          idx === index ? { ...item, labelEn } : item,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+                <Field label="Label AR">
+                  <TextInput
+                    value={str(metric.labelAr)}
+                    onChange={(labelAr) =>
+                      onSet(
+                        'metrics',
+                        trustMetrics.map((item, idx) =>
+                          idx === index ? { ...item, labelAr } : item,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+                <Field label="Icon">
+                  <select
+                    value={str(metric.icon) || 'shield'}
+                    onChange={(event) =>
+                      onSet(
+                        'metrics',
+                        trustMetrics.map((item, idx) =>
+                          idx === index ? { ...item, icon: event.target.value } : item,
+                        ),
+                      )
+                    }
+                    style={selectStyle()}
+                  >
+                    <option value="shield">{text.option('Shield')}</option>
+                    <option value="truck">{text.option('Truck')}</option>
+                    <option value="boxes">{text.option('Boxes')}</option>
+                    <option value="card">{text.option('Card')}</option>
+                    <option value="heart">{text.option('Heart')}</option>
+                    <option value="filter">{text.option('Filter')}</option>
+                  </select>
+                </Field>
+                <button
+                  type="button"
+                  onClick={() => onSet('metrics', trustMetrics.filter((_, idx) => idx !== index))}
+                  style={inlineGhostBtn()}
+                >
+                  {text.option('Remove')}
+                </button>
+              </div>
+            ))}
+            {trustMetrics.length < 6 ? (
+              <button
+                type="button"
+                onClick={() =>
+                  onSet('metrics', [
+                    ...trustMetrics,
+                    { value: 'New', labelEn: 'Trust point', labelAr: 'نقطة ثقة', icon: 'shield' },
+                  ])
+                }
+                style={inlineGhostBtn()}
+              >
+                {text.option('+ Add metric')}
+              </button>
+            ) : null}
+          </div>
+        </Section>
+      ) : null}
+    </>
+  );
+}
+
+function EcommerceBlockEditor({
+  props,
+  onSet,
+  onSetMany,
+  anchorTargets,
+  giphyStorefrontSlug,
+  storefrontSlug,
+  blockType,
+  productOptions,
+  categoryOptions,
+}: {
+  props: Record<string, unknown>;
+  onSet: (key: string, value: unknown) => void;
+  onSetMany: (patch: Record<string, unknown>) => void;
   anchorTargets: BlockOutlineEntry[];
   giphyStorefrontSlug?: string;
   storefrontSlug: string;
-  showCategories: boolean;
+  blockType: Block['type'];
   productOptions: ProductOption[];
+  categoryOptions: string[];
 }) {
+  const legacyIds = Array.isArray(props.productIds) ? (props.productIds as string[]) : [];
+  const source = normalizeCommerceProductSource(props.productSource, legacyIds);
+  const setSource = (next: CommerceProductSource) => {
+    const patch: Record<string, unknown> = {
+      productSource: next,
+      productIds: next.source === 'manual' && next.productIds?.length ? next.productIds : undefined,
+    };
+    if (blockType === 'ecommerce2') {
+      const current = (props.filterable as FilterableShopConfig | undefined) ?? {};
+      patch.filterable = { ...current, productSource: next };
+    }
+    onSetMany(patch);
+  };
+
   return (
     <>
       <Section>
@@ -3504,47 +4072,178 @@ function EcommerceBlockEditor({
         <Field label="Subtitle">
           <TextArea value={str(props.subtitle)} onChange={(v) => onSet('subtitle', v)} rows={3} />
         </Field>
-        <Field label="Tabs">
-          <TextInput
-            value={Array.isArray(props.tabs) ? (props.tabs as string[]).join(', ') : ''}
-            onChange={(v) =>
-              onSet(
-                'tabs',
-                v
-                  .split(',')
-                  .map((tab) => tab.trim())
-                  .filter(Boolean),
-              )
-            }
-            placeholder="All, Travel, Home, Gifts"
-          />
-        </Field>
+        {blockType === 'ecommerce6' || blockType === 'ecommerce7' ? null : (
+          <Field label="Tabs">
+            <TextInput
+              value={Array.isArray(props.tabs) ? (props.tabs as string[]).join(', ') : ''}
+              onChange={(v) =>
+                onSet(
+                  'tabs',
+                  v
+                    .split(',')
+                    .map((tab) => tab.trim())
+                    .filter(Boolean),
+                )
+              }
+              placeholder="All, Travel, Home, Gifts"
+            />
+          </Field>
+        )}
       </Section>
       <CtaForm
         cta={props.cta as Cta}
         onChange={(v) => onSet('cta', v)}
         anchorTargets={anchorTargets}
       />
-      <EcommerceProductPicker
-        value={Array.isArray(props.productIds) ? (props.productIds as string[]) : []}
-        options={productOptions}
-        onChange={(ids) => onSet('productIds', ids.length ? ids : undefined)}
+      <ProductSourceEditor
+        label="Product source"
+        source={source}
+        productOptions={productOptions}
+        categoryOptions={categoryOptions}
+        onChange={setSource}
       />
-      {showCategories ? (
-        <EcommerceCategoriesEditor
-          categories={
-            Array.isArray(props.categories) ? (props.categories as EcommerceCategory[]) : []
-          }
-          onChange={(categories) => onSet('categories', categories)}
-          giphyStorefrontSlug={giphyStorefrontSlug}
-          storefrontSlug={storefrontSlug}
+      {blockType === 'ecommerce2' ? (
+        <FilterableShopEditor
+          value={(props.filterable as FilterableShopConfig | undefined) ?? {}}
+          onChange={(value) => onSet('filterable', value)}
+          productOptions={productOptions}
+          categoryOptions={categoryOptions}
         />
+      ) : null}
+      {blockType === 'ecommerce6' ? (
+        <TabbedProductsEditor
+          value={(props.tabbed as TabbedProductsConfig | undefined) ?? {}}
+          onChange={(value) => onSet('tabbed', value)}
+          productOptions={productOptions}
+          categoryOptions={categoryOptions}
+        />
+      ) : null}
+      {blockType === 'ecommerce7' ? (
+        <>
+          <VisualCategoryTilesEditor
+            value={(props.tilesConfig as VisualCategoryTilesConfig | undefined) ?? {}}
+            onChange={(value) => onSet('tilesConfig', value)}
+            productOptions={productOptions}
+            categoryOptions={categoryOptions}
+            giphyStorefrontSlug={giphyStorefrontSlug}
+            storefrontSlug={storefrontSlug}
+          />
+          <EcommerceCategoriesEditor
+            categories={
+              Array.isArray(props.categories) ? (props.categories as EcommerceCategory[]) : []
+            }
+            onChange={(categories) => onSet('categories', categories)}
+            giphyStorefrontSlug={giphyStorefrontSlug}
+            storefrontSlug={storefrontSlug}
+          />
+        </>
       ) : null}
     </>
   );
 }
 
-function EcommerceProductPicker({
+function ProductSourceEditor({
+  label,
+  source,
+  productOptions,
+  categoryOptions,
+  onChange,
+}: {
+  label: string;
+  source: CommerceProductSource;
+  productOptions: ProductOption[];
+  categoryOptions: string[];
+  onChange: (next: CommerceProductSource) => void;
+}) {
+  const text = useInspectorText();
+  const update = (patch: Partial<CommerceProductSource>) => onChange({ ...source, ...patch });
+  return (
+    <Section label={label}>
+      <div style={{ display: 'grid', gap: 10 }}>
+        <Field label="Source">
+          <select
+            value={source.source}
+            onChange={(event) =>
+              update({
+                source: event.target.value as CommerceProductSourceKind,
+                sort: event.target.value === 'latest' ? 'newest' : source.sort,
+              })
+            }
+            style={selectStyle()}
+          >
+            <option value="all">{text.option('All products')}</option>
+            <option value="manual">{text.option('Manual selection')}</option>
+            <option value="category">{text.option('Category')}</option>
+            <option value="tag">{text.option('Tag / collection')}</option>
+            <option value="latest">{text.option('Latest products')}</option>
+          </select>
+        </Field>
+        {source.source === 'manual' ? (
+          <OrderedProductPicker
+            value={source.productIds ?? []}
+            options={productOptions}
+            onChange={(productIds) => update({ productIds })}
+          />
+        ) : null}
+        {source.source === 'category' ? (
+          <Field label="Category">
+            <select
+              value={source.category ?? ''}
+              onChange={(event) => update({ category: event.target.value || null })}
+              style={selectStyle()}
+            >
+              <option value="">{text.option('Choose category')}</option>
+              {categoryOptions.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+        {source.source === 'tag' ? (
+          <Field label="Tag / collection">
+            <TextInput
+              value={source.tag ?? ''}
+              onChange={(tag) => update({ tag: tag || null })}
+              placeholder={text.option('Future-ready tag or collection')}
+            />
+          </Field>
+        ) : null}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <Field label="Limit">
+            <NumberInput
+              value={source.limit ?? 8}
+              min={1}
+              onChange={(limit) => update({ limit: limit ?? 8 })}
+            />
+          </Field>
+          <Field label="Sort">
+            <select
+              value={source.sort ?? 'manual'}
+              onChange={(event) => update({ sort: event.target.value as CommerceProductSort })}
+              style={selectStyle()}
+            >
+              <option value="manual">{text.option('Manual')}</option>
+              <option value="newest">{text.option('Newest')}</option>
+              <option value="price_low">{text.option('Price low to high')}</option>
+              <option value="price_high">{text.option('Price high to low')}</option>
+              <option value="title_az">{text.option('Title A-Z')}</option>
+            </select>
+          </Field>
+        </div>
+        <Field label="Hide unavailable">
+          <Toggle
+            checked={source.hideUnavailable !== false}
+            onChange={(hideUnavailable) => update({ hideUnavailable })}
+          />
+        </Field>
+      </div>
+    </Section>
+  );
+}
+
+function OrderedProductPicker({
   value,
   options,
   onChange,
@@ -3553,118 +4252,1070 @@ function EcommerceProductPicker({
   options: ProductOption[];
   onChange: (next: string[]) => void;
 }) {
+  const text = useInspectorText();
+  const [query, setQuery] = useState('');
+  const byId = new Map(options.map((product) => [product.id, product]));
+  const selectedProducts = value
+    .map((id) => byId.get(id))
+    .filter((product): product is ProductOption => Boolean(product));
   const selected = new Set(value);
-  const activeOptions = options.filter((product) => product.status !== 'draft');
-  const toggle = (id: string) => {
-    const next = selected.has(id) ? value.filter((item) => item !== id) : [...value, id];
+  const results = options
+    .filter((product) => product.status !== 'draft' && !selected.has(product.id))
+    .filter((product) => {
+      const q = query.trim().toLowerCase();
+      if (!q) return true;
+      return `${product.title} ${product.category ?? ''}`.toLowerCase().includes(q);
+    })
+    .slice(0, 8);
+  const move = (id: string, direction: -1 | 1) => {
+    const index = value.indexOf(id);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= value.length) return;
+    const next = [...value];
+    [next[index], next[nextIndex]] = [next[nextIndex]!, next[index]!];
     onChange(next);
   };
 
+  if (options.length === 0) {
+    return (
+      <p style={helpTextStyle()}>
+        {text.option('Add products from the founder dashboard, then pick them here for this section.')}
+      </p>
+    );
+  }
+
   return (
-    <Section label="Dashboard products">
-      {options.length === 0 ? (
-        <p style={helpTextStyle()}>
-          Add products from the founder dashboard, then pick them here for this section.
-        </p>
-      ) : (
+    <div style={{ display: 'grid', gap: 10 }}>
+      <TextInput value={query} onChange={setQuery} placeholder={text.option('Search products')} />
+      {selectedProducts.length ? (
         <div style={{ display: 'grid', gap: 8 }}>
-          {options.map((product) => {
-            const disabled = product.status === 'draft';
-            const checked = selected.has(product.id);
-            return (
-              <label
-                key={product.id}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '44px 1fr auto',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: 8,
-                  border: '1px solid var(--bld-divider)',
-                  borderRadius: 8,
-                  background: checked
-                    ? 'var(--bld-accent-softer)'
-                    : 'color-mix(in srgb, var(--bld-surface) 84%, transparent)',
-                  opacity: disabled ? 0.5 : 1,
-                  cursor: disabled ? 'not-allowed' : 'pointer',
-                }}
+          {selectedProducts.map((product) => (
+            <ProductPickerRow
+              key={product.id}
+              product={product}
+              trailing={
+                <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => move(product.id, -1)} style={miniBtnStyle()}>
+                    {text.option('Up')}
+                  </button>
+                  <button type="button" onClick={() => move(product.id, 1)} style={miniBtnStyle()}>
+                    {text.option('Down')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onChange(value.filter((id) => id !== product.id))}
+                    style={miniBtnStyle()}
+                  >
+                    {text.option('Remove')}
+                  </button>
+                </span>
+              }
+            />
+          ))}
+        </div>
+      ) : (
+        <p style={helpTextStyle()}>{text.option('No manual products selected yet.')}</p>
+      )}
+      <div style={{ display: 'grid', gap: 8 }}>
+        {results.map((product) => (
+          <ProductPickerRow
+            key={product.id}
+            product={product}
+            trailing={
+              <button
+                type="button"
+                onClick={() => onChange([...value, product.id])}
+                style={miniBtnStyle()}
               >
-                <span
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                    background: 'var(--bld-surface-strong)',
-                    border: '1px solid var(--bld-divider)',
-                  }}
-                >
-                  {product.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={product.imageUrl}
-                      alt=""
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  ) : null}
-                </span>
-                <span style={{ minWidth: 0 }}>
-                  <span
-                    style={{
-                      display: 'block',
-                      color: 'var(--bld-text)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {product.title}
-                  </span>
-                  <span
-                    style={{
-                      display: 'block',
-                      marginTop: 2,
-                      color: 'var(--bld-text-muted)',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 10,
-                      letterSpacing: '0.08em',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    {product.status === 'draft'
-                      ? 'Draft - hidden'
-                      : product.category || (product.priceQar !== null ? `QAR ${product.priceQar}` : 'Product')}
-                  </span>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={disabled}
-                  onChange={() => toggle(product.id)}
-                  style={{ accentColor: 'var(--bld-accent)', width: 16, height: 16 }}
-                />
-              </label>
-            );
-          })}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {text.option('Add')}
+              </button>
+            }
+          />
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() =>
+            onChange(
+              options.filter((product) => product.status === 'active').map((product) => product.id),
+            )
+          }
+          style={inlineGhostBtn()}
+        >
+          {text.option('Select active')}
+        </button>
+        <button type="button" onClick={() => onChange([])} style={inlineGhostBtn()}>
+          {text.option('Clear')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProductPickerRow({ product, trailing }: { product: ProductOption; trailing: ReactNode }) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '44px minmax(0, 1fr) auto',
+        alignItems: 'center',
+        gap: 10,
+        padding: 8,
+        border: '1px solid var(--bld-divider)',
+        borderRadius: 8,
+        background: 'color-mix(in srgb, var(--bld-surface) 84%, transparent)',
+      }}
+    >
+      <span
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 8,
+          overflow: 'hidden',
+          background: 'var(--bld-surface-strong)',
+          border: '1px solid var(--bld-divider)',
+        }}
+      >
+        {product.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={product.imageUrl}
+            alt=""
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        ) : null}
+      </span>
+      <span style={{ minWidth: 0 }}>
+        <span
+          style={{
+            display: 'block',
+            color: 'var(--bld-text)',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 13,
+            fontWeight: 600,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {product.title}
+        </span>
+        <span
+          style={{
+            display: 'block',
+            marginTop: 2,
+            color: 'var(--bld-text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {product.status === 'draft'
+            ? 'Draft - hidden'
+            : product.category ||
+              (product.priceQar !== null ? `QAR ${product.priceQar}` : 'Product')}
+        </span>
+      </span>
+      {trailing}
+    </div>
+  );
+}
+
+function FilterableShopEditor({
+  value,
+  onChange,
+  productOptions,
+  categoryOptions,
+}: {
+  value: FilterableShopConfig;
+  onChange: (next: FilterableShopConfig) => void;
+  productOptions: ProductOption[];
+  categoryOptions: string[];
+}) {
+  const text = useInspectorText();
+  const filters = value.filters ?? {};
+  const groups = filters.groups?.length ? filters.groups : [defaultFilterGroup('category')];
+  const setFilters = (patch: Partial<NonNullable<FilterableShopConfig['filters']>>) =>
+    onChange({ ...value, filters: { ...filters, ...patch } });
+  const updateGroup = (index: number, patch: Partial<CommerceFilterGroup>) =>
+    setFilters({
+      groups: groups.map((group, idx) => (idx === index ? { ...group, ...patch } : group)),
+    });
+
+  return (
+    <Section label="Filterable grid">
+      <Field label="Filters enabled">
+        <Toggle
+          checked={filters.enabled !== false}
+          onChange={(enabled) => setFilters({ enabled })}
+        />
+      </Field>
+      <Field label="Layout">
+        <SegmentedControl
+          value={filters.layout ?? 'sidebar'}
+          onChange={(layout) => setFilters({ layout: layout as 'sidebar' | 'topbar' })}
+          options={[
+            { value: 'sidebar', label: 'Sidebar' },
+            { value: 'topbar', label: 'Topbar' },
+          ]}
+        />
+      </Field>
+      <Field label="Hide empty options">
+        <Toggle
+          checked={filters.hideEmptyOptions !== false}
+          onChange={(hideEmptyOptions) => setFilters({ hideEmptyOptions })}
+        />
+      </Field>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {groups.map((group, index) => (
+          <div key={group.id} style={editorCardStyle()}>
+            <Field label="Group label EN">
+              <TextInput
+                value={group.labelEn ?? ''}
+                onChange={(labelEn) => updateGroup(index, { labelEn })}
+              />
+            </Field>
+            <Field label="Group label AR">
+              <TextInput
+                value={group.labelAr ?? ''}
+                onChange={(labelAr) => updateGroup(index, { labelAr })}
+              />
+            </Field>
+            <Field label="Source">
+              <select
+                value={group.source}
+                onChange={(event) =>
+                  updateGroup(index, {
+                    source: event.target.value as CommerceFilterGroup['source'],
+                    id: event.target.value,
+                  })
+                }
+                style={selectStyle()}
+              >
+                <option value="category">{text.option('Category')}</option>
+                <option value="brand">{text.option('Brand')}</option>
+                <option value="tag">{text.option('Tag / collection')}</option>
+                <option value="price">{text.option('Price')}</option>
+                <option value="availability">{text.option('Availability')}</option>
+                <option value="manual">{text.option('Manual')}</option>
+              </select>
+            </Field>
+            <Field label="Auto-generate options">
+              <Toggle
+                checked={group.autoGenerate !== false}
+                onChange={(autoGenerate) => updateGroup(index, { autoGenerate })}
+              />
+            </Field>
+            {group.autoGenerate === false ? (
+              <FilterOptionsEditor
+                group={group}
+                onChange={(options) => updateGroup(index, { options })}
+                productOptions={productOptions}
+                categoryOptions={categoryOptions}
+              />
+            ) : null}
             <button
               type="button"
-              onClick={() => onChange(activeOptions.map((product) => product.id))}
+              onClick={() => setFilters({ groups: groups.filter((_, idx) => idx !== index) })}
               style={inlineGhostBtn()}
             >
-              Select active
-            </button>
-            <button type="button" onClick={() => onChange([])} style={inlineGhostBtn()}>
-              Clear
+              {text.option('Remove group')}
             </button>
           </div>
-        </div>
-      )}
+        ))}
+        <button
+          type="button"
+          onClick={() => setFilters({ groups: [...groups, defaultFilterGroup('category')] })}
+          style={inlineGhostBtn()}
+        >
+          {text.option('+ Add filter group')}
+        </button>
+      </div>
+      <CardConfigEditor
+        value={value.card ?? {}}
+        onChange={(card) => onChange({ ...value, card })}
+      />
     </Section>
   );
+}
+
+function FilterOptionsEditor({
+  group,
+  onChange,
+  productOptions,
+  categoryOptions,
+}: {
+  group: CommerceFilterGroup;
+  onChange: (options: NonNullable<CommerceFilterGroup['options']>) => void;
+  productOptions: ProductOption[];
+  categoryOptions: string[];
+}) {
+  const text = useInspectorText();
+  const options = group.options?.length ? group.options : [defaultFilterOption(group.source)];
+  const update = (
+    index: number,
+    patch: Partial<NonNullable<CommerceFilterGroup['options']>[number]>,
+  ) => onChange(options.map((option, idx) => (idx === index ? { ...option, ...patch } : option)));
+  return (
+    <div style={{ display: 'grid', gap: 8 }}>
+      {options.map((option, index) => (
+        <div key={option.id} style={editorNestedCardStyle()}>
+          <TextInput
+            value={option.labelEn ?? ''}
+            onChange={(labelEn) => update(index, { labelEn })}
+            placeholder={text.option('Label EN')}
+          />
+          <TextInput
+            value={option.labelAr ?? ''}
+            onChange={(labelAr) => update(index, { labelAr })}
+            placeholder={text.option('Label AR')}
+          />
+          {group.source === 'manual' ? (
+            <OrderedProductPicker
+              value={option.productIds ?? []}
+              options={productOptions}
+              onChange={(productIds) => update(index, { productIds })}
+            />
+          ) : group.source === 'category' ? (
+            <select
+              value={option.category ?? option.value ?? ''}
+              onChange={(event) =>
+                update(index, { category: event.target.value, value: event.target.value })
+              }
+              style={selectStyle()}
+            >
+              <option value="">{text.option('Choose category')}</option>
+              {categoryOptions.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <TextInput
+              value={option.value ?? ''}
+              onChange={(value) => update(index, { value })}
+              placeholder={text.option('Value')}
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => onChange(options.filter((_, idx) => idx !== index))}
+            style={inlineGhostBtn()}
+          >
+            {text.option('Remove option')}
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...options, defaultFilterOption(group.source)])}
+        style={inlineGhostBtn()}
+      >
+        {text.option('+ Add option')}
+      </button>
+    </div>
+  );
+}
+
+function CardConfigEditor({
+  value,
+  onChange,
+}: {
+  value: CommerceCardConfig;
+  onChange: (next: CommerceCardConfig) => void;
+}) {
+  const text = useInspectorText();
+  const update = (patch: Partial<CommerceCardConfig>) => onChange({ ...value, ...patch });
+  return (
+    <div style={{ display: 'grid', gap: 8 }}>
+      <Field label="Show description">
+        <Toggle
+          checked={value.showDescription !== false}
+          onChange={(showDescription) => update({ showDescription })}
+        />
+      </Field>
+      <Field label="Show category / brand">
+        <Toggle
+          checked={value.showCategory !== false}
+          onChange={(showCategory) => update({ showCategory, showBrand: showCategory })}
+        />
+      </Field>
+      <Field label="CTA behavior">
+        <select
+          value={value.ctaMode ?? 'direct_add'}
+          onChange={(event) =>
+            update({ ctaMode: event.target.value as CommerceCardConfig['ctaMode'] })
+          }
+          style={selectStyle()}
+        >
+          <option value="direct_add">{text.option('Direct add')}</option>
+          <option value="quick_view">{text.option('Quick view')}</option>
+          <option value="product_page">{text.option('Product page')}</option>
+        </select>
+      </Field>
+    </div>
+  );
+}
+
+function TabbedProductsEditor({
+  value,
+  onChange,
+  productOptions,
+  categoryOptions,
+}: {
+  value: TabbedProductsConfig;
+  onChange: (next: TabbedProductsConfig) => void;
+  productOptions: ProductOption[];
+  categoryOptions: string[];
+}) {
+  const text = useInspectorText();
+  const tabs = value.tabs?.length ? value.tabs : [defaultCommerceTab('new')];
+  const updateTab = (
+    index: number,
+    patch: Partial<NonNullable<TabbedProductsConfig['tabs']>[number]>,
+  ) =>
+    onChange({
+      ...value,
+      tabs: tabs.map((tab, idx) => (idx === index ? { ...tab, ...patch } : tab)),
+    });
+  const moveTab = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= tabs.length) return;
+    const next = [...tabs];
+    [next[index], next[nextIndex]] = [next[nextIndex]!, next[index]!];
+    onChange({ ...value, tabs: next });
+  };
+  return (
+    <Section label="Curated tabs">
+      <Field label="All tab">
+        <Toggle
+          checked={value.allTab?.enabled !== false}
+          onChange={(enabled) => onChange({ ...value, allTab: { ...value.allTab, enabled } })}
+        />
+      </Field>
+      <Field label="All tab source">
+        <select
+          value={value.allTab?.mode ?? 'combined_tabs'}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              allTab: {
+                ...value.allTab,
+                mode: event.target.value as NonNullable<TabbedProductsConfig['allTab']>['mode'],
+              },
+            })
+          }
+          style={selectStyle()}
+        >
+          <option value="combined_tabs">{text.option('Combine tab products')}</option>
+          <option value="all_products">{text.option('All store products')}</option>
+          <option value="manual">{text.option('Manual All products')}</option>
+        </select>
+      </Field>
+      {value.allTab?.mode === 'manual' ? (
+        <OrderedProductPicker
+          value={value.allTab.productIds ?? []}
+          options={productOptions}
+          onChange={(productIds) => onChange({ ...value, allTab: { ...value.allTab, productIds } })}
+        />
+      ) : null}
+      <Field label="Empty tab behavior">
+        <select
+          value={value.emptyTabBehavior ?? 'empty_state'}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              emptyTabBehavior: event.target.value as TabbedProductsConfig['emptyTabBehavior'],
+            })
+          }
+          style={selectStyle()}
+        >
+          <option value="empty_state">{text.option('Show empty state')}</option>
+          <option value="hide">{text.option('Hide empty tab')}</option>
+          <option value="fallback_all">{text.option('Fallback to all products')}</option>
+        </select>
+      </Field>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {tabs.map((tab, index) => (
+          <div key={tab.id} style={editorCardStyle()}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <TextInput
+                value={tab.labelEn ?? ''}
+                onChange={(labelEn) => updateTab(index, { labelEn })}
+                placeholder={text.option('Label EN')}
+              />
+              <TextInput
+                value={tab.labelAr ?? ''}
+                onChange={(labelAr) => updateTab(index, { labelAr })}
+                placeholder={text.option('Label AR')}
+              />
+            </div>
+            <TextInput
+              value={tab.value ?? tab.id}
+              onChange={(value) => updateTab(index, { value, id: slugForBuilder(value) })}
+              placeholder={text.option('Tab slug')}
+            />
+            <ProductSourceEditor
+              label="Tab products"
+              source={normalizeCommerceProductSource(tab.productSource)}
+              productOptions={productOptions}
+              categoryOptions={categoryOptions}
+              onChange={(productSource) => updateTab(index, { productSource })}
+            />
+            <button
+              type="button"
+              onClick={() => onChange({ ...value, tabs: tabs.filter((_, idx) => idx !== index) })}
+              style={inlineGhostBtn()}
+            >
+              {text.option('Remove tab')}
+            </button>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => moveTab(index, -1)} style={miniBtnStyle()}>
+                {text.option('Move up')}
+              </button>
+              <button type="button" onClick={() => moveTab(index, 1)} style={miniBtnStyle()}>
+                {text.option('Move down')}
+              </button>
+            </div>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() =>
+            onChange({ ...value, tabs: [...tabs, defaultCommerceTab(`tab-${tabs.length + 1}`)] })
+          }
+          style={inlineGhostBtn()}
+        >
+          {text.option('+ Add tab')}
+        </button>
+      </div>
+      <CardConfigEditor
+        value={value.card ?? {}}
+        onChange={(card) => onChange({ ...value, card })}
+      />
+    </Section>
+  );
+}
+
+function VisualCategoryTilesEditor({
+  value,
+  onChange,
+  productOptions,
+  categoryOptions,
+  storefrontSlug,
+  giphyStorefrontSlug,
+}: {
+  value: VisualCategoryTilesConfig;
+  onChange: (next: VisualCategoryTilesConfig) => void;
+  productOptions: ProductOption[];
+  categoryOptions: string[];
+  storefrontSlug: string;
+  giphyStorefrontSlug?: string;
+}) {
+  const text = useInspectorText();
+  const tiles = value.tiles?.length ? value.tiles : [defaultVisualTile()];
+  const behavior = value.behavior ?? {};
+  const updateTile = (index: number, patch: Partial<VisualCategoryTile>) =>
+    onChange({
+      ...value,
+      tiles: tiles.map((tile, idx) => (idx === index ? { ...tile, ...patch } : tile)),
+    });
+  const moveTile = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= tiles.length) return;
+    const next = [...tiles];
+    [next[index], next[nextIndex]] = [next[nextIndex]!, next[index]!];
+    onChange({ ...value, tiles: next });
+  };
+  const updateDestination = (
+    index: number,
+    patch: NonNullable<VisualCategoryTile['destination']>,
+  ) => {
+    const current = tiles[index]?.destination ?? {};
+    updateTile(index, { destination: { ...current, ...patch } });
+  };
+
+  return (
+    <Section label="Visual category tiles">
+      <Field label="Tile tabs">
+        <Toggle
+          checked={behavior.showTabs !== false}
+          onChange={(showTabs) => onChange({ ...value, behavior: { ...behavior, showTabs } })}
+        />
+      </Field>
+      <Field label="Click behavior">
+        <select
+          value={behavior.clickAction ?? 'navigate'}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              behavior: {
+                ...behavior,
+                clickAction: event.target.value as NonNullable<
+                  VisualCategoryTilesConfig['behavior']
+                >['clickAction'],
+              },
+            })
+          }
+          style={selectStyle()}
+        >
+          <option value="navigate">{text.option('Navigate')}</option>
+          <option value="filter_products">{text.option('Filter products below')}</option>
+          <option value="scroll_to_products">{text.option('Scroll to product grid')}</option>
+          <option value="open_collection_drawer">{text.option('Open collection drawer')}</option>
+        </select>
+      </Field>
+      <Field label="Overlay">
+        <select
+          value={behavior.overlayStyle ?? 'dark_gradient'}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              behavior: {
+                ...behavior,
+                overlayStyle: event.target.value as NonNullable<
+                  VisualCategoryTilesConfig['behavior']
+                >['overlayStyle'],
+              },
+            })
+          }
+          style={selectStyle()}
+        >
+          <option value="dark_gradient">{text.option('Dark gradient')}</option>
+          <option value="light_overlay">{text.option('Light overlay')}</option>
+          <option value="minimal">{text.option('Minimal text')}</option>
+          <option value="framed">{text.option('Framed')}</option>
+        </select>
+      </Field>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {tiles.map((tile, index) => (
+          <div key={tile.id} style={editorCardStyle()}>
+            <MediaUploader
+              value={tile.imageUrl ?? ''}
+              onChange={(imageUrl) => updateTile(index, { imageUrl })}
+              namespace="ecommerce-tile"
+              storefrontSlug={storefrontSlug}
+              giphyStorefrontSlug={giphyStorefrontSlug}
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <TextInput
+                value={tile.labelEn ?? ''}
+                onChange={(labelEn) => updateTile(index, { labelEn })}
+                placeholder={text.option('Label EN')}
+              />
+              <TextInput
+                value={tile.labelAr ?? ''}
+                onChange={(labelAr) => updateTile(index, { labelAr })}
+                placeholder={text.option('Label AR')}
+              />
+              <TextInput
+                value={tile.eyebrowEn ?? ''}
+                onChange={(eyebrowEn) => updateTile(index, { eyebrowEn })}
+                placeholder={text.option('Eyebrow EN')}
+              />
+              <TextInput
+                value={tile.eyebrowAr ?? ''}
+                onChange={(eyebrowAr) => updateTile(index, { eyebrowAr })}
+                placeholder={text.option('Eyebrow AR')}
+              />
+            </div>
+            <TextInput
+              value={tile.badge?.labelEn ?? ''}
+              onChange={(labelEn) => updateTile(index, { badge: { ...tile.badge, labelEn } })}
+              placeholder={text.option('Badge EN')}
+            />
+            <Field label="Destination">
+              <select
+                value={tile.destination?.type ?? 'category'}
+                onChange={(event) =>
+                  updateDestination(index, {
+                    type: event.target.value as NonNullable<
+                      VisualCategoryTile['destination']
+                    >['type'],
+                  })
+                }
+                style={selectStyle()}
+              >
+                <option value="category">{text.option('Category')}</option>
+                <option value="tag">{text.option('Tag / collection')}</option>
+                <option value="manual_products">{text.option('Manual products')}</option>
+                <option value="page">{text.option('Store page')}</option>
+                <option value="external">{text.option('External link')}</option>
+              </select>
+            </Field>
+            {tile.destination?.type === 'manual_products' ? (
+              <OrderedProductPicker
+                value={tile.destination.productIds ?? []}
+                options={productOptions}
+                onChange={(productIds) => updateDestination(index, { productIds })}
+              />
+            ) : tile.destination?.type === 'category' || !tile.destination?.type ? (
+              <select
+                value={tile.destination?.category ?? ''}
+                onChange={(event) =>
+                  updateDestination(index, { category: event.target.value || null })
+                }
+                style={selectStyle()}
+              >
+                <option value="">{text.option('Choose category')}</option>
+                {categoryOptions.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            ) : tile.destination?.type === 'external' ? (
+              <TextInput
+                value={tile.destination.url ?? ''}
+                onChange={(url) => updateDestination(index, { url })}
+                placeholder="https://..."
+              />
+            ) : tile.destination?.type === 'page' ? (
+              <TextInput
+                value={tile.destination.pageSlug ?? ''}
+                onChange={(pageSlug) => updateDestination(index, { pageSlug })}
+                placeholder={text.option('Page slug')}
+              />
+            ) : (
+              <TextInput
+                value={tile.destination?.tag ?? ''}
+                onChange={(tag) => updateDestination(index, { tag })}
+                placeholder={text.option('Tag / collection')}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => onChange({ ...value, tiles: tiles.filter((_, idx) => idx !== index) })}
+              style={inlineGhostBtn()}
+            >
+              {text.option('Remove tile')}
+            </button>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => moveTile(index, -1)} style={miniBtnStyle()}>
+                {text.option('Move up')}
+              </button>
+              <button type="button" onClick={() => moveTile(index, 1)} style={miniBtnStyle()}>
+                {text.option('Move down')}
+              </button>
+            </div>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => onChange({ ...value, tiles: [...tiles, defaultVisualTile()] })}
+          style={inlineGhostBtn()}
+        >
+          {text.option('+ Add tile')}
+        </button>
+      </div>
+    </Section>
+  );
+}
+
+function TaqimBundleEditor({
+  value,
+  onChange,
+  productOptions,
+}: {
+  value: NonNullable<TaqimBlockProps['bundle']>;
+  onChange: (next: NonNullable<TaqimBlockProps['bundle']>) => void;
+  productOptions: ProductOption[];
+}) {
+  const text = useInspectorText();
+  const items = value.items?.length ? value.items : [];
+  const pricing = value.pricing ?? {};
+  const cta = value.cta ?? {};
+  const updateItem = (
+    index: number,
+    patch: Partial<NonNullable<NonNullable<TaqimBlockProps['bundle']>['items']>[number]>,
+  ) =>
+    onChange({
+      ...value,
+      items: items.map((item, idx) => (idx === index ? { ...item, ...patch } : item)),
+    });
+  const selectedIds = items.map((item) => item.productId).filter(Boolean);
+
+  return (
+    <Section label="Builder bundle">
+      <Field label="Title EN">
+        <TextInput
+          value={value.titleEn ?? ''}
+          onChange={(titleEn) => onChange({ ...value, titleEn })}
+        />
+      </Field>
+      <Field label="Title AR">
+        <TextInput
+          value={value.titleAr ?? ''}
+          onChange={(titleAr) => onChange({ ...value, titleAr })}
+        />
+      </Field>
+      <Field label="Badge EN">
+        <TextInput
+          value={value.badge?.labelEn ?? ''}
+          onChange={(labelEn) => onChange({ ...value, badge: { ...value.badge, labelEn } })}
+          placeholder="50% OFF"
+        />
+      </Field>
+      <OrderedProductPicker
+        value={selectedIds}
+        options={productOptions}
+        onChange={(productIds) =>
+          onChange({
+            ...value,
+            items: productIds.map((productId) => {
+              const existing = items.find((item) => item.productId === productId);
+              return existing ?? { productId, required: true, buyerCanChooseOption: true };
+            }),
+          })
+        }
+      />
+      <div style={{ display: 'grid', gap: 10 }}>
+        {items.map((item, index) => {
+          const product = productOptions.find((option) => option.id === item.productId);
+          return (
+            <div key={item.productId || index} style={editorCardStyle()}>
+              <p style={helpTextStyle()}>{product?.title ?? text.option('Bundle product')}</p>
+              <Field label="Required item">
+                <Toggle
+                  checked={item.required !== false}
+                  onChange={(required) => updateItem(index, { required })}
+                />
+              </Field>
+              <Field label="Buyer chooses option">
+                <Toggle
+                  checked={item.buyerCanChooseOption !== false}
+                  onChange={(buyerCanChooseOption) => updateItem(index, { buyerCanChooseOption })}
+                />
+              </Field>
+              <TextInput
+                value={item.defaultOptionValue ?? ''}
+                onChange={(defaultOptionValue) => updateItem(index, { defaultOptionValue })}
+                placeholder={text.option('Default option, if needed')}
+              />
+              <TextInput
+                value={item.badgeEn ?? ''}
+                onChange={(badgeEn) => updateItem(index, { badgeEn })}
+                placeholder={text.option('Product badge EN')}
+              />
+              <TextInput
+                value={item.badgeAr ?? ''}
+                onChange={(badgeAr) => updateItem(index, { badgeAr })}
+                placeholder={text.option('Product badge AR')}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <Field label="Discount mode">
+        <select
+          value={pricing.mode ?? 'auto_total'}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              pricing: {
+                ...pricing,
+                mode: event.target.value as NonNullable<
+                  NonNullable<TaqimBlockProps['bundle']>['pricing']
+                >['mode'],
+              },
+            })
+          }
+          style={selectStyle()}
+        >
+          <option value="auto_total">{text.option('Auto total')}</option>
+          <option value="percent_discount">{text.option('Percent discount')}</option>
+          <option value="fixed_discount">{text.option('Fixed amount discount')}</option>
+          <option value="fixed_bundle_price">{text.option('Fixed bundle price')}</option>
+          <option value="display_only">{text.option('Display-only badge')}</option>
+        </select>
+      </Field>
+      {pricing.mode === 'percent_discount' ? (
+        <Field label="Percent off">
+          <NumberInput
+            value={pricing.percentOff ?? ''}
+            min={0}
+            onChange={(percentOff) => onChange({ ...value, pricing: { ...pricing, percentOff } })}
+          />
+        </Field>
+      ) : null}
+      {pricing.mode === 'fixed_discount' ? (
+        <Field label="Fixed discount QAR">
+          <NumberInput
+            value={pricing.fixedDiscountQar ?? ''}
+            min={0}
+            onChange={(fixedDiscountQar) =>
+              onChange({ ...value, pricing: { ...pricing, fixedDiscountQar } })
+            }
+          />
+        </Field>
+      ) : null}
+      {pricing.mode === 'fixed_bundle_price' ? (
+        <Field label="Bundle price QAR">
+          <NumberInput
+            value={pricing.fixedBundlePriceQar ?? ''}
+            min={0}
+            onChange={(fixedBundlePriceQar) =>
+              onChange({ ...value, pricing: { ...pricing, fixedBundlePriceQar } })
+            }
+          />
+        </Field>
+      ) : null}
+      <Field label="Show savings">
+        <Toggle
+          checked={pricing.showSavings !== false}
+          onChange={(showSavings) => onChange({ ...value, pricing: { ...pricing, showSavings } })}
+        />
+      </Field>
+      <Field label="Cart CTA mode">
+        <SegmentedControl
+          value={cta.mode ?? 'add_all'}
+          onChange={(mode) =>
+            onChange({ ...value, cta: { ...cta, mode: mode as 'add_all' | 'add_selected' } })
+          }
+          options={[
+            { value: 'add_all', label: 'Add all' },
+            { value: 'add_selected', label: 'Selected' },
+          ]}
+        />
+      </Field>
+      <TextInput
+        value={cta.labelEn ?? ''}
+        onChange={(labelEn) => onChange({ ...value, cta: { ...cta, labelEn } })}
+        placeholder="Add bundle to cart"
+      />
+      <TextInput
+        value={cta.labelAr ?? ''}
+        onChange={(labelAr) => onChange({ ...value, cta: { ...cta, labelAr } })}
+        placeholder="أضف الباقة للسلة"
+      />
+      <Field label="Per-product add buttons">
+        <Toggle
+          checked={Boolean(cta.showPerProductButtons)}
+          onChange={(showPerProductButtons) =>
+            onChange({ ...value, cta: { ...cta, showPerProductButtons } })
+          }
+        />
+      </Field>
+    </Section>
+  );
+}
+
+function defaultFilterGroup(source: CommerceFilterGroup['source']): CommerceFilterGroup {
+  const labels: Record<CommerceFilterGroup['source'], { en: string; ar: string }> = {
+    category: { en: 'Category', ar: 'التصنيف' },
+    brand: { en: 'Brand', ar: 'العلامة' },
+    tag: { en: 'Tag', ar: 'الوسم' },
+    price: { en: 'Price', ar: 'السعر' },
+    availability: { en: 'Availability', ar: 'التوفر' },
+    manual: { en: 'Custom filter', ar: 'فلتر مخصص' },
+  };
+  return {
+    id: `${source}-${makeServiceId().slice(0, 5)}`,
+    source,
+    labelEn: labels[source].en,
+    labelAr: labels[source].ar,
+    autoGenerate: source !== 'manual',
+    options: source === 'manual' ? [defaultFilterOption('manual')] : [],
+  };
+}
+
+function defaultFilterOption(
+  source: CommerceFilterGroup['source'],
+): NonNullable<CommerceFilterGroup['options']>[number] {
+  return {
+    id: `option-${makeServiceId().slice(0, 5)}`,
+    labelEn: source === 'price' ? 'Under 100 QAR' : 'Option',
+    labelAr: source === 'price' ? 'أقل من 100 ر.ق' : 'خيار',
+    value: source === 'price' ? 'under_100' : '',
+    productIds: [],
+  };
+}
+
+function defaultCommerceTab(seed: string): NonNullable<TabbedProductsConfig['tabs']>[number] {
+  const id = slugForBuilder(seed);
+  return {
+    id,
+    labelEn: labelFromId(id),
+    labelAr: labelFromId(id),
+    value: id,
+    productSource: {
+      source: 'latest',
+      productIds: [],
+      category: null,
+      tag: null,
+      limit: 8,
+      sort: 'newest',
+      hideUnavailable: true,
+    },
+  };
+}
+
+function defaultVisualTile(): VisualCategoryTile {
+  const id = `tile-${makeServiceId().slice(0, 5)}`;
+  return {
+    id,
+    labelEn: 'Collection',
+    labelAr: 'مجموعة',
+    eyebrowEn: 'Shop',
+    eyebrowAr: 'تسوق',
+    imageUrl: '',
+    badge: { labelEn: '', labelAr: '', tone: 'gold', position: 'top-right' },
+    destination: {
+      type: 'category',
+      category: null,
+      tag: null,
+      productIds: [],
+      pageSlug: null,
+      url: null,
+    },
+  };
+}
+
+function slugForBuilder(value: string) {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\u0600-\u06FF]+/g, '-')
+      .replace(/^-+|-+$/g, '') || `item-${makeServiceId().slice(0, 5)}`
+  );
+}
+
+function editorCardStyle(): React.CSSProperties {
+  return {
+    display: 'grid',
+    gap: 10,
+    padding: 10,
+    borderRadius: 10,
+    border: '1px solid var(--bld-divider)',
+    background: 'color-mix(in srgb, var(--bld-surface) 88%, transparent)',
+  };
+}
+
+function editorNestedCardStyle(): React.CSSProperties {
+  return {
+    display: 'grid',
+    gap: 8,
+    padding: 8,
+    borderRadius: 8,
+    border: '1px solid var(--bld-divider)',
+    background: 'color-mix(in srgb, var(--bld-surface-strong) 74%, transparent)',
+  };
+}
+
+function miniBtnStyle(): React.CSSProperties {
+  return {
+    border: '1px solid var(--bld-divider)',
+    borderRadius: 6,
+    background: 'transparent',
+    color: 'var(--bld-text-muted)',
+    fontSize: 10,
+    padding: '5px 7px',
+    cursor: 'pointer',
+  };
 }
 
 function EcommerceCategoriesEditor({
@@ -4293,12 +5944,13 @@ function ProductPicker({
     if (a && !b) return -1;
     return a.localeCompare(b, undefined, { sensitivity: 'base' });
   });
+  const text = useInspectorText();
 
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} style={selectStyle()}>
-      <option value="">— pick a product —</option>
+      <option value="">{text.option('Pick a product')}</option>
       {sortedKeys.map((key) => (
-        <optgroup key={key || '__uncat__'} label={key || 'Uncategorised'}>
+        <optgroup key={key || '__uncat__'} label={key || text.option('Uncategorised')}>
           {groups.get(key)!.map((p) => (
             <option key={p.id} value={p.id}>
               {p.title}
@@ -4319,9 +5971,10 @@ function CategoryPicker({
   options: string[];
   onChange: (v: string) => void;
 }) {
+  const text = useInspectorText();
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} style={selectStyle()}>
-      <option value="">All categories</option>
+      <option value="">{text.option('All categories')}</option>
       {options.map((c) => (
         <option key={c} value={c}>
           {c}
@@ -4336,12 +5989,14 @@ function CategoryPicker({
 // =========================================================================
 
 function useInspectorText() {
-  const { builder } = useBuilderCopy();
+  const { builder, locale } = useBuilderCopy();
   const labels = builder.inspector.labels as Record<string, string>;
   const options = builder.inspector.options as Record<string, string>;
+  const inline = locale === 'ar' ? INSPECTOR_INLINE_AR : {};
+  const resolve = (value: string) => labels[value] ?? options[value] ?? inline[value] ?? value;
   return {
-    label: (value: string | undefined) => (value ? labels[value] ?? value : value),
-    option: (value: string) => options[value] ?? labels[value] ?? value,
+    label: (value: string | undefined) => (value ? resolve(value) : value),
+    option: (value: string) => options[value] ?? resolve(value),
   };
 }
 

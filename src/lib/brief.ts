@@ -6,13 +6,35 @@ import type { PaletteId } from './palettes';
 import type { Block, ThemeOverrides } from './blocks/types';
 import type {
   BankDetails,
+  CheckoutAddressDesign,
+  CheckoutBackgroundPreset,
+  CheckoutButtonStyle,
+  CheckoutCustomColors,
+  CheckoutCustomTrustBadge,
+  CheckoutExperienceSettings,
+  CheckoutOrderSummaryLayout,
+  CheckoutPaymentAvailabilityRule,
+  CheckoutPaymentCardStyle,
   CheckoutSettings,
+  CheckoutThankYouStyle,
+  CheckoutTrustBadge,
   PaymentMethod,
   PayLink,
   PolicyKey,
+  SouqnaCityRegion,
+  SouqnaCitySettings,
   ThankYouSettings,
   StorefrontPolicies,
 } from './storefrontSettings';
+import {
+  DEFAULT_CHECKOUT_EXPERIENCE,
+  DEFAULT_SOUQNA_CITY_SETTINGS,
+  SOUQNA_CITY_REGIONS,
+} from './storefrontSettings';
+import {
+  parseProductIndexSettings,
+  type ProductIndexSettings,
+} from './productIndexSettings';
 
 export type Ownership = 'have_business' | 'want_to_start';
 export type Experience = 'first_time' | 'one_before' | 'multiple';
@@ -188,6 +210,8 @@ export type Storefront = {
    * migration 016.
    */
   checkout: CheckoutSettings;
+  /** Controlled system page settings for the buyer-facing /products catalogue. */
+  productIndex: ProductIndexSettings;
   /** Founder self-attestation that the storefront CR belongs to the business. */
   crConfirmedAt: Date | null;
   /**
@@ -261,7 +285,10 @@ type StorefrontRow = {
   checkout_currency: string | null;
   checkout_min_order_qar: number | null;
   checkout_shipping_flat_qar: number | null;
+  checkout_address_design: string | null;
+  checkout_experience: unknown;
   checkout_thank_you: unknown;
+  products_index_settings?: unknown;
   custom_domain: string | null;
   custom_domain_added_at: string | null;
   custom_domain_verified_at: string | null;
@@ -345,6 +372,7 @@ function fromRow(row: StorefrontRow): Storefront {
       shipping: row.policies_shipping,
     },
     checkout: parseCheckoutFromRow(row),
+    productIndex: parseProductIndexSettings(row.products_index_settings),
     customDomain: row.custom_domain,
     customDomainAddedAt: row.custom_domain_added_at ? new Date(row.custom_domain_added_at) : null,
     customDomainVerifiedAt: row.custom_domain_verified_at
@@ -369,6 +397,228 @@ const ALLOWED_PAYMENT_METHODS = new Set<string>([
   'pay_link',
 ]);
 const ALLOWED_REQUIRED_POLICIES = new Set<string>(['terms', 'privacy', 'refund', 'shipping']);
+const ALLOWED_CHECKOUT_ADDRESS_DESIGNS = new Set<string>([
+  'qatar_plate',
+  'soft_card',
+  'classic',
+]);
+const ALLOWED_CHECKOUT_BUTTON_STYLES = new Set<string>(['solid', 'maroon', 'gold', 'outline']);
+const ALLOWED_CHECKOUT_BACKGROUND_PRESETS = new Set<string>([
+  'sand',
+  'pearl',
+  'midnight',
+  'plate',
+  'custom',
+]);
+const ALLOWED_CHECKOUT_TRUST_BADGES = new Set<string>([
+  'secure_checkout',
+  'fast_confirmation',
+  'whatsapp_support',
+  'local_delivery',
+]);
+const ALLOWED_CHECKOUT_PAYMENT_CARD_STYLES = new Set<string>(['soft', 'bordered', 'compact']);
+const ALLOWED_CHECKOUT_ORDER_SUMMARY_LAYOUTS = new Set<string>(['side', 'bottom', 'compact']);
+const ALLOWED_CHECKOUT_THANK_YOU_STYLES = new Set<string>(['warm', 'minimal', 'celebration']);
+
+function parseCheckoutAddressDesign(value: unknown): CheckoutAddressDesign {
+  return typeof value === 'string' && ALLOWED_CHECKOUT_ADDRESS_DESIGNS.has(value)
+    ? (value as CheckoutAddressDesign)
+    : 'qatar_plate';
+}
+
+function parseCheckoutExperience(value: unknown): CheckoutExperienceSettings {
+  const obj =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const trustBadges = Array.isArray(obj.trustBadges)
+    ? obj.trustBadges
+        .filter((badge): badge is CheckoutTrustBadge =>
+          typeof badge === 'string' && ALLOWED_CHECKOUT_TRUST_BADGES.has(badge),
+        )
+        .filter((badge, index, all) => all.indexOf(badge) === index)
+    : DEFAULT_CHECKOUT_EXPERIENCE.trustBadges;
+
+  return {
+    heroTitle: normalizeCheckoutText(obj.heroTitle, 120),
+    heroSubtitle: normalizeCheckoutText(obj.heroSubtitle, 240),
+    backgroundPreset:
+      typeof obj.backgroundPreset === 'string' &&
+      ALLOWED_CHECKOUT_BACKGROUND_PRESETS.has(obj.backgroundPreset)
+        ? (obj.backgroundPreset as CheckoutBackgroundPreset)
+        : DEFAULT_CHECKOUT_EXPERIENCE.backgroundPreset,
+    customColors: parseCheckoutCustomColors(obj.customColors),
+    customCss: normalizeCheckoutCss(obj.customCss),
+    buttonStyle:
+      typeof obj.buttonStyle === 'string' && ALLOWED_CHECKOUT_BUTTON_STYLES.has(obj.buttonStyle)
+        ? (obj.buttonStyle as CheckoutButtonStyle)
+        : DEFAULT_CHECKOUT_EXPERIENCE.buttonStyle,
+    trustBadges: trustBadges.length > 0 ? trustBadges : DEFAULT_CHECKOUT_EXPERIENCE.trustBadges,
+    customTrustBadges: parseCheckoutCustomTrustBadges(obj.customTrustBadges),
+    deliveryNotes: normalizeCheckoutText(obj.deliveryNotes, 420),
+    paymentCardStyle:
+      typeof obj.paymentCardStyle === 'string' &&
+      ALLOWED_CHECKOUT_PAYMENT_CARD_STYLES.has(obj.paymentCardStyle)
+        ? (obj.paymentCardStyle as CheckoutPaymentCardStyle)
+        : DEFAULT_CHECKOUT_EXPERIENCE.paymentCardStyle,
+    orderSummaryLayout:
+      typeof obj.orderSummaryLayout === 'string' &&
+      ALLOWED_CHECKOUT_ORDER_SUMMARY_LAYOUTS.has(obj.orderSummaryLayout)
+        ? (obj.orderSummaryLayout as CheckoutOrderSummaryLayout)
+        : DEFAULT_CHECKOUT_EXPERIENCE.orderSummaryLayout,
+    thankYouStyle:
+      typeof obj.thankYouStyle === 'string' && ALLOWED_CHECKOUT_THANK_YOU_STYLES.has(obj.thankYouStyle)
+        ? (obj.thankYouStyle as CheckoutThankYouStyle)
+        : DEFAULT_CHECKOUT_EXPERIENCE.thankYouStyle,
+    paymentAvailabilityRules: parseCheckoutPaymentAvailabilityRules(
+      obj.paymentAvailabilityRules,
+    ),
+    souqnaCity: parseSouqnaCitySettings(obj.souqnaCity),
+  };
+}
+
+function parseCheckoutCustomColors(value: unknown): CheckoutCustomColors {
+  const defaults = DEFAULT_CHECKOUT_EXPERIENCE.customColors;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ...defaults };
+  const obj = value as Record<string, unknown>;
+  return {
+    background: normalizeCheckoutColor(obj.background),
+    surface: normalizeCheckoutColor(obj.surface),
+    accent: normalizeCheckoutColor(obj.accent),
+    text: normalizeCheckoutColor(obj.text),
+    buttonText: normalizeCheckoutColor(obj.buttonText),
+  };
+}
+
+function normalizeCheckoutColor(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(trimmed)
+    ? trimmed
+    : null;
+}
+
+function parseCheckoutCustomTrustBadges(value: unknown): CheckoutCustomTrustBadge[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+      const obj = item as Record<string, unknown>;
+      const labelEn = normalizeCheckoutText(obj.labelEn, 48);
+      const labelAr = normalizeCheckoutText(obj.labelAr, 48);
+      if (!labelEn && !labelAr) return null;
+      return {
+        labelEn: labelEn ?? labelAr ?? '',
+        labelAr: labelAr ?? labelEn ?? '',
+      } satisfies CheckoutCustomTrustBadge;
+    })
+    .filter((item): item is CheckoutCustomTrustBadge => item !== null)
+    .slice(0, 6);
+}
+
+function parseCheckoutPaymentAvailabilityRules(
+  value: unknown,
+): CheckoutPaymentAvailabilityRule[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+      const obj = item as Record<string, unknown>;
+      const method =
+        typeof obj.method === 'string' && ALLOWED_PAYMENT_METHODS.has(obj.method)
+          ? (obj.method as CheckoutPaymentAvailabilityRule['method'])
+          : null;
+      const cities = Array.isArray(obj.cities)
+        ? obj.cities
+            .map((city) => normalizeCheckoutText(city, 80))
+            .filter((city): city is string => Boolean(city))
+            .filter((city, index, all) => all.indexOf(city) === index)
+            .slice(0, 12)
+        : [];
+      if (!method || cities.length === 0) return null;
+      return {
+        method,
+        mode: 'allow_only',
+        cities,
+      } satisfies CheckoutPaymentAvailabilityRule;
+    })
+    .filter((item): item is CheckoutPaymentAvailabilityRule => item !== null)
+    .slice(0, 8);
+}
+
+function parseSouqnaCitySettings(value: unknown): SouqnaCitySettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return cloneDefaultSouqnaCitySettings();
+  }
+  const obj = value as Record<string, unknown>;
+  const rules = Array.isArray(obj.rules)
+    ? obj.rules
+        .map((item) => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+          const row = item as Record<string, unknown>;
+          const city = normalizeCheckoutText(row.city, 80);
+          if (!city) return null;
+          const region =
+            typeof row.region === 'string' &&
+            (SOUQNA_CITY_REGIONS as readonly string[]).includes(row.region)
+              ? (row.region as SouqnaCityRegion)
+              : 'custom';
+          const paymentMethods = Array.isArray(row.paymentMethods)
+            ? row.paymentMethods
+                .filter((method): method is SouqnaCitySettings['rules'][number]['paymentMethods'][number] =>
+                  typeof method === 'string' && ALLOWED_PAYMENT_METHODS.has(method),
+                )
+                .filter((method, index, all) => all.indexOf(method) === index)
+                .slice(0, 6)
+            : [];
+          const deliveryFee =
+            typeof row.deliveryFeeQar === 'number' && Number.isFinite(row.deliveryFeeQar)
+              ? Math.max(0, Math.floor(row.deliveryFeeQar))
+              : null;
+          return {
+            id:
+              typeof row.id === 'string' && row.id.trim()
+                ? row.id.trim().slice(0, 80)
+                : `souqna-city-${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+            city,
+            region,
+            enabled: row.enabled !== false,
+            paymentMethods: paymentMethods.length > 0 ? paymentMethods : ['cod'],
+            deliveryFeeQar: deliveryFee,
+          };
+        })
+        .filter((item): item is SouqnaCitySettings['rules'][number] => item !== null)
+        .slice(0, 30)
+    : cloneDefaultSouqnaCitySettings().rules;
+
+  return {
+    enabled: obj.enabled === true,
+    autoMatchNearest: obj.autoMatchNearest !== false,
+    rules,
+  };
+}
+
+function cloneDefaultSouqnaCitySettings(): SouqnaCitySettings {
+  return {
+    ...DEFAULT_SOUQNA_CITY_SETTINGS,
+    rules: DEFAULT_SOUQNA_CITY_SETTINGS.rules.map((rule) => ({
+      ...rule,
+      paymentMethods: [...rule.paymentMethods],
+    })),
+  };
+}
+
+function normalizeCheckoutText(value: unknown, max: number): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.slice(0, max) : null;
+}
+
+function normalizeCheckoutCss(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.slice(0, 2500) : null;
+}
 
 function parseBankDetailsFromRow(value: unknown): BankDetails | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -410,6 +660,7 @@ function parseCheckoutFromRow(row: StorefrontRow): CheckoutSettings {
   const sadadRef = parseSadadCredentialsRef(row.checkout_sadad_credentials);
 
   return {
+    enabled: true,
     paymentMethods,
     bankDetails: parseBankDetailsFromRow(row.checkout_bank_details),
     payLink,
@@ -447,6 +698,8 @@ function parseCheckoutFromRow(row: StorefrontRow): CheckoutSettings {
     currency: (row.checkout_currency ?? 'QAR').toUpperCase(),
     minOrderQar: row.checkout_min_order_qar,
     shippingFlatQar: row.checkout_shipping_flat_qar,
+    addressDesign: parseCheckoutAddressDesign(row.checkout_address_design),
+    experience: parseCheckoutExperience(row.checkout_experience),
     thankYou: parseThankYouSettings(row.checkout_thank_you),
   };
 }
@@ -580,6 +833,7 @@ export type CreateStorefrontInput = Omit<
   | 'souqyBrief'
   | 'policies'
   | 'checkout'
+  | 'productIndex'
   | 'crConfirmedAt'
   | 'customDomain'
   | 'customDomainAddedAt'
@@ -614,6 +868,7 @@ export type UpdateStorefrontInput = Omit<
   | 'souqyBrief'
   | 'policies'
   | 'checkout'
+  | 'productIndex'
   | 'crConfirmedAt'
   | 'customDomain'
   | 'customDomainAddedAt'

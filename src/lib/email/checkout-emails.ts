@@ -157,7 +157,10 @@ function itemsTable(order: Order): { html: string; text: string } {
 
 function itemOptionLines(item: Order['items'][number]): string[] {
   const lines: string[] = [];
-  if (item.variantLabel) lines.push(`Option: ${item.variantLabel}`);
+  if (item.variantLabel) lines.push(`Size: ${item.variantLabel}`);
+  if (item.customInputs.variant) {
+    lines.push(`${item.customInputs.variantLabel || 'Variant'}: ${item.customInputs.variant}`);
+  }
   if (item.customInputs.height) {
     lines.push(`${item.customInputs.heightLabel || 'Height'}: ${item.customInputs.height}`);
   }

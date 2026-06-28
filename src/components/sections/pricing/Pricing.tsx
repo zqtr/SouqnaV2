@@ -31,19 +31,19 @@ type Props = {
 
 const TAGLINE: Record<Plan, { en: string; ar: string }> = {
   free: {
-    en: 'Launch a branded starter storefront with clear growth limits.',
+    en: 'Launch a branded starter storefront with Fawran and cash on delivery.',
     ar: 'ولّد أول متجر لك وأطلق الأساسيات.',
   },
   starter: {
-    en: 'The conversion plan for merchants ready to sell seriously.',
+    en: 'The conversion plan for merchants selling with Fawran and cash on delivery.',
     ar: 'أطلق متاجر أكثر مع نطاق خاص ودعم.',
   },
   pro: {
-    en: 'Scale with Souqy, AI generation, team tools, and marketing apps.',
+    en: 'Scale with Souqy, AI generation, teams, and official payment providers.',
     ar: 'أضف سوقي، أصول الذكاء، نصوص المنتجات، وتطبيقات النمو.',
   },
   atelier: {
-    en: 'Run agencies, operators, and multi-brand commerce workspaces.',
+    en: 'Run agencies, operators, multi-brand workspaces, and every payment provider.',
     ar: 'وسّع التشغيل بذكاء متقدم وتكاملات ومقاعد فريق.',
   },
 };
@@ -56,6 +56,8 @@ const FEATURES_EN: Record<Plan, { intro: string; bullets: string[] }> = {
       '10 products',
       '1 template',
       '25 orders per month',
+      'Fawran + cash on delivery checkout',
+      'Basic analytics',
       'Souqna branding locked',
       'Upgrade to unlock growth tools',
     ],
@@ -68,8 +70,10 @@ const FEATURES_EN: Record<Plan, { intro: string; bullets: string[] }> = {
       '5 templates',
       'Custom domain',
       'Remove branding',
-      'Basic analytics',
+      'Basic analytics with more history',
+      'Analytics export ready',
       'WhatsApp integration',
+      'Fawran + cash on delivery checkout',
       'Discount codes + SEO settings',
       '100 AI credits per month',
       'Email support',
@@ -84,10 +88,12 @@ const FEATURES_EN: Record<Plan, { intro: string; bullets: string[] }> = {
       'EN + AR AI generation',
       'Marketing apps',
       'Meta/TikTok integrations',
+      'Payment providers: SADAD, SkipCash, Tap Payments',
       'Team members',
       'Automation flows',
       'Premium templates and builder blocks',
       'Advanced analytics',
+      'Funnels, behavior, attribution, and AI insights',
       'Priority support',
     ],
   },
@@ -99,7 +105,9 @@ const FEATURES_EN: Record<Plan, { intro: string; bullets: string[] }> = {
       'Client permissions',
       'White-label tools',
       'API access',
+      'All payment providers: SADAD, SkipCash, Tap Payments',
       'Advanced analytics AI',
+      'Forecasting and multi-store reporting',
       'Bulk operations',
       'Advanced SEO AI',
       'Early access features',
@@ -405,7 +413,11 @@ function PlanCard({
             {isRtl ? plan.labelAr : plan.label}
           </h3>
         </div>
-        {isFeatured ? <Badge>{featuredLabel}</Badge> : isMax ? <Badge muted>Scale</Badge> : null}
+        {isFeatured ? (
+          <Badge>{`${featuredLabel} · Providers`}</Badge>
+        ) : isMax ? (
+          <Badge muted>All providers</Badge>
+        ) : null}
       </div>
 
       <div className="relative z-10 mb-4 flex items-baseline gap-2">

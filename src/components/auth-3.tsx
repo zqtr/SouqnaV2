@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { motion } from 'motion/react';
 import type { ReactNode } from 'react';
 import { useTheme } from '@/components/theme/ThemeProvider';
-import SplitText from '@/components/react-bits/split-text';
+import SplitText from '@/components/souqna-motion/split-text';
 import type { Locale } from '@/i18n/locales';
 
 type Auth3Props = {

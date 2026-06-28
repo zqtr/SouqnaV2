@@ -1,4 +1,5 @@
 ﻿'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import { useId, useMemo, useRef, useState } from 'react';
 import { upload } from '@vercel/blob/client';
@@ -9,18 +10,29 @@ import type { Product, ProductStatus } from '@/lib/products';
 import { planUnlocksMonthlyPayments, type Plan } from '@/lib/plans';
 import {
   DEFAULT_PRODUCT_HEIGHT_OPTIONS,
-  MAX_PRODUCT_SIZE_OPTIONS,
+  DEFAULT_PRODUCT_VARIANT_OPTIONS,
+  type PricedProductOption,
   normalizeHeightInputLabel,
   normalizeHeightOptions,
-  normalizeSizeOptions,
+  normalizePricedOptions,
 } from '@/lib/productOptions';
 import type { Category } from '@/lib/categories';
 import { createProduct, updateProduct, type ProductActionState } from '@/app/actions/products';
 import { createCategory } from '@/app/actions/categories';
+import {
+  STOREFRONT_MEDIA_ACCEPT,
+  STOREFRONT_MEDIA_FORMATS_LABEL,
+  mediaKindFromUrl,
+} from '@/lib/media';
 
 type Mode = 'create' | 'edit';
 
 const PRODUCT_SAVE_TIMEOUT_MS = 25_000;
+
+type ProductOptionDraft = {
+  label: string;
+  priceDeltaQar: string;
+};
 
 type Props = {
   mode: Mode;
@@ -59,60 +71,265 @@ type Props = {
 
 type FormState = {
   title: string;
+  subtitle: string;
   description: string;
   priceQar: string;
+  compareAtPriceQar: string;
+  costPerItemQar: string;
+  taxable: boolean;
+  discountEligible: boolean;
   pricingMode: 'one_time' | 'monthly_payment';
   monthlyPriceQar: string;
   imageUrl: string;
+  mediaAltText: string;
+  productType: string;
+  vendor: string;
+  tagsText: string;
+  templateKey: string;
+  badgesText: string;
+  handle: string;
+  seoTitle: string;
+  seoDescription: string;
   eventAt: string;
+  publishedAt: string;
+  saleStartsAt: string;
+  saleEndsAt: string;
   status: ProductStatus;
+  stock: string;
+  sku: string;
+  barcode: string;
+  trackInventory: boolean;
+  continueSellingWhenOutOfStock: boolean;
+  lowStockThreshold: string;
+  restockAt: string;
+  supplierCostQar: string;
+  purchaseOrderRef: string;
+  stockStatusLabel: string;
+  minOrderQuantity: string;
+  maxOrderQuantity: string;
+  physicalProduct: boolean;
+  weightGrams: string;
+  packageLengthCm: string;
+  packageWidthCm: string;
+  packageHeightCm: string;
+  requiresShipping: boolean;
+  freeShippingEligible: boolean;
+  countryOfOrigin: string;
+  hsCode: string;
+  customsDescription: string;
+  digitalDelivery: boolean;
+  metafieldsText: string;
   isCustomizable: boolean;
   customizationLabel: string;
   hasSizes: boolean;
-  sizeOptions: string[];
+  sizeOptions: ProductOptionDraft[];
   allowCustomSize: boolean;
+  hasVariants: boolean;
+  variantOptions: ProductOptionDraft[];
   requiresHeightInput: boolean;
   heightInputLabel: string;
   heightOptions: string[];
 };
 
+function draftOptionsFrom(value: unknown): ProductOptionDraft[] {
+  return normalizePricedOptions(value).map((option) => ({
+    label: option.label,
+    priceDeltaQar: option.priceDeltaQar === 0 ? '' : String(option.priceDeltaQar),
+  }));
+}
+
+function draftOptionsFromLabels(labels: string[]): ProductOptionDraft[] {
+  return labels.map((label) => ({ label, priceDeltaQar: '' }));
+}
+
+function draftOptionsForForm(options: PricedProductOption[]): ProductOptionDraft[] {
+  return options.map((option) => ({
+    label: option.label,
+    priceDeltaQar: option.priceDeltaQar === 0 ? '' : String(option.priceDeltaQar),
+  }));
+}
+
+function dateInputValue(date: Date | null | undefined): string {
+  return date ? new Date(date).toISOString().slice(0, 16) : '';
+}
+
+function listToText(value: string[] | null | undefined): string {
+  return (value ?? []).join(', ');
+}
+
+function textToList(value: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of value.split(',')) {
+    const label = raw.replace(/\s+/g, ' ').trim();
+    const key = label.toLowerCase();
+    if (!label || seen.has(key)) continue;
+    seen.add(key);
+    out.push(label);
+  }
+  return out;
+}
+
+function nullableNumber(value: string): number | null {
+  if (value.trim() === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function metafieldsToText(value: Record<string, string> | null | undefined): string {
+  return Object.entries(value ?? {})
+    .map(([key, val]) => `${key}: ${val}`)
+    .join('\n');
+}
+
+function textToMetafields(value: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of value.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const idx = trimmed.includes(':') ? trimmed.indexOf(':') : trimmed.indexOf('=');
+    if (idx <= 0) continue;
+    const key = trimmed.slice(0, idx).replace(/\s+/g, ' ').trim().slice(0, 60);
+    const val = trimmed
+      .slice(idx + 1)
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 240);
+    if (key && val) out[key] = val;
+  }
+  return out;
+}
+
 function defaultsFrom(initial: Product | undefined): FormState {
   if (!initial) {
     return {
       title: '',
+      subtitle: '',
       description: '',
       priceQar: '',
+      compareAtPriceQar: '',
+      costPerItemQar: '',
+      taxable: true,
+      discountEligible: true,
       pricingMode: 'one_time',
       monthlyPriceQar: '',
       imageUrl: '',
+      mediaAltText: '',
+      productType: '',
+      vendor: '',
+      tagsText: '',
+      templateKey: '',
+      badgesText: '',
+      handle: '',
+      seoTitle: '',
+      seoDescription: '',
       eventAt: '',
+      publishedAt: '',
+      saleStartsAt: '',
+      saleEndsAt: '',
       status: 'active',
+      stock: '0',
+      sku: '',
+      barcode: '',
+      trackInventory: false,
+      continueSellingWhenOutOfStock: false,
+      lowStockThreshold: '',
+      restockAt: '',
+      supplierCostQar: '',
+      purchaseOrderRef: '',
+      stockStatusLabel: '',
+      minOrderQuantity: '1',
+      maxOrderQuantity: '',
+      physicalProduct: true,
+      weightGrams: '',
+      packageLengthCm: '',
+      packageWidthCm: '',
+      packageHeightCm: '',
+      requiresShipping: true,
+      freeShippingEligible: false,
+      countryOfOrigin: '',
+      hsCode: '',
+      customsDescription: '',
+      digitalDelivery: false,
+      metafieldsText: '',
       isCustomizable: false,
       customizationLabel: '',
       hasSizes: false,
       sizeOptions: [],
       allowCustomSize: false,
+      hasVariants: false,
+      variantOptions: [],
       requiresHeightInput: false,
       heightInputLabel: '',
       heightOptions: [],
     };
   }
-  const sizeOptions = normalizeSizeOptions(initial.sizeOptions);
+  const sizeOptions = draftOptionsFrom(initial.sizeOptionPrices ?? initial.sizeOptions);
+  const variantOptions = draftOptionsFrom(initial.variantOptionPrices ?? initial.variantOptions);
   const heightOptions = normalizeHeightOptions(initial.heightOptions);
   return {
     title: initial.title,
+    subtitle: initial.subtitle ?? '',
     description: initial.description ?? '',
     priceQar: initial.priceQar !== null ? String(initial.priceQar) : '',
+    compareAtPriceQar:
+      initial.compareAtPriceQar !== null ? String(initial.compareAtPriceQar) : '',
+    costPerItemQar: initial.costPerItemQar !== null ? String(initial.costPerItemQar) : '',
+    taxable: initial.taxable,
+    discountEligible: initial.discountEligible,
     pricingMode: initial.pricingMode,
     monthlyPriceQar: initial.monthlyPriceQar !== null ? String(initial.monthlyPriceQar) : '',
     imageUrl: initial.imageUrl ?? '',
-    eventAt: initial.eventAt ? new Date(initial.eventAt).toISOString().slice(0, 16) : '',
+    mediaAltText: initial.mediaAltText ?? '',
+    productType: initial.productType ?? '',
+    vendor: initial.vendor ?? '',
+    tagsText: listToText(initial.tags),
+    templateKey: initial.templateKey ?? '',
+    badgesText: listToText(initial.badges),
+    handle: initial.handle ?? '',
+    seoTitle: initial.seoTitle ?? '',
+    seoDescription: initial.seoDescription ?? '',
+    eventAt: dateInputValue(initial.eventAt),
+    publishedAt: dateInputValue(initial.publishedAt),
+    saleStartsAt: dateInputValue(initial.saleStartsAt),
+    saleEndsAt: dateInputValue(initial.saleEndsAt),
     status: initial.status,
+    stock: String(initial.stock),
+    sku: initial.sku ?? '',
+    barcode: initial.barcode ?? '',
+    trackInventory: initial.trackInventory,
+    continueSellingWhenOutOfStock: initial.continueSellingWhenOutOfStock,
+    lowStockThreshold:
+      initial.lowStockThreshold !== null ? String(initial.lowStockThreshold) : '',
+    restockAt: dateInputValue(initial.restockAt),
+    supplierCostQar: initial.supplierCostQar !== null ? String(initial.supplierCostQar) : '',
+    purchaseOrderRef: initial.purchaseOrderRef ?? '',
+    stockStatusLabel: initial.stockStatusLabel ?? '',
+    minOrderQuantity: String(initial.minOrderQuantity),
+    maxOrderQuantity:
+      initial.maxOrderQuantity !== null ? String(initial.maxOrderQuantity) : '',
+    physicalProduct: initial.physicalProduct,
+    weightGrams: initial.weightGrams !== null ? String(initial.weightGrams) : '',
+    packageLengthCm:
+      initial.packageDimensions.lengthCm !== null ? String(initial.packageDimensions.lengthCm) : '',
+    packageWidthCm:
+      initial.packageDimensions.widthCm !== null ? String(initial.packageDimensions.widthCm) : '',
+    packageHeightCm:
+      initial.packageDimensions.heightCm !== null ? String(initial.packageDimensions.heightCm) : '',
+    requiresShipping: initial.requiresShipping,
+    freeShippingEligible: initial.freeShippingEligible,
+    countryOfOrigin: initial.countryOfOrigin ?? '',
+    hsCode: initial.hsCode ?? '',
+    customsDescription: initial.customsDescription ?? '',
+    digitalDelivery: initial.digitalDelivery,
+    metafieldsText: metafieldsToText(initial.metafields),
     isCustomizable: initial.isCustomizable,
     customizationLabel: initial.customizationLabel ?? '',
     hasSizes: sizeOptions.length > 0,
     sizeOptions,
     allowCustomSize: initial.allowCustomSize,
+    hasVariants: variantOptions.length > 0,
+    variantOptions,
     requiresHeightInput: initial.requiresHeightInput,
     heightInputLabel: initial.heightInputLabel ?? '',
     heightOptions,
@@ -158,6 +375,8 @@ export function ProductForm({
 
     const priceParsed = form.priceQar.trim() === '' ? null : Number(form.priceQar);
     const priceQar = priceParsed === null || Number.isNaN(priceParsed) ? null : priceParsed;
+    const compareAtPriceQar = nullableNumber(form.compareAtPriceQar);
+    const costPerItemQar = nullableNumber(form.costPerItemQar);
     const monthlyParsed = form.monthlyPriceQar.trim() === '' ? null : Number(form.monthlyPriceQar);
     const monthlyPriceQar =
       monthlyParsed === null || Number.isNaN(monthlyParsed) ? null : monthlyParsed;
@@ -165,7 +384,8 @@ export function ProductForm({
       canUseMonthlyPayments && form.pricingMode === 'monthly_payment'
         ? 'monthly_payment'
         : 'one_time';
-    const sizeOptions = form.hasSizes ? normalizeSizeOptions(form.sizeOptions) : [];
+    const sizeOptions = form.hasSizes ? normalizePricedOptions(form.sizeOptions) : [];
+    const variantOptions = form.hasVariants ? normalizePricedOptions(form.variantOptions) : [];
     const heightOptions = form.requiresHeightInput
       ? normalizeHeightOptions(form.heightOptions)
       : [];
@@ -176,6 +396,16 @@ export function ProductForm({
           ? 'أضف مقاساً واحداً على الأقل أو أوقف خيار المقاسات.'
           : 'Add at least one size or turn Sizes off.',
         field: 'sizeOptions',
+      });
+      return;
+    }
+    if (form.hasVariants && variantOptions.length === 0) {
+      setState({
+        status: 'error',
+        message: isRtl
+          ? 'أضف خياراً واحداً على الأقل أو أوقف خيار المتغيرات.'
+          : 'Add at least one variant or turn Variants off.',
+        field: 'variantOptions',
       });
       return;
     }
@@ -194,17 +424,66 @@ export function ProductForm({
       slug: storefrontSlug,
       locale,
       title: form.title.trim(),
+      subtitle: form.subtitle.trim(),
       description: form.description.trim(),
       priceQar,
+      compareAtPriceQar,
+      costPerItemQar,
+      taxable: form.taxable,
+      discountEligible: form.discountEligible,
       pricingMode,
       monthlyPriceQar,
       imageUrl: form.imageUrl.trim(),
+      mediaAltText: form.mediaAltText.trim(),
       // Legacy column kept blank — server rewrites it from the picker
       // selection so older storefront surfaces keep matching.
       category: '',
       categoryIds: selectedCategoryIds,
+      productType: form.productType.trim(),
+      vendor: form.vendor.trim(),
+      tags: textToList(form.tagsText),
+      templateKey: form.templateKey.trim(),
+      badges: textToList(form.badgesText),
+      handle: form.handle.trim(),
+      seoTitle: form.seoTitle.trim(),
+      seoDescription: form.seoDescription.trim(),
       eventAt: form.eventAt.trim(),
+      publishedAt: form.publishedAt.trim(),
+      saleStartsAt: form.saleStartsAt.trim(),
+      saleEndsAt: form.saleEndsAt.trim(),
       status: form.status,
+      stock: Math.max(0, Math.floor(nullableNumber(form.stock) ?? 0)),
+      sku: form.sku.trim(),
+      barcode: form.barcode.trim(),
+      trackInventory: form.trackInventory,
+      continueSellingWhenOutOfStock: form.continueSellingWhenOutOfStock,
+      lowStockThreshold: nullableNumber(form.lowStockThreshold),
+      restockAt: form.restockAt.trim(),
+      supplierCostQar: nullableNumber(form.supplierCostQar),
+      purchaseOrderRef: form.purchaseOrderRef.trim(),
+      stockStatusLabel: form.stockStatusLabel.trim(),
+      minOrderQuantity: Math.max(1, Math.floor(nullableNumber(form.minOrderQuantity) ?? 1)),
+      maxOrderQuantity:
+        nullableNumber(form.maxOrderQuantity) !== null
+          ? Math.floor(nullableNumber(form.maxOrderQuantity) ?? 0)
+          : null,
+      physicalProduct: form.physicalProduct,
+      weightGrams:
+        nullableNumber(form.weightGrams) !== null
+          ? Math.floor(nullableNumber(form.weightGrams) ?? 0)
+          : null,
+      packageDimensions: {
+        lengthCm: nullableNumber(form.packageLengthCm),
+        widthCm: nullableNumber(form.packageWidthCm),
+        heightCm: nullableNumber(form.packageHeightCm),
+      },
+      requiresShipping: form.requiresShipping,
+      freeShippingEligible: form.freeShippingEligible,
+      countryOfOrigin: form.countryOfOrigin.trim(),
+      hsCode: form.hsCode.trim(),
+      customsDescription: form.customsDescription.trim(),
+      digitalDelivery: form.digitalDelivery,
+      metafields: textToMetafields(form.metafieldsText),
       isCustomizable: form.isCustomizable,
       customizationLabel:
         form.isCustomizable && form.customizationLabel.trim()
@@ -214,6 +493,7 @@ export function ProductForm({
             : 'Customizable',
       sizeOptions,
       allowCustomSize: form.hasSizes && form.allowCustomSize,
+      variantOptions,
       requiresHeightInput: form.requiresHeightInput,
       heightInputLabel:
         form.requiresHeightInput && form.heightInputLabel.trim()
@@ -226,7 +506,10 @@ export function ProductForm({
 
     setSaving(true);
     if (form.hasSizes) {
-      setForm((prev) => ({ ...prev, sizeOptions }));
+      setForm((prev) => ({ ...prev, sizeOptions: draftOptionsForForm(sizeOptions) }));
+    }
+    if (form.hasVariants) {
+      setForm((prev) => ({ ...prev, variantOptions: draftOptionsForForm(variantOptions) }));
     }
     if (form.requiresHeightInput) {
       setForm((prev) => ({ ...prev, heightOptions }));
@@ -328,6 +611,16 @@ export function ProductForm({
           required
         />
 
+        <Field
+          id={`${idBase}-subtitle`}
+          label={isRtl ? 'وصف قصير' : 'Short description'}
+          value={form.subtitle}
+          onChange={(v) => update('subtitle', v)}
+          isRtl={isRtl}
+          placeholder={isRtl ? 'جملة قصيرة تظهر تحت اسم المنتج' : 'A short line under the title'}
+          maxLength={240}
+        />
+
         <TextArea
           id={`${idBase}-desc`}
           label={t.labels.description}
@@ -335,8 +628,118 @@ export function ProductForm({
           onChange={(v) => update('description', v)}
           isRtl={isRtl}
           placeholder={t.placeholders.description}
-          maxLength={800}
+          maxLength={4000}
         />
+
+        <CollapsibleField
+          label={isRtl ? 'واجهة المتجر و SEO' : 'Storefront & SEO'}
+          summary={
+            form.handle || form.seoTitle || form.tagsText
+              ? isRtl
+                ? 'تم ضبط بيانات الظهور'
+                : 'Visibility details set'
+              : isRtl
+                ? 'الرابط، البحث، الشارات'
+                : 'Handle, search, badges'
+          }
+          defaultOpen={Boolean(form.handle || form.seoTitle || form.tagsText)}
+          isRtl={isRtl}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <Field
+              id={`${idBase}-handle`}
+              label={isRtl ? 'رابط المنتج' : 'Product URL handle'}
+              value={form.handle}
+              onChange={(v) => update('handle', v)}
+              isRtl={false}
+              placeholder="oud-amber-launch"
+              maxLength={120}
+              helper={
+                isRtl
+                  ? 'اتركه فارغاً ليتم إنشاؤه من اسم المنتج.'
+                  : 'Leave blank to generate from the product title.'
+              }
+            />
+            <Field
+              id={`${idBase}-media-alt`}
+              label={isRtl ? 'وصف الوسائط' : 'Media alt text'}
+              value={form.mediaAltText}
+              onChange={(v) => update('mediaAltText', v)}
+              isRtl={isRtl}
+              maxLength={180}
+            />
+            <Field
+              id={`${idBase}-product-type`}
+              label={isRtl ? 'نوع المنتج' : 'Product type'}
+              value={form.productType}
+              onChange={(v) => update('productType', v)}
+              isRtl={isRtl}
+              placeholder={isRtl ? 'عطر، باقة، خدمة' : 'Perfume, bundle, service'}
+              maxLength={80}
+            />
+            <Field
+              id={`${idBase}-vendor`}
+              label={isRtl ? 'العلامة / المورد' : 'Brand / vendor'}
+              value={form.vendor}
+              onChange={(v) => update('vendor', v)}
+              isRtl={isRtl}
+              maxLength={120}
+            />
+            <Field
+              id={`${idBase}-tags`}
+              label={isRtl ? 'وسوم' : 'Tags'}
+              value={form.tagsText}
+              onChange={(v) => update('tagsText', v)}
+              isRtl={isRtl}
+              placeholder={isRtl ? 'رمضان، هدية، فاخر' : 'Ramadan, gift, premium'}
+              helper={isRtl ? 'افصل بينها بفواصل.' : 'Separate with commas.'}
+            />
+            <Field
+              id={`${idBase}-badges`}
+              label={isRtl ? 'شارات المنتج' : 'Product badges'}
+              value={form.badgesText}
+              onChange={(v) => update('badgesText', v)}
+              isRtl={isRtl}
+              placeholder={isRtl ? 'جديد، الأكثر مبيعاً' : 'New, bestseller'}
+              helper={isRtl ? 'افصل بينها بفواصل.' : 'Separate with commas.'}
+            />
+            <Field
+              id={`${idBase}-template`}
+              label={isRtl ? 'قالب المنتج' : 'Product template'}
+              value={form.templateKey}
+              onChange={(v) => update('templateKey', v)}
+              isRtl={false}
+              placeholder="premium-detail"
+              maxLength={80}
+            />
+            <Field
+              id={`${idBase}-published-at`}
+              label={isRtl ? 'تاريخ النشر' : 'Publish date'}
+              value={form.publishedAt}
+              onChange={(v) => update('publishedAt', v)}
+              isRtl={false}
+              type="datetime-local"
+            />
+          </div>
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <Field
+              id={`${idBase}-seo-title`}
+              label={isRtl ? 'عنوان SEO' : 'SEO title'}
+              value={form.seoTitle}
+              onChange={(v) => update('seoTitle', v)}
+              isRtl={isRtl}
+              maxLength={160}
+            />
+            <TextArea
+              id={`${idBase}-seo-description`}
+              label={isRtl ? 'وصف SEO' : 'SEO description'}
+              value={form.seoDescription}
+              onChange={(v) => update('seoDescription', v)}
+              isRtl={isRtl}
+              maxLength={220}
+            />
+          </div>
+        </CollapsibleField>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <Field
@@ -373,6 +776,301 @@ export function ProductForm({
             }}
           />
         </div>
+
+        <CollapsibleField
+          label={isRtl ? 'التسعير والحدود' : 'Pricing controls'}
+          summary={
+            form.compareAtPriceQar || form.costPerItemQar || form.maxOrderQuantity
+              ? isRtl
+                ? 'تم ضبط أسعار إضافية'
+                : 'Extra pricing set'
+              : isRtl
+                ? 'السعر قبل الخصم، التكلفة، الكمية'
+                : 'Compare-at, cost, quantity'
+          }
+          defaultOpen={Boolean(form.compareAtPriceQar || form.costPerItemQar)}
+          isRtl={isRtl}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <Field
+              id={`${idBase}-compare-price`}
+              label={isRtl ? 'السعر قبل الخصم' : 'Compare-at price'}
+              value={form.compareAtPriceQar}
+              onChange={(v) => update('compareAtPriceQar', v)}
+              isRtl={false}
+              type="number"
+            />
+            <Field
+              id={`${idBase}-cost-price`}
+              label={isRtl ? 'تكلفة المنتج' : 'Cost per item'}
+              value={form.costPerItemQar}
+              onChange={(v) => update('costPerItemQar', v)}
+              isRtl={false}
+              type="number"
+            />
+            <Field
+              id={`${idBase}-sale-start`}
+              label={isRtl ? 'بداية التخفيض' : 'Sale starts'}
+              value={form.saleStartsAt}
+              onChange={(v) => update('saleStartsAt', v)}
+              isRtl={false}
+              type="datetime-local"
+            />
+            <Field
+              id={`${idBase}-sale-end`}
+              label={isRtl ? 'نهاية التخفيض' : 'Sale ends'}
+              value={form.saleEndsAt}
+              onChange={(v) => update('saleEndsAt', v)}
+              isRtl={false}
+              type="datetime-local"
+            />
+            <Field
+              id={`${idBase}-min-qty`}
+              label={isRtl ? 'أقل كمية للطلب' : 'Minimum order quantity'}
+              value={form.minOrderQuantity}
+              onChange={(v) => update('minOrderQuantity', v)}
+              isRtl={false}
+              type="number"
+            />
+            <Field
+              id={`${idBase}-max-qty`}
+              label={isRtl ? 'أعلى كمية للطلب' : 'Maximum order quantity'}
+              value={form.maxOrderQuantity}
+              onChange={(v) => update('maxOrderQuantity', v)}
+              isRtl={false}
+              type="number"
+            />
+          </div>
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <ToggleRow
+              label={isRtl ? 'خاضع للضريبة' : 'Taxable product'}
+              helper={isRtl ? 'يُحسب ضمن إعدادات الضرائب.' : 'Included in tax settings.'}
+              checked={form.taxable}
+              onChange={(v) => update('taxable', v)}
+              isRtl={isRtl}
+            />
+            <ToggleRow
+              label={isRtl ? 'مؤهل للخصومات' : 'Discount eligible'}
+              helper={isRtl ? 'يسمح بتطبيق أكواد الخصم.' : 'Allow discount codes on this item.'}
+              checked={form.discountEligible}
+              onChange={(v) => update('discountEligible', v)}
+              isRtl={isRtl}
+            />
+          </div>
+        </CollapsibleField>
+
+        <CollapsibleField
+          label={isRtl ? 'المخزون' : 'Inventory'}
+          summary={
+            form.sku || form.trackInventory
+              ? isRtl
+                ? 'تم ضبط SKU أو تتبع المخزون'
+                : 'SKU or tracking enabled'
+              : isRtl
+                ? 'SKU، الباركود، نفاد المخزون'
+                : 'SKU, barcode, stock'
+          }
+          defaultOpen={Boolean(form.sku || form.trackInventory)}
+          isRtl={isRtl}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <Field
+              id={`${idBase}-stock`}
+              label={isRtl ? 'الكمية' : 'Stock'}
+              value={form.stock}
+              onChange={(v) => update('stock', v)}
+              isRtl={false}
+              type="number"
+            />
+            <Field
+              id={`${idBase}-sku`}
+              label="SKU"
+              value={form.sku}
+              onChange={(v) => update('sku', v)}
+              isRtl={false}
+              maxLength={80}
+            />
+            <Field
+              id={`${idBase}-barcode`}
+              label={isRtl ? 'الباركود' : 'Barcode / GTIN'}
+              value={form.barcode}
+              onChange={(v) => update('barcode', v)}
+              isRtl={false}
+              maxLength={80}
+            />
+            <Field
+              id={`${idBase}-low-stock`}
+              label={isRtl ? 'حد المخزون المنخفض' : 'Low-stock threshold'}
+              value={form.lowStockThreshold}
+              onChange={(v) => update('lowStockThreshold', v)}
+              isRtl={false}
+              type="number"
+            />
+            <Field
+              id={`${idBase}-restock`}
+              label={isRtl ? 'تاريخ إعادة التوفر' : 'Restock date'}
+              value={form.restockAt}
+              onChange={(v) => update('restockAt', v)}
+              isRtl={false}
+              type="datetime-local"
+            />
+            <Field
+              id={`${idBase}-stock-label`}
+              label={isRtl ? 'وسم حالة المخزون' : 'Stock status label'}
+              value={form.stockStatusLabel}
+              onChange={(v) => update('stockStatusLabel', v)}
+              isRtl={isRtl}
+              maxLength={80}
+            />
+            <Field
+              id={`${idBase}-supplier-cost`}
+              label={isRtl ? 'تكلفة المورد' : 'Supplier cost'}
+              value={form.supplierCostQar}
+              onChange={(v) => update('supplierCostQar', v)}
+              isRtl={false}
+              type="number"
+            />
+            <Field
+              id={`${idBase}-po-ref`}
+              label={isRtl ? 'مرجع أمر الشراء' : 'Purchase order ref'}
+              value={form.purchaseOrderRef}
+              onChange={(v) => update('purchaseOrderRef', v)}
+              isRtl={false}
+              maxLength={80}
+            />
+          </div>
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <ToggleRow
+              label={isRtl ? 'تتبع الكمية' : 'Track quantity'}
+              helper={isRtl ? 'يمنع البيع عند النفاد إذا لم تسمح بالاستمرار.' : 'Controls sold-out behavior.'}
+              checked={form.trackInventory}
+              onChange={(v) => update('trackInventory', v)}
+              isRtl={isRtl}
+            />
+            <ToggleRow
+              label={isRtl ? 'استمر بالبيع عند النفاد' : 'Continue selling when out of stock'}
+              helper={isRtl ? 'مفيد للطلبات المسبقة.' : 'Useful for preorders.'}
+              checked={form.continueSellingWhenOutOfStock}
+              onChange={(v) => update('continueSellingWhenOutOfStock', v)}
+              isRtl={isRtl}
+            />
+          </div>
+        </CollapsibleField>
+
+        <CollapsibleField
+          label={isRtl ? 'الشحن والبيانات' : 'Shipping & custom data'}
+          summary={
+            form.weightGrams || form.metafieldsText
+              ? isRtl
+                ? 'تم ضبط بيانات إضافية'
+                : 'Extra product data set'
+              : isRtl
+                ? 'الوزن، الأبعاد، الحقول المخصصة'
+                : 'Weight, dimensions, metafields'
+          }
+          defaultOpen={Boolean(form.weightGrams || form.metafieldsText)}
+          isRtl={isRtl}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <ToggleRow
+              label={isRtl ? 'منتج فعلي' : 'Physical product'}
+              helper={isRtl ? 'يحتاج شحناً أو توصيلاً.' : 'Requires delivery or pickup.'}
+              checked={form.physicalProduct}
+              onChange={(v) => update('physicalProduct', v)}
+              isRtl={isRtl}
+            />
+            <ToggleRow
+              label={isRtl ? 'يتطلب الشحن' : 'Requires shipping'}
+              helper={isRtl ? 'يظهر ضمن حساب الشحن.' : 'Included in shipping calculations.'}
+              checked={form.requiresShipping}
+              onChange={(v) => update('requiresShipping', v)}
+              isRtl={isRtl}
+            />
+            <ToggleRow
+              label={isRtl ? 'مؤهل للشحن المجاني' : 'Free shipping eligible'}
+              helper={isRtl ? 'يستخدم مع إعدادات الشحن.' : 'Works with shipping rules.'}
+              checked={form.freeShippingEligible}
+              onChange={(v) => update('freeShippingEligible', v)}
+              isRtl={isRtl}
+            />
+            <ToggleRow
+              label={isRtl ? 'منتج رقمي' : 'Digital product'}
+              helper={isRtl ? 'للملفات أو التنزيلات.' : 'For downloads or files.'}
+              checked={form.digitalDelivery}
+              onChange={(v) => update('digitalDelivery', v)}
+              isRtl={isRtl}
+            />
+          </div>
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-4 gap-5">
+            <Field
+              id={`${idBase}-weight`}
+              label={isRtl ? 'الوزن بالجرام' : 'Weight (g)'}
+              value={form.weightGrams}
+              onChange={(v) => update('weightGrams', v)}
+              isRtl={false}
+              type="number"
+            />
+            <Field
+              id={`${idBase}-dim-l`}
+              label={isRtl ? 'الطول سم' : 'Length cm'}
+              value={form.packageLengthCm}
+              onChange={(v) => update('packageLengthCm', v)}
+              isRtl={false}
+              type="number"
+            />
+            <Field
+              id={`${idBase}-dim-w`}
+              label={isRtl ? 'العرض سم' : 'Width cm'}
+              value={form.packageWidthCm}
+              onChange={(v) => update('packageWidthCm', v)}
+              isRtl={false}
+              type="number"
+            />
+            <Field
+              id={`${idBase}-dim-h`}
+              label={isRtl ? 'الارتفاع سم' : 'Height cm'}
+              value={form.packageHeightCm}
+              onChange={(v) => update('packageHeightCm', v)}
+              isRtl={false}
+              type="number"
+            />
+            <Field
+              id={`${idBase}-origin`}
+              label={isRtl ? 'بلد المنشأ' : 'Country of origin'}
+              value={form.countryOfOrigin}
+              onChange={(v) => update('countryOfOrigin', v)}
+              isRtl={isRtl}
+              maxLength={80}
+            />
+            <Field
+              id={`${idBase}-hs-code`}
+              label="HS code"
+              value={form.hsCode}
+              onChange={(v) => update('hsCode', v)}
+              isRtl={false}
+              maxLength={40}
+            />
+            <Field
+              id={`${idBase}-customs`}
+              label={isRtl ? 'وصف الجمارك' : 'Customs description'}
+              value={form.customsDescription}
+              onChange={(v) => update('customsDescription', v)}
+              isRtl={isRtl}
+              maxLength={160}
+            />
+          </div>
+          <div className="mt-5">
+            <TextArea
+              id={`${idBase}-metafields`}
+              label={isRtl ? 'حقول مخصصة' : 'Product metafields'}
+              value={form.metafieldsText}
+              onChange={(v) => update('metafieldsText', v)}
+              isRtl={isRtl}
+              placeholder={isRtl ? 'المكونات: عود، عنبر' : 'Ingredients: oud, amber'}
+              maxLength={2000}
+            />
+          </div>
+        </CollapsibleField>
 
         <CollapsibleField
           label={t.labels.eventAt}
@@ -438,6 +1136,39 @@ export function ProductForm({
           isRtl={isRtl}
         />
 
+        <div
+          style={{
+            display: 'grid',
+            gap: 4,
+            paddingTop: 4,
+            color: 'var(--ink-muted)',
+            direction: isRtl ? 'rtl' : 'ltr',
+          }}
+        >
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {isRtl ? 'اختيارات مخصصة' : 'Custom selections'}
+          </span>
+          <span
+            style={{
+              fontFamily: isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)',
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: 'var(--ink-faint)',
+            }}
+          >
+            {isRtl
+              ? 'فعّل المقاسات أو المتغيرات فقط عندما يحتاج المنتج لاختيار من العميل.'
+              : 'Turn on sizes or variants only when the product needs a buyer choice.'}
+          </span>
+        </div>
+
         <SizeOptionsField
           idBase={`${idBase}-sizes`}
           enabled={form.hasSizes}
@@ -447,8 +1178,8 @@ export function ProductForm({
               ...prev,
               hasSizes: enabled,
               sizeOptions:
-                enabled && normalizeSizeOptions(prev.sizeOptions).length === 0
-                  ? ['S', 'M', 'L']
+                enabled && normalizePricedOptions(prev.sizeOptions).length === 0
+                  ? draftOptionsFromLabels(['S', 'M', 'L', 'XL'])
                   : prev.sizeOptions,
               allowCustomSize: enabled ? prev.allowCustomSize : false,
             }))
@@ -456,6 +1187,24 @@ export function ProductForm({
           onValuesChange={(values) => update('sizeOptions', values)}
           allowCustomSize={form.allowCustomSize}
           onAllowCustomSizeChange={(enabled) => update('allowCustomSize', enabled)}
+          isRtl={isRtl}
+        />
+
+        <VariantOptionsField
+          idBase={`${idBase}-variants`}
+          enabled={form.hasVariants}
+          values={form.variantOptions}
+          onEnabledChange={(enabled) =>
+            setForm((prev) => ({
+              ...prev,
+              hasVariants: enabled,
+              variantOptions:
+                enabled && normalizePricedOptions(prev.variantOptions).length === 0
+                  ? draftOptionsFromLabels(DEFAULT_PRODUCT_VARIANT_OPTIONS)
+                  : prev.variantOptions,
+            }))
+          }
+          onValuesChange={(values) => update('variantOptions', values)}
           isRtl={isRtl}
         />
 
@@ -908,10 +1657,10 @@ function SizeOptionsField({
 }: {
   idBase: string;
   enabled: boolean;
-  values: string[];
+  values: ProductOptionDraft[];
   allowCustomSize: boolean;
   onEnabledChange: (v: boolean) => void;
-  onValuesChange: (v: string[]) => void;
+  onValuesChange: (v: ProductOptionDraft[]) => void;
   onAllowCustomSizeChange: (v: boolean) => void;
   isRtl: boolean;
 }) {
@@ -922,9 +1671,10 @@ function SizeOptionsField({
         customCheckbox: 'مقاس مخصص',
         customHelper: 'اسمح للعميل بكتابة مقاس غير موجود في القائمة.',
         input: 'المقاس',
+        price: 'تغيير السعر',
+        priceHelper: 'اختياري — اتركه فارغاً بدون تغيير.',
         add: 'أضف مقاس',
         remove: 'حذف المقاس',
-        limit: 'وصلت إلى الحد الأقصى للمقاسات',
       }
     : {
         checkbox: 'Sizes',
@@ -932,20 +1682,26 @@ function SizeOptionsField({
         customCheckbox: 'Custom size',
         customHelper: 'Let shoppers type a missing size before adding to cart.',
         input: 'Size',
+        price: 'Price change',
+        priceHelper: 'Optional — blank means no change.',
         add: 'Add size',
         remove: 'Remove size',
-        limit: 'Maximum size options reached',
       };
-  const safeValues = values.length > 0 ? values : [''];
-  const canAddMore = safeValues.length < MAX_PRODUCT_SIZE_OPTIONS;
+  const safeValues = values.length > 0 ? values : [{ label: '', priceDeltaQar: '' }];
 
-  function updateAt(index: number, value: string) {
-    onValuesChange(safeValues.map((item, i) => (i === index ? value : item)));
+  function updateLabelAt(index: number, value: string) {
+    onValuesChange(safeValues.map((item, i) => (i === index ? { ...item, label: value } : item)));
+  }
+
+  function updatePriceAt(index: number, value: string) {
+    onValuesChange(
+      safeValues.map((item, i) => (i === index ? { ...item, priceDeltaQar: value } : item)),
+    );
   }
 
   function removeAt(index: number) {
     const next = safeValues.filter((_, i) => i !== index);
-    onValuesChange(next.length > 0 ? next : ['']);
+    onValuesChange(next.length > 0 ? next : [{ label: '', priceDeltaQar: '' }]);
   }
 
   return (
@@ -1013,23 +1769,38 @@ function SizeOptionsField({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))',
               gap: 10,
             }}
           >
             {safeValues.map((value, index) => (
               <div
                 key={`${idBase}-${index}`}
-                style={{ display: 'flex', alignItems: 'end', gap: 8 }}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1.5fr) minmax(92px, 0.8fr) 36px',
+                  alignItems: 'end',
+                  gap: 8,
+                }}
               >
                 <Field
                   id={`${idBase}-${index}`}
                   label={`${labels.input} ${index + 1}`}
-                  value={value}
-                  onChange={(next) => updateAt(index, next)}
+                  value={value.label}
+                  onChange={(next) => updateLabelAt(index, next)}
                   isRtl={isRtl}
-                  placeholder={index < 3 ? ['S', 'M', 'L'][index] : '35'}
+                  placeholder={['S', 'M', 'L', 'XL'][index] ?? 'S-1'}
                   maxLength={40}
+                />
+                <Field
+                  id={`${idBase}-${index}-price`}
+                  label={labels.price}
+                  value={value.priceDeltaQar}
+                  onChange={(next) => updatePriceAt(index, next)}
+                  isRtl={false}
+                  type="number"
+                  placeholder="+0"
+                  helper={index === 0 ? labels.priceHelper : undefined}
                 />
                 <button
                   type="button"
@@ -1058,22 +1829,20 @@ function SizeOptionsField({
           <button
             type="button"
             onClick={() => {
-              if (canAddMore) onValuesChange([...safeValues, '']);
+              onValuesChange([...safeValues, { label: '', priceDeltaQar: '' }]);
             }}
-            disabled={!canAddMore}
-            title={canAddMore ? labels.add : labels.limit}
             style={{
               justifySelf: isRtl ? 'end' : 'start',
-              border: `1px dashed ${canAddMore ? 'var(--admin-accent)' : 'var(--surface-rule-strong)'}`,
+              border: '1px dashed var(--admin-accent)',
               borderRadius: 8,
               background: 'transparent',
-              color: canAddMore ? 'var(--admin-accent)' : 'var(--ink-faint)',
+              color: 'var(--admin-accent)',
               minHeight: 38,
               padding: '0 12px',
               display: 'inline-flex',
               alignItems: 'center',
               gap: 8,
-              cursor: canAddMore ? 'pointer' : 'default',
+              cursor: 'pointer',
               fontFamily: 'var(--font-mono)',
               fontSize: 11,
               letterSpacing: '0.06em',
@@ -1140,6 +1909,209 @@ function SizeOptionsField({
   );
 }
 
+function VariantOptionsField({
+  idBase,
+  enabled,
+  values,
+  onEnabledChange,
+  onValuesChange,
+  isRtl,
+}: {
+  idBase: string;
+  enabled: boolean;
+  values: ProductOptionDraft[];
+  onEnabledChange: (v: boolean) => void;
+  onValuesChange: (v: ProductOptionDraft[]) => void;
+  isRtl: boolean;
+}) {
+  const labels = isRtl
+    ? {
+        checkbox: 'المتغيرات',
+        helper: 'فعّلها للألوان أو الروائح أو النكهات أو أي اختيار آخر خاص بالمنتج.',
+        input: 'المتغير',
+        price: 'تغيير السعر',
+        priceHelper: 'اختياري — اتركه فارغاً بدون تغيير.',
+        add: 'أضف متغير',
+        remove: 'حذف المتغير',
+      }
+    : {
+        checkbox: 'Variants',
+        helper: 'Enable for colors, scents, flavors, editions, or any extra product choice.',
+        input: 'Variant',
+        price: 'Price change',
+        priceHelper: 'Optional — blank means no change.',
+        add: 'Add variant',
+        remove: 'Remove variant',
+      };
+  const safeValues = values.length > 0 ? values : [{ label: '', priceDeltaQar: '' }];
+
+  function updateLabelAt(index: number, value: string) {
+    onValuesChange(safeValues.map((item, i) => (i === index ? { ...item, label: value } : item)));
+  }
+
+  function updatePriceAt(index: number, value: string) {
+    onValuesChange(
+      safeValues.map((item, i) => (i === index ? { ...item, priceDeltaQar: value } : item)),
+    );
+  }
+
+  function removeAt(index: number) {
+    const next = safeValues.filter((_, i) => i !== index);
+    onValuesChange(next.length > 0 ? next : [{ label: '', priceDeltaQar: '' }]);
+  }
+
+  return (
+    <div
+      style={{
+        border: '1px solid var(--surface-rule)',
+        borderRadius: 8,
+        background: 'var(--surface-bg)',
+        padding: 14,
+        display: 'grid',
+        gap: enabled ? 14 : 0,
+      }}
+    >
+      <label
+        htmlFor={`${idBase}-check`}
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 12,
+          cursor: 'pointer',
+          color: 'var(--ink-strong)',
+          direction: isRtl ? 'rtl' : 'ltr',
+        }}
+      >
+        <input
+          id={`${idBase}-check`}
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onEnabledChange(e.target.checked)}
+          style={{
+            marginTop: 3,
+            accentColor: 'var(--admin-accent)',
+            width: 16,
+            height: 16,
+            flex: '0 0 auto',
+          }}
+        />
+        <span style={{ display: 'grid', gap: 4, minWidth: 0 }}>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: 'var(--ink-muted)',
+            }}
+          >
+            {labels.checkbox}
+          </span>
+          <span
+            style={{
+              fontFamily: isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)',
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: 'var(--ink-faint)',
+            }}
+          >
+            {labels.helper}
+          </span>
+        </span>
+      </label>
+
+      {enabled ? (
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))',
+              gap: 10,
+            }}
+          >
+            {safeValues.map((value, index) => (
+              <div
+                key={`${idBase}-${index}`}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1.5fr) minmax(92px, 0.8fr) 36px',
+                  alignItems: 'end',
+                  gap: 8,
+                }}
+              >
+                <Field
+                  id={`${idBase}-${index}`}
+                  label={`${labels.input} ${index + 1}`}
+                  value={value.label}
+                  onChange={(next) => updateLabelAt(index, next)}
+                  isRtl={isRtl}
+                  placeholder={DEFAULT_PRODUCT_VARIANT_OPTIONS[index] ?? 'Limited edition'}
+                  maxLength={40}
+                />
+                <Field
+                  id={`${idBase}-${index}-price`}
+                  label={labels.price}
+                  value={value.priceDeltaQar}
+                  onChange={(next) => updatePriceAt(index, next)}
+                  isRtl={false}
+                  type="number"
+                  placeholder="+0"
+                  helper={index === 0 ? labels.priceHelper : undefined}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeAt(index)}
+                  aria-label={labels.remove}
+                  title={labels.remove}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    border: '1px solid var(--surface-rule-strong)',
+                    background: 'transparent',
+                    color: 'var(--ink-muted)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    flex: '0 0 auto',
+                  }}
+                >
+                  <X size={15} aria-hidden />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => onValuesChange([...safeValues, { label: '', priceDeltaQar: '' }])}
+            style={{
+              justifySelf: isRtl ? 'end' : 'start',
+              border: '1px dashed var(--admin-accent)',
+              borderRadius: 8,
+              background: 'transparent',
+              color: 'var(--admin-accent)',
+              minHeight: 38,
+              padding: '0 12px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              cursor: 'pointer',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+            }}
+          >
+            <Plus size={14} aria-hidden />
+            {labels.add}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function HeightOptionsField({
   idBase,
   enabled,
@@ -1170,7 +2142,6 @@ function HeightOptionsField({
         input: 'الطول',
         add: 'أضف طول',
         remove: 'حذف الطول',
-        limit: 'وصلت إلى الحد الأقصى للخيارات',
       }
     : {
         checkbox: 'Height',
@@ -1180,10 +2151,8 @@ function HeightOptionsField({
         input: 'Height',
         add: 'Add height',
         remove: 'Remove height',
-        limit: 'Maximum height options reached',
       };
   const safeValues = values.length > 0 ? values : [''];
-  const canAddMore = safeValues.length < MAX_PRODUCT_SIZE_OPTIONS;
 
   function updateAt(index: number, value: string) {
     onValuesChange(safeValues.map((item, i) => (i === index ? value : item)));
@@ -1315,24 +2284,20 @@ function HeightOptionsField({
             <button
               type="button"
               onClick={() => {
-                if (canAddMore) onValuesChange([...safeValues, '']);
+                onValuesChange([...safeValues, '']);
               }}
-              disabled={!canAddMore}
-              title={canAddMore ? labels.add : labels.limit}
               style={{
                 justifySelf: isRtl ? 'end' : 'start',
-                border: `1px dashed ${
-                  canAddMore ? 'var(--admin-accent)' : 'var(--surface-rule-strong)'
-                }`,
+                border: '1px dashed var(--admin-accent)',
                 borderRadius: 8,
                 background: 'transparent',
-                color: canAddMore ? 'var(--admin-accent)' : 'var(--ink-faint)',
+                color: 'var(--admin-accent)',
                 minHeight: 38,
                 padding: '0 12px',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 8,
-                cursor: canAddMore ? 'pointer' : 'default',
+                cursor: 'pointer',
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
                 letterSpacing: '0.06em',
@@ -1794,6 +2759,97 @@ function CategoryPicker({
   );
 }
 
+function ToggleRow({
+  label,
+  helper,
+  checked,
+  onChange,
+  isRtl,
+}: {
+  label: string;
+  helper?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  isRtl: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      dir={isRtl ? 'rtl' : 'ltr'}
+      style={{
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 14,
+        padding: '12px 14px',
+        borderRadius: 10,
+        border: `1px solid ${checked ? 'var(--admin-accent)' : 'var(--surface-rule-strong)'}`,
+        background: checked
+          ? 'color-mix(in srgb, var(--admin-accent) 12%, transparent)'
+          : 'var(--surface-bg)',
+        color: 'var(--ink-strong)',
+        cursor: 'pointer',
+        textAlign: isRtl ? 'right' : 'left',
+      }}
+    >
+      <span style={{ minWidth: 0 }}>
+        <span
+          style={{
+            display: 'block',
+            fontFamily: isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)',
+            fontSize: 13,
+            fontWeight: 650,
+          }}
+        >
+          {label}
+        </span>
+        {helper ? (
+          <span
+            style={{
+              display: 'block',
+              marginTop: 3,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.04em',
+              color: 'var(--ink-faint)',
+            }}
+          >
+            {helper}
+          </span>
+        ) : null}
+      </span>
+      <span
+        aria-hidden
+        style={{
+          width: 42,
+          height: 24,
+          flex: '0 0 auto',
+          borderRadius: 999,
+          padding: 3,
+          background: checked ? 'var(--admin-accent)' : 'var(--surface-rule-strong)',
+          display: 'flex',
+          justifyContent: checked ? 'flex-end' : 'flex-start',
+          transition: 'background 160ms',
+        }}
+      >
+        <span
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: '50%',
+            background: checked ? 'var(--ink-on-gold)' : 'var(--surface-elevated)',
+            boxShadow: '0 3px 10px rgba(0,0,0,0.22)',
+          }}
+        />
+      </span>
+    </button>
+  );
+}
+
 function StatusField({
   label,
   value,
@@ -1905,7 +2961,31 @@ function ImageField({
           background: 'transparent',
         }}
       >
-        {value ? (
+        {value && mediaKindFromUrl(value) === 'video' ? (
+          <video
+            src={value}
+            width={64}
+            height={64}
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 4,
+              objectFit: 'contain',
+              border: '1px solid color-mix(in srgb, var(--admin-accent) 35%, transparent)',
+              background: 'var(--surface-sunken)',
+            }}
+            onMouseEnter={(event) => {
+              void event.currentTarget.play().catch(() => undefined);
+            }}
+            onMouseLeave={(event) => {
+              event.currentTarget.pause();
+            }}
+          />
+        ) : value ? (
           <img
             src={value}
             alt=""
@@ -1989,6 +3069,8 @@ function ImageField({
             }}
           >
             {helper}
+            {' · '}
+            {STOREFRONT_MEDIA_FORMATS_LABEL}
           </p>
           {error ? (
             <p
@@ -2008,7 +3090,7 @@ function ImageField({
         <input
           ref={inputRef}
           type="file"
-          accept="image/png,image/jpeg,image/jpg,image/webp"
+          accept={STOREFRONT_MEDIA_ACCEPT}
           onChange={(e) => handleFile(e.target.files?.[0] ?? undefined)}
           style={{ display: 'none' }}
         />

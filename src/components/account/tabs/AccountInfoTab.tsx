@@ -1,7 +1,8 @@
+﻿/* eslint-disable @next/next/no-img-element */
 import type { ReactNode } from 'react';
 
 type Props = {
-  /** Display name — first name, then username, then email local-part. */
+  /** Display name: first name, then username, then email local-part. */
   displayName: string;
   /** Primary email shown verbatim. */
   email: string | null;
@@ -11,7 +12,7 @@ type Props = {
   memberSince: Date | null;
   /** OAuth provider names (e.g. ["google", "github"]). */
   providers: string[];
-  /** Total storefronts in this account — surfaced on the profile card. */
+  /** Total storefronts in this account, surfaced on the profile card. */
   storefrontCount: number;
   /** Total live (published, non-expired) storefronts. */
   liveStorefrontCount: number;
@@ -25,7 +26,7 @@ type Props = {
  * click "Account" in the sidebar.
  *
  * Profile *editing* (changing email, password, connected accounts) lives
- * in the Clerk `<UserButton>` modal in the page header — duplicating that
+ * in the Clerk `<UserButton>` modal in the page header, duplicating that
  * surface here would just create two sources of truth. We tell the user
  * where to find it instead.
  */
@@ -137,11 +138,11 @@ export function AccountInfoTab({
         <Detail label="Products" value={productCount.toString()} />
         <Detail
           label="Member since"
-          value={memberSince ? formatDate(memberSince) : '—'}
+          value={memberSince ? formatDate(memberSince) : '-'}
         />
         <Detail
           label="Signed in via"
-          value={providers.length > 0 ? providers.join(' · ') : 'Email'}
+          value={providers.length > 0 ? providers.join(' - ') : 'Email'}
         />
       </section>
 

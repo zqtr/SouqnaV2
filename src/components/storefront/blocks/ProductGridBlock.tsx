@@ -1,6 +1,6 @@
 import type { BlockRenderProps } from './BlockContext';
 import type { ProductGridProps } from '@/lib/blocks/types';
-import { pickProducts } from './helpers';
+import { pickProducts, productPathSegment } from './helpers';
 import { UnifiedProductCard } from './UnifiedProductCard';
 
 export function ProductGridBlock({ block, ctx }: BlockRenderProps<ProductGridProps>) {
@@ -71,12 +71,15 @@ export function ProductGridBlock({ block, ctx }: BlockRenderProps<ProductGridPro
               pricingMode: product.pricingMode,
               monthlyPriceQar: product.monthlyPriceQar,
               status: product.status,
-              href: `${storefrontBaseHref}/p/${product.id}`,
+              href: `${storefrontBaseHref}/p/${productPathSegment(product)}`,
               createdAt: product.createdAt.toISOString(),
               isCustomizable: product.isCustomizable,
               customizationLabel: product.customizationLabel,
               sizeOptions: product.sizeOptions,
+              sizeOptionPrices: product.sizeOptionPrices,
               allowCustomSize: product.allowCustomSize,
+              variantOptions: product.variantOptions,
+              variantOptionPrices: product.variantOptionPrices,
               requiresHeightInput: product.requiresHeightInput,
               heightInputLabel: product.heightInputLabel,
               heightOptions: product.heightOptions,

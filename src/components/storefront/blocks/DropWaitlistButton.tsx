@@ -110,7 +110,7 @@ export function DropWaitlistButton({
         autoFocus
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        placeholder="you@example.com"
+        placeholder="name@store.qa"
         style={{
           padding: '12px 14px',
           borderRadius: 999,

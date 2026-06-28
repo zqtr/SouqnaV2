@@ -2,13 +2,22 @@ import Link from 'next/link';
 import { auth } from '@clerk/nextjs/server';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { CreditCard, Settings2, ShieldCheck, Store, Users } from 'lucide-react';
 import { getStorefrontsForUser } from '@/lib/brief';
 import {
   PageHeader,
-  Surface,
-  StatusBadge,
 } from '@/components/admin/primitives';
-import { ChevronRight } from '@/components/admin/glyphs';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { Reveal } from '@/components/motion/Reveal';
 import { SETTINGS_NAV_SECTIONS } from '@/components/admin/settingsNav';
 import { adminLocale, adminNavLabel, adminPhrase, adminText } from '@/components/admin/adminLocale';
 import { direction, isLocale } from '@/i18n/locales';
@@ -43,98 +52,74 @@ export default async function SettingsHubPage({
         subtitle={adminPhrase(locale, 'Choose a section from the sidebar, or open one below.')}
       />
 
-      <div
-        className="souqna-settings-overview"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-          gap: 14,
-        }}
-      >
-        {SETTINGS_NAV_SECTIONS.map((section) => (
-          <Surface key={section.id} padding={18}>
-            <header style={{ marginBottom: 10 }}>
-              <h2
-                style={{
-                  margin: 0,
-                  fontFamily: 'var(--font-serif, var(--font-sans))',
-                  fontWeight: 600,
-                  fontSize: 16,
-                  color: 'var(--ink-strong)',
-                }}
+      <Reveal y={14}>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {SETTINGS_NAV_SECTIONS.map((section) => {
+            const Icon = sectionIcon(section.id);
+            return (
+              <Card
+                key={section.id}
+                className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-card)]"
               >
-                {adminNavLabel(section.title, locale)}
-              </h2>
-              <p
-                style={{
-                  margin: '5px 0 0',
-                  fontSize: 12.5,
-                  lineHeight: 1.55,
-                  color: 'var(--ink-muted)',
-                }}
-              >
-                {adminPhrase(locale, section.summary)}
-              </p>
-            </header>
-            <ul
-              style={{
-                listStyle: 'none',
-                margin: 0,
-                padding: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
-              }}
-            >
-              {section.items.map((item) => (
-                <li key={item.id}>
-                  <Link
-                    href={`${item.href}${storeQs}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 9,
-                      minHeight: 34,
-                      padding: '7px 6px',
-                      borderRadius: 7,
-                      color: 'var(--ink-strong)',
-                      textDecoration: 'none',
-                    }}
-                    className="souqna-settings-row"
-                  >
-                    <span
-                      style={{
-                        minWidth: 0,
-                        flex: 1,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        fontSize: 13.5,
-                      }}
-                    >
-                      {adminNavLabel(item.label, locale)}
-                    </span>
-                    {item.soon ? <StatusBadge tone="neutral">{t.soon}</StatusBadge> : null}
-                    <ChevronRight size={14} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Surface>
-        ))}
-      </div>
-
-      <style>{`
-        .souqna-settings-row:hover {
-          background: color-mix(in srgb, var(--ink-strong) 5%, transparent);
-        }
-
-        @media (max-width: 760px) {
-          .souqna-settings-overview {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
+                <CardHeader className="px-5 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex min-w-0 gap-3">
+                      <span className="grid size-10 shrink-0 place-items-center rounded-lg border bg-muted text-foreground">
+                        <Icon className="size-5" aria-hidden />
+                      </span>
+                      <div className="min-w-0">
+                        <CardTitle className="text-base">
+                          {adminNavLabel(section.title, locale)}
+                        </CardTitle>
+                        <CardDescription className="mt-1 leading-6">
+                          {adminPhrase(locale, section.summary)}
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 font-mono">
+                      {section.items.length}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <Separator />
+                <CardContent className="px-3 py-3">
+                  <ul className="grid gap-1">
+                    {section.items.map((item) => (
+                      <li key={item.id}>
+                        <Button
+                          asChild
+                          variant="ghost"
+                          className="h-auto w-full justify-start gap-3 px-3 py-2 text-start"
+                        >
+                          <Link href={`${item.href}${storeQs}`}>
+                            <span className="min-w-0 flex-1 truncate">
+                              {adminNavLabel(item.label, locale)}
+                            </span>
+                            {item.soon ? (
+                              <Badge variant="outline" className="shrink-0 text-[10px]">
+                                {t.soon}
+                              </Badge>
+                            ) : null}
+                            <span className="text-muted-foreground">↗</span>
+                          </Link>
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </Reveal>
     </div>
   );
+}
+
+function sectionIcon(id: string) {
+  if (id === 'store-settings') return Store;
+  if (id === 'operations') return CreditCard;
+  if (id === 'customers') return Users;
+  if (id === 'platform') return ShieldCheck;
+  return Settings2;
 }

@@ -1,4 +1,4 @@
--- Migration 044 - Changelog entries for platform fees and custom product sizes.
+-- Migration 044 - Changelog entries for checkout rules and custom product sizes.
 
 begin;
 
@@ -13,21 +13,21 @@ insert into updates (
   is_active, is_sticky, audience, preview_payload, banner_payload
 ) values (
   '0f7d9b79-6b6d-4ec6-8c80-27c8bf9a9d3a',
-  'Souqna platform fees are now clearer',
-  'Souqna now snapshots the seller plan on every checkout order so the platform fee is easy to audit: Free is 5%, Pro is 3%, Pro+ is 1%, and Max+ is 0%. For SkipCash online checkout, Souqna collects the buyer payment through the platform SkipCash account, marks the platform fee as collected, and creates a pending seller payout for the net amount. Cash on delivery has no Souqna fee. Bank transfer and pay-link orders stay merchant-collected and can be tracked separately when needed.',
+  'Souqna checkout rules are now clearer',
+  'Souqna takes no transaction fees. Free and Pro can receive orders with cash on delivery and Fawran. Pro+ and Max+ unlock provider payments such as SADAD, SkipCash, and Tap Payments. Merchant-collected methods stay tracked separately when needed.',
   'billing',
-  'fees-2026-05-platform-collection',
+  'checkout-2026-05-provider-rules',
   95,
   now(),
-  'Free 5%, Pro 3%, Pro+ 1%, Max+ 0%. SkipCash orders collect the fee automatically; COD is fee-free.',
-  'Fees',
+  'No Souqna fees. Free and Pro use Fawran plus COD; Pro+ and Max+ unlock provider payments.',
+  'Checkout',
   'View plans',
   '/account/settings/plan',
   '/account/settings/plan',
   true,
   false,
   '{}'::jsonb,
-  '{"kind":"fees","rates":{"free":"5%","starter":"3%","pro":"1%","atelier":"0%"},"codFee":"0%","onlineCollection":"platform_skipcash"}'::jsonb,
+  '{"kind":"checkout-rules","souqnaFees":"none","baseMethods":["cod","fawran"],"providerMethods":["sadad","skipcash","tap_payments"],"providerPlans":["pro","atelier"]}'::jsonb,
   '{}'::jsonb
 ) on conflict (id) do update
   set title = excluded.title,
@@ -88,9 +88,9 @@ insert into updates (
       updated_at = now();
 
 update updates
-   set title = 'New Souqna growth plans, fees, and product options are live',
-       body = 'Souqna now includes clearer Free, Pro, Pro+, and Max+ tiers, visible transaction-fee rates, dashboard upgrade guidance, and product options such as custom sizes. The changelog explains how fees are collected and how sellers can add size choices to products.',
-       summary = 'Plan limits, transaction fees, AI credits, and custom product sizes now match the new Souqna catalog.',
+   set title = 'New Souqna growth plans and product options are live',
+       body = 'Souqna now includes clearer Free, Pro, Pro+, and Max+ tiers, no Souqna transaction fees, dashboard upgrade guidance, and product options such as custom sizes. The changelog explains which checkout methods each plan can use and how sellers can add size choices to products.',
+       summary = 'Plan limits, no-fee checkout rules, AI credits, and custom product sizes now match the new Souqna catalog.',
        updated_at = now()
  where id = '28e3de2c-7d8e-46d5-9fc2-320e1e116f1f';
 

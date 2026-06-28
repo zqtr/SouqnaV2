@@ -2,7 +2,7 @@
 
 import { createElement, type CSSProperties, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import StaggeredText from '@/components/react-bits/staggered-text';
+import StaggeredText from '@/components/souqna-motion/staggered-text';
 import type { TextEffect } from '@/lib/blocks/types';
 
 type Props = {

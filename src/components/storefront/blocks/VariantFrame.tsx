@@ -10,7 +10,7 @@ import {
   HalftoneWaveSurface,
   MetallicSwirlSurface,
   SilkWavesSurface,
-} from '@/components/react-bits/PremiumSurfaces';
+} from '@/components/souqna-motion/PremiumSurfaces';
 
 /**
  * VariantFrame — wraps the inner content of a Hero / Banner / Gallery /

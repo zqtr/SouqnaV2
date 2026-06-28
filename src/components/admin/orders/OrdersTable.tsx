@@ -207,19 +207,47 @@ export function OrdersTable({
   const stats = useMemo(() => {
     const pending = orders.filter((o) => o.orderStatus === 'pending').length;
     const unpaid = orders.filter((o) => o.paymentStatus === 'unpaid').length;
-    const revenue = orders
-      .filter((o) => o.paymentStatus === 'marked_paid')
-      .reduce((sum, o) => sum + Number(o.totalQar), 0);
-    return { pending, unpaid, revenue, currency: orders[0]?.currency ?? 'QAR' };
-  }, [orders]);
+    const paidOrders = orders.filter((o) => o.paymentStatus === 'marked_paid');
+    const revenue = paidOrders.reduce((sum, o) => sum + Number(o.totalQar), 0);
+    const aov = paidOrders.length ? Math.round(revenue / paidOrders.length) : 0;
+    const methodCounts = new Map<string, number>();
+    const providerCounts = new Map<string, number>();
+    for (const order of orders) {
+      const method = t(METHOD_LABEL[order.paymentMethod]);
+      methodCounts.set(method, (methodCounts.get(method) ?? 0) + 1);
+      const provider =
+        order.platformProvider ||
+        (order.paymentMethod === 'skipcash'
+          ? 'SkipCash'
+          : order.collectionMode === 'offline'
+            ? t('Offline')
+            : t(METHOD_LABEL[order.paymentMethod]));
+      providerCounts.set(provider, (providerCounts.get(provider) ?? 0) + 1);
+    }
+    return {
+      pending,
+      unpaid,
+      revenue,
+      aov,
+      paidCount: paidOrders.length,
+      currency: orders[0]?.currency ?? 'QAR',
+      methodMix: Array.from(methodCounts.entries()).sort((a, b) => b[1] - a[1]),
+      providerMix: Array.from(providerCounts.entries()).sort((a, b) => b[1] - a[1]),
+    };
+  }, [orders, t]);
 
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
           label={t('On this page')}
           value={orders.length.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')}
           sub={`${t('of')} ${total.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')} ${t('total')}`}
+        />
+        <Stat
+          label={t('Paid revenue')}
+          value={`${stats.currency} ${stats.revenue.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')}`}
+          sub={`${stats.paidCount.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')} ${t('paid orders')} · ${t('AOV')} ${stats.currency} ${stats.aov.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')}`}
         />
         <Stat
           label={t('Pending')}
@@ -234,6 +262,13 @@ export function OrdersTable({
           tone={stats.unpaid > 0 ? 'warning' : undefined}
         />
       </div>
+
+      <PaymentMixCard
+        methodMix={stats.methodMix}
+        providerMix={stats.providerMix}
+        total={orders.length}
+        locale={locale}
+      />
 
       <div className="my-5 flex flex-col gap-3">
         <ChipRow
@@ -349,6 +384,65 @@ function Stat({
         {value}
       </p>
       {sub ? <p className="text-xs text-muted-foreground">{sub}</p> : null}
+    </Card>
+  );
+}
+
+function PaymentMixCard({
+  methodMix,
+  providerMix,
+  total,
+  locale,
+}: {
+  methodMix: Array<[string, number]>;
+  providerMix: Array<[string, number]>;
+  total: number;
+  locale: string;
+}) {
+  const t = (text: string) => adminPhrase(locale, text);
+  const numberLocale = locale === 'ar' ? 'ar-QA' : 'en-US';
+  const rows = providerMix.length ? providerMix : methodMix;
+
+  return (
+    <Card className="mt-3 gap-4 px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+            {t('Payment mix')}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t('Methods and providers used by orders on this page')}
+          </p>
+        </div>
+        <span className="rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+          {total.toLocaleString(numberLocale)} {t('orders')}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="m-0 text-sm text-muted-foreground">{t('No payment data yet')}</p>
+      ) : (
+        <div className="grid gap-2 md:grid-cols-2">
+          {rows.slice(0, 6).map(([label, count]) => {
+            const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+            return (
+              <div key={label} className="grid gap-1.5">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-medium">{label}</span>
+                  <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                    {count.toLocaleString(numberLocale)} · {pct.toLocaleString(numberLocale)}%
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-foreground"
+                    style={{ width: `${Math.max(3, pct)}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 }

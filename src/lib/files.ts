@@ -1,6 +1,7 @@
 import 'server-only';
 import { list, del } from '@vercel/blob';
 import { env } from './env';
+import type { Plan } from './plans';
 
 /**
  * Lightweight wrapper around the Vercel Blob list/delete APIs scoped to
@@ -15,7 +16,10 @@ import { env } from './env';
  * (logos, products, og-images, brand, banners, builder).
  */
 
-export const STOREFRONT_STORAGE_LIMIT_BYTES = 1_073_741_824; // 1 GiB
+export const FREE_PRO_STORAGE_LIMIT_BYTES = 350 * 1024 * 1024; // 350 MB
+export const PRO_PLUS_STORAGE_LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GB
+export const MAX_PLUS_STORAGE_LIMIT_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
+export const STOREFRONT_STORAGE_LIMIT_BYTES = FREE_PRO_STORAGE_LIMIT_BYTES;
 export const MAX_UPLOAD_BYTES = 52_428_800; // 50 MB
 
 export const FILE_NAMESPACES = [
@@ -126,8 +130,17 @@ export async function getStorefrontStorageUsedBytes(storefrontSlug: string): Pro
   return total;
 }
 
-export function remainingStorefrontStorageBytes(usedBytes: number): number {
-  return Math.max(0, STOREFRONT_STORAGE_LIMIT_BYTES - usedBytes);
+export function storageLimitBytesForPlan(plan: Plan | null | undefined): number {
+  if (plan === 'atelier') return MAX_PLUS_STORAGE_LIMIT_BYTES;
+  if (plan === 'pro') return PRO_PLUS_STORAGE_LIMIT_BYTES;
+  return FREE_PRO_STORAGE_LIMIT_BYTES;
+}
+
+export function remainingStorefrontStorageBytes(
+  usedBytes: number,
+  limitBytes = STOREFRONT_STORAGE_LIMIT_BYTES,
+): number {
+  return Math.max(0, limitBytes - usedBytes);
 }
 
 export function isFileNamespace(value: string): value is FileNamespace {

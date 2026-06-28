@@ -20,12 +20,14 @@ export type SkipCashPayment = {
   statusId: number;
   created?: string;
   payUrl?: string;
-  amount: number;
+  amount: number | string;
+  firstPaymentAmount?: number | string;
   currency?: string;
   transactionId?: string | null;
   custom1?: string | null;
   visaId?: string | null;
   status?: SkipCashPaymentStatus;
+  recurringSubscriptionId?: string | null;
 };
 
 type SkipCashResponse<T> = {
@@ -47,6 +49,17 @@ type CreatePaymentInput = {
   phone?: string | null;
   transactionId: string;
   custom1?: string | null;
+  returnUrl?: string | null;
+  webhookUrl?: string | null;
+  recurring?: {
+    planName: string;
+    frequency: string | number;
+    interval: 'day' | 'week' | 'month' | 'year';
+    startDate: string;
+    endDate: string;
+    allowedFailedAttempts?: string | number;
+    firstPaymentAmountQar?: number;
+  };
 };
 
 export type SkipCashMerchantCredentials = {
@@ -71,6 +84,16 @@ type SkipCashCreateRequest = {
   PostalCode?: string;
   TransactionId: string;
   Custom1?: string;
+  ReturnUrl?: string;
+  WebhookUrl?: string;
+  IsRecurring?: boolean;
+  PlanName?: string;
+  Frequency?: string;
+  Interval?: string;
+  StartDate?: string;
+  EndDate?: string;
+  AllowedFailedAttempts?: string;
+  FirstPaymentAmount?: string;
 };
 
 export type SkipCashWebhookPayload = {
@@ -86,6 +109,8 @@ export type SkipCashWebhookPayload = {
   Custom1?: string | null;
   visaId?: string | null;
   VisaId?: string | null;
+  recurringSubscriptionId?: string | null;
+  RecurringSubscriptionId?: string | null;
 };
 
 const CREATE_SIGNATURE_KEYS = [
@@ -104,6 +129,8 @@ const CREATE_SIGNATURE_KEYS = [
   'TransactionId',
   'Custom1',
 ] as const;
+
+const CANCEL_SUBSCRIPTION_SIGNATURE_KEYS = ['Id', 'KeyId'] as const;
 
 const WEBHOOK_SIGNATURE_KEYS = [
   'PaymentId',
@@ -132,6 +159,13 @@ export function skipCashAmount(amountQar: number): string {
   return amountQar.toFixed(2);
 }
 
+export function normalizeSkipCashRecurringSubscriptionId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '00000000-0000-0000-0000-000000000000') return null;
+  return trimmed;
+}
+
 export async function createSkipCashPayment(input: CreatePaymentInput): Promise<SkipCashPayment> {
   if (!hasSkipCash() || !env.SKIPCASH_KEY_ID || !env.SKIPCASH_KEY_SECRET) {
     throw new Error('SkipCash not configured');
@@ -152,7 +186,10 @@ export async function createSkipCashPayment(input: CreatePaymentInput): Promise<
     PostalCode: '00000',
     TransactionId: trimField(input.transactionId, 40),
     Custom1: trimField(input.custom1 ?? '', 50),
+    ReturnUrl: trimField(input.returnUrl ?? '', 300),
+    WebhookUrl: trimField(input.webhookUrl ?? '', 300),
   };
+  applyRecurringFields(payload, input);
 
   const signature = signValues(payload, CREATE_SIGNATURE_KEYS, env.SKIPCASH_KEY_SECRET);
   const res = await fetch(`${skipCashBaseUrl()}/payments`, {
@@ -200,7 +237,10 @@ export async function createSkipCashPaymentForMerchant(
     PostalCode: '00000',
     TransactionId: trimField(input.transactionId, 40),
     Custom1: trimField(input.custom1 ?? '', 50),
+    ReturnUrl: trimField(input.returnUrl ?? '', 300),
+    WebhookUrl: trimField(input.webhookUrl ?? '', 300),
   };
+  applyRecurringFields(payload, input);
 
   const signature = signValues(payload, CREATE_SIGNATURE_KEYS, credentials.keySecret);
   const res = await fetch(`${skipCashBaseUrl()}/payments`, {
@@ -223,6 +263,51 @@ export async function createSkipCashPaymentForMerchant(
   }
   if (!json.resultObj.payUrl) {
     throw new Error('SkipCash create payment response did not include a payUrl');
+  }
+  return json.resultObj;
+}
+
+export type SkipCashCancelRecurringResult = {
+  subscriptionId?: string | null;
+  isCancelled?: boolean;
+  message?: string | null;
+};
+
+export async function cancelSkipCashRecurringPayment(
+  subscriptionId: string,
+): Promise<SkipCashCancelRecurringResult> {
+  if (!hasSkipCash() || !env.SKIPCASH_KEY_ID || !env.SKIPCASH_KEY_SECRET) {
+    throw new Error('SkipCash not configured');
+  }
+  const normalized = normalizeSkipCashRecurringSubscriptionId(subscriptionId);
+  if (!normalized) throw new Error('SkipCash recurring subscription id is missing');
+
+  const payload = {
+    Id: normalized,
+    KeyId: env.SKIPCASH_KEY_ID,
+  };
+  const signature = signValues(
+    payload,
+    CANCEL_SUBSCRIPTION_SIGNATURE_KEYS,
+    env.SKIPCASH_KEY_SECRET,
+  );
+  const res = await fetch(`${skipCashBaseUrl()}/payments/subscription/cancel`, {
+    method: 'POST',
+    headers: {
+      Authorization: signature,
+      'Content-Type': 'application/json;charset=UTF-8',
+      'x-client-id': env.SKIPCASH_CLIENT_ID ?? '',
+    },
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  const json = text ? (JSON.parse(text) as SkipCashResponse<SkipCashCancelRecurringResult>) : {};
+
+  if (!res.ok || json.hasError || json.hasValidationError || !json.resultObj) {
+    throw new Error(
+      `SkipCash cancel recurring payment failed (${res.status}): ${text.slice(0, 300)}`,
+    );
   }
   return json.resultObj;
 }
@@ -294,11 +379,14 @@ export function normalizeWebhookPayload(payload: SkipCashWebhookPayload) {
     TransactionId: stringValue(payload.TransactionId ?? payload.transactionId),
     Custom1: stringValue(payload.Custom1 ?? payload.custom1),
     VisaId: stringValue(payload.VisaId ?? payload.visaId),
+    RecurringSubscriptionId: stringValue(
+      payload.RecurringSubscriptionId ?? payload.recurringSubscriptionId,
+    ),
   };
 }
 
 function signValues<T extends string>(
-  values: Partial<Record<T, string | number | null | undefined>>,
+  values: Partial<Record<T, string | number | boolean | null | undefined>>,
   orderedKeys: readonly T[],
   secret: string,
 ): string {
@@ -310,6 +398,20 @@ function signValues<T extends string>(
     })
     .join(',');
   return createHmac('sha256', secret).update(data, 'utf8').digest('base64');
+}
+
+function applyRecurringFields(payload: SkipCashCreateRequest, input: CreatePaymentInput): void {
+  if (!input.recurring) return;
+  payload.IsRecurring = true;
+  payload.PlanName = trimField(input.recurring.planName, 80);
+  payload.Frequency = String(input.recurring.frequency);
+  payload.Interval = input.recurring.interval;
+  payload.StartDate = input.recurring.startDate;
+  payload.EndDate = input.recurring.endDate;
+  payload.AllowedFailedAttempts = String(input.recurring.allowedFailedAttempts ?? 3);
+  payload.FirstPaymentAmount = skipCashAmount(
+    input.recurring.firstPaymentAmountQar ?? input.amountQar,
+  );
 }
 
 function trimField(value: string, max: number): string {

@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useMemo, useState, useTransition } from 'react';
+import type { FormEvent } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import type { PhoneNumberResource } from '@clerk/types';

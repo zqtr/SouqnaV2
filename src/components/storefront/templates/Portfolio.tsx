@@ -3,6 +3,7 @@ import { StorefrontTopRail, StorefrontFooter } from '../StorefrontChrome';
 import { StorefrontHero } from '../StorefrontHero';
 import { StorefrontPractical } from '../StorefrontPractical';
 import { InquireButton } from '../InquireButton';
+import { ProductMedia } from '../ProductMedia';
 
 /**
  * Portfolio archetype — large project cards with a wide cover image, title,
@@ -65,10 +66,9 @@ export function Portfolio({ data, vocabulary, products }: TemplateProps) {
                     }}
                   >
                     {p.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={p.imageUrl}
-                        alt={p.title}
+                      <ProductMedia
+                        url={p.imageUrl}
+                        title={p.title}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                     ) : (

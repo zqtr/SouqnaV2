@@ -1,33 +1,93 @@
-export const MAX_PRODUCT_SIZE_OPTIONS = 24;
-export const MAX_PRODUCT_VARIANT_OPTIONS = 7;
 export const MAX_PRODUCT_SIZE_LABEL_LENGTH = 40;
 export const MAX_PRODUCT_CUSTOM_INPUT_LENGTH = 80;
+export const MAX_PRODUCT_OPTION_PRICE_DELTA_QAR = 999_999;
 export const DEFAULT_PRODUCT_VARIANT_OPTIONS = ['Beige (Custom)', 'Ref (Custom)', 'Additional'];
 export const DEFAULT_PRODUCT_HEIGHT_OPTIONS = ['156', '165', '178'];
 
-export function normalizeSizeOptions(value: unknown): string[] {
+export type PricedProductOption = {
+  label: string;
+  priceDeltaQar: number;
+};
+
+export type ProductOptionInput =
+  | string
+  | number
+  | {
+      label?: unknown;
+      name?: unknown;
+      value?: unknown;
+      priceDeltaQar?: unknown;
+      priceAdjustmentQar?: unknown;
+      priceQar?: unknown;
+      price?: unknown;
+    };
+
+function normalizeOptionLabel(value: unknown): string {
+  const label =
+    typeof value === 'string'
+      ? value
+      : typeof value === 'number' && Number.isFinite(value)
+        ? String(value)
+        : value && typeof value === 'object'
+          ? String(
+              (value as { label?: unknown; name?: unknown; value?: unknown }).label ??
+                (value as { name?: unknown }).name ??
+                (value as { value?: unknown }).value ??
+                '',
+            )
+          : '';
+
+  return label.replace(/\s+/g, ' ').trim().slice(0, MAX_PRODUCT_SIZE_LABEL_LENGTH);
+}
+
+function normalizeOptionPriceDelta(value: unknown): number {
+  const raw =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)?.[0] ?? NaN)
+        : NaN;
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(
+    -MAX_PRODUCT_OPTION_PRICE_DELTA_QAR,
+    Math.min(MAX_PRODUCT_OPTION_PRICE_DELTA_QAR, Math.round(raw)),
+  );
+}
+
+function optionPriceDeltaFromInput(value: unknown): number {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return 0;
+  const option = value as ProductOptionInput & {
+    priceDeltaQar?: unknown;
+    priceAdjustmentQar?: unknown;
+    priceQar?: unknown;
+    price?: unknown;
+  };
+  return normalizeOptionPriceDelta(
+    option.priceDeltaQar ?? option.priceAdjustmentQar ?? option.priceQar ?? option.price,
+  );
+}
+
+export function normalizePricedOptions(value: unknown): PricedProductOption[] {
   const raw = Array.isArray(value) ? value : [];
   const seen = new Set<string>();
-  const sizes: string[] = [];
+  const options: PricedProductOption[] = [];
 
   for (const item of raw) {
-    const label =
-      typeof item === 'string'
-        ? item
-        : typeof item === 'number' && Number.isFinite(item)
-          ? String(item)
-        : item && typeof item === 'object' && 'label' in item
-          ? String((item as { label?: unknown }).label ?? '')
-          : '';
-    const normalized = label.replace(/\s+/g, ' ').trim().slice(0, MAX_PRODUCT_SIZE_LABEL_LENGTH);
-    const key = normalized.toLowerCase();
-    if (!normalized || seen.has(key)) continue;
+    const label = normalizeOptionLabel(item);
+    const key = label.toLowerCase();
+    if (!label || seen.has(key)) continue;
     seen.add(key);
-    sizes.push(normalized);
-    if (sizes.length >= MAX_PRODUCT_SIZE_OPTIONS) break;
+    options.push({
+      label,
+      priceDeltaQar: optionPriceDeltaFromInput(item),
+    });
   }
 
-  return sizes;
+  return options;
+}
+
+export function normalizeSizeOptions(value: unknown): string[] {
+  return normalizePricedOptions(value).map((option) => option.label);
 }
 
 export function isAllowedSizeOption(
@@ -45,7 +105,19 @@ export function normalizeCustomSizeValue(value: unknown): string | null {
 }
 
 export function normalizeVariantOptions(value: unknown): string[] {
-  return normalizeSizeOptions(value).slice(0, MAX_PRODUCT_VARIANT_OPTIONS);
+  return normalizeSizeOptions(value);
+}
+
+export function optionPriceDeltaFor(
+  options: unknown,
+  value: string | null | undefined,
+): number {
+  const requested = value?.trim().toLowerCase();
+  if (!requested) return 0;
+  return (
+    normalizePricedOptions(options).find((option) => option.label.toLowerCase() === requested)
+      ?.priceDeltaQar ?? 0
+  );
 }
 
 export function isAllowedProductSizeOption(

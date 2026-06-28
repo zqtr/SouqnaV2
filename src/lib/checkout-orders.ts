@@ -449,6 +449,7 @@ export async function listOrdersForStorefront(
 
 export type StorefrontOrderStats = {
   totalOrders: number;
+  paidOrders: number;
   revenueQar: number;
   pendingOrders: number;
   unpaidOrders: number;
@@ -460,6 +461,7 @@ export async function getOrderStatsForStorefront(slug: string): Promise<Storefro
   const rows = (await db()`
     select
       count(*)::int as total_orders,
+      count(*) filter (where payment_status = 'marked_paid')::int as paid_orders,
       coalesce(sum(total_qar) filter (where payment_status = 'marked_paid'), 0)::int as revenue_qar,
       count(*) filter (where order_status = 'pending')::int as pending_orders,
       count(*) filter (where payment_status = 'unpaid')::int as unpaid_orders,
@@ -468,6 +470,7 @@ export async function getOrderStatsForStorefront(slug: string): Promise<Storefro
     where storefront_slug = ${slug}
   `) as unknown as Array<{
     total_orders: number;
+    paid_orders: number;
     revenue_qar: number;
     pending_orders: number;
     unpaid_orders: number;
@@ -476,11 +479,232 @@ export async function getOrderStatsForStorefront(slug: string): Promise<Storefro
   const row = rows[0];
   return {
     totalOrders: row?.total_orders ?? 0,
+    paidOrders: row?.paid_orders ?? 0,
+    revenueQar: row?.revenue_qar ?? 0,
+    pendingOrders: row?.pending_orders ?? 0,
+    unpaidOrders: row?.unpaid_orders ?? 0,
+  averageOrderQar: row?.average_order_qar ?? 0,
+  };
+}
+
+export type OrderAnalyticsSummary = StorefrontOrderStats & {
+  fulfilledOrders: number;
+  deliveredOrders: number;
+  cancelledOrders: number;
+  refundRequests: number;
+  customerCount: number;
+  newCustomers: number;
+  returningCustomers: number;
+};
+
+export async function getOrderAnalyticsSummaryForStorefront(
+  slug: string,
+  sinceDays: number,
+): Promise<OrderAnalyticsSummary> {
+  noStore();
+  const rows = (await db()`
+    with bounds as (
+      select now() - (${sinceDays}::int * interval '1 day') as start_at
+    ),
+    window_orders as (
+      select
+        o.*,
+        coalesce(nullif(lower(o.customer_email), ''), nullif(o.customer_phone, ''), o.id::text) as customer_key
+      from checkout_orders o, bounds
+      where o.storefront_slug = ${slug}
+        and o.created_at >= bounds.start_at
+    ),
+    first_orders as (
+      select
+        coalesce(nullif(lower(customer_email), ''), nullif(customer_phone, ''), id::text) as customer_key,
+        min(created_at) as first_at
+      from checkout_orders
+      where storefront_slug = ${slug}
+      group by 1
+    )
+    select
+      count(window_orders.id)::int as total_orders,
+      count(window_orders.id) filter (where window_orders.payment_status = 'marked_paid')::int as paid_orders,
+      coalesce(sum(window_orders.total_qar) filter (where window_orders.payment_status = 'marked_paid'), 0)::int as revenue_qar,
+      count(window_orders.id) filter (where window_orders.order_status = 'pending')::int as pending_orders,
+      count(window_orders.id) filter (where window_orders.payment_status = 'unpaid')::int as unpaid_orders,
+      coalesce(round(avg(window_orders.total_qar) filter (where window_orders.payment_status = 'marked_paid')), 0)::int as average_order_qar,
+      count(window_orders.id) filter (where window_orders.order_status in ('preparing', 'shipped', 'delivered'))::int as fulfilled_orders,
+      count(window_orders.id) filter (where window_orders.order_status = 'delivered')::int as delivered_orders,
+      count(window_orders.id) filter (where window_orders.order_status = 'cancelled')::int as cancelled_orders,
+      count(window_orders.id) filter (where window_orders.payment_status = 'refunded')::int as refund_requests,
+      count(distinct window_orders.customer_key)::int as customer_count,
+      count(distinct window_orders.customer_key) filter (where first_orders.first_at >= bounds.start_at)::int as new_customers,
+      count(distinct window_orders.customer_key) filter (where first_orders.first_at < bounds.start_at)::int as returning_customers
+    from bounds
+    left join window_orders on true
+    left join first_orders on first_orders.customer_key = window_orders.customer_key
+    group by bounds.start_at
+  `) as unknown as Array<{
+    total_orders: number;
+    paid_orders: number;
+    revenue_qar: number;
+    pending_orders: number;
+    unpaid_orders: number;
+    average_order_qar: number;
+    fulfilled_orders: number;
+    delivered_orders: number;
+    cancelled_orders: number;
+    refund_requests: number;
+    customer_count: number;
+    new_customers: number;
+    returning_customers: number;
+  }>;
+  const row = rows[0];
+  return {
+    totalOrders: row?.total_orders ?? 0,
+    paidOrders: row?.paid_orders ?? 0,
     revenueQar: row?.revenue_qar ?? 0,
     pendingOrders: row?.pending_orders ?? 0,
     unpaidOrders: row?.unpaid_orders ?? 0,
     averageOrderQar: row?.average_order_qar ?? 0,
+    fulfilledOrders: row?.fulfilled_orders ?? 0,
+    deliveredOrders: row?.delivered_orders ?? 0,
+    cancelledOrders: row?.cancelled_orders ?? 0,
+    refundRequests: row?.refund_requests ?? 0,
+    customerCount: row?.customer_count ?? 0,
+    newCustomers: row?.new_customers ?? 0,
+    returningCustomers: row?.returning_customers ?? 0,
   };
+}
+
+export type RevenueGrain = 'day' | 'week' | 'month' | 'year';
+export type RevenueSeriesPoint = {
+  label: string;
+  revenueQar: number;
+  ordersCount: number;
+};
+
+export async function revenueSeriesForStorefront(
+  slug: string,
+  grain: RevenueGrain,
+): Promise<RevenueSeriesPoint[]> {
+  noStore();
+  const bucket =
+    grain === 'year'
+      ? db()`date_trunc('year', created_at)`
+      : grain === 'month'
+        ? db()`date_trunc('month', created_at)`
+        : grain === 'week'
+          ? db()`date_trunc('week', created_at)`
+          : db()`date_trunc('day', created_at)`;
+  const lookbackDays = grain === 'year' ? 365 * 5 : grain === 'month' ? 365 : grain === 'week' ? 84 : 30;
+  const format = grain === 'year' ? 'YYYY' : grain === 'month' ? 'Mon YYYY' : grain === 'week' ? '"W"IW YYYY' : 'YYYY-MM-DD';
+
+  const rows = (await db()`
+    select
+      to_char(${bucket}, ${format}) as label,
+      coalesce(sum(total_qar) filter (where payment_status = 'marked_paid'), 0)::int as revenue_qar,
+      count(*) filter (where order_status <> 'cancelled')::int as orders_count
+    from checkout_orders
+    where storefront_slug = ${slug}
+      and created_at >= now() - (${lookbackDays}::int * interval '1 day')
+    group by ${bucket}
+    order by ${bucket}
+  `) as unknown as Array<{ label: string; revenue_qar: number; orders_count: number }>;
+
+  return rows.map((row) => ({
+    label: row.label,
+    revenueQar: Number(row.revenue_qar ?? 0),
+    ordersCount: Number(row.orders_count ?? 0),
+  }));
+}
+
+export type PaymentMethodPerformance = {
+  provider: string;
+  ordersCount: number;
+  paidOrders: number;
+  failedOrders: number;
+  revenueQar: number;
+  successRate: number;
+};
+
+export async function paymentMethodPerformanceForStorefront(
+  slug: string,
+  sinceDays: number,
+): Promise<PaymentMethodPerformance[]> {
+  noStore();
+  const rows = (await db()`
+    select
+      coalesce(
+        nullif(platform_provider, ''),
+        nullif(metadata->>'paymentProvider', ''),
+        payment_method
+      ) as provider,
+      count(*)::int as orders_count,
+      count(*) filter (where payment_status = 'marked_paid')::int as paid_orders,
+      count(*) filter (where payment_status = 'payment_failed')::int as failed_orders,
+      coalesce(sum(total_qar) filter (where payment_status = 'marked_paid'), 0)::int as revenue_qar
+    from checkout_orders
+    where storefront_slug = ${slug}
+      and created_at >= now() - (${sinceDays}::int * interval '1 day')
+    group by provider
+    order by orders_count desc, revenue_qar desc
+  `) as unknown as Array<{
+    provider: string;
+    orders_count: number;
+    paid_orders: number;
+    failed_orders: number;
+    revenue_qar: number;
+  }>;
+
+  return rows.map((row) => {
+    const ordersCount = Number(row.orders_count ?? 0);
+    const paidOrders = Number(row.paid_orders ?? 0);
+    return {
+      provider: row.provider,
+      ordersCount,
+      paidOrders,
+      failedOrders: Number(row.failed_orders ?? 0),
+      revenueQar: Number(row.revenue_qar ?? 0),
+      successRate: ordersCount > 0 ? (paidOrders / ordersCount) * 100 : 0,
+    };
+  });
+}
+
+export type RealtimeOrderFeedItem = {
+  id: string;
+  displayCode: string;
+  customerName: string;
+  totalQar: number;
+  paymentStatus: PaymentStatus;
+  orderStatus: OrderStatus;
+  createdAt: string;
+};
+
+export async function realtimeOrderFeedForStorefront(
+  slug: string,
+  limit = 5,
+): Promise<RealtimeOrderFeedItem[]> {
+  noStore();
+  const rows = (await db()`
+    select id, customer_name, total_qar, payment_status, order_status, created_at
+    from checkout_orders
+    where storefront_slug = ${slug}
+    order by created_at desc
+    limit ${Math.min(Math.max(limit, 1), 20)}
+  `) as unknown as Array<{
+    id: string;
+    customer_name: string;
+    total_qar: number | string;
+    payment_status: PaymentStatus;
+    order_status: OrderStatus;
+    created_at: string;
+  }>;
+  return rows.map((row) => ({
+    id: row.id,
+    displayCode: row.id.slice(0, 8).toUpperCase(),
+    customerName: row.customer_name,
+    totalQar: Number(row.total_qar ?? 0),
+    paymentStatus: row.payment_status,
+    orderStatus: row.order_status,
+    createdAt: row.created_at,
+  }));
 }
 
 export async function setOrderStatus(

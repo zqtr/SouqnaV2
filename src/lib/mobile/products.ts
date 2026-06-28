@@ -5,12 +5,15 @@ import { z } from 'zod';
 import type { ProductWriteInput } from '@/lib/products';
 import {
   DEFAULT_PRODUCT_HEIGHT_OPTIONS,
-  MAX_PRODUCT_VARIANT_OPTIONS,
-  MAX_PRODUCT_SIZE_OPTIONS,
   normalizeHeightInputLabel,
   normalizeHeightOptions,
-  normalizeVariantOptions,
+  normalizePricedOptions,
 } from '@/lib/productOptions';
+
+const PricedOptionSchema = z.object({
+  label: z.string().trim().min(1).max(40),
+  priceDeltaQar: z.number().min(-999_999).max(999_999).default(0),
+});
 
 export const MobileProductFieldsSchema = z.object({
   store: z.string().trim().min(1).max(64),
@@ -22,8 +25,11 @@ export const MobileProductFieldsSchema = z.object({
   category: z.string().trim().max(120).optional().nullable(),
   categoryIds: z.array(z.string().uuid()).max(20).optional().default([]),
   sizeOptions: z
-    .array(z.string().trim().max(40))
-    .max(MAX_PRODUCT_VARIANT_OPTIONS)
+    .preprocess((value) => normalizePricedOptions(value), z.array(PricedOptionSchema))
+    .optional()
+    .default([]),
+  variantOptions: z
+    .preprocess((value) => normalizePricedOptions(value), z.array(PricedOptionSchema))
     .optional()
     .default([]),
   allowCustomSize: z.boolean().optional().default(false),
@@ -31,7 +37,6 @@ export const MobileProductFieldsSchema = z.object({
   heightInputLabel: z.string().trim().max(40).optional().nullable(),
   heightOptions: z
     .array(z.string().trim().max(40))
-    .max(MAX_PRODUCT_SIZE_OPTIONS)
     .optional()
     .default([]),
   eventAt: z.string().trim().optional().nullable(),
@@ -54,9 +59,10 @@ export function mobileProductPayload(
     stock: data.stock,
     imageUrl: data.imageUrl ? data.imageUrl : null,
     category: data.category?.trim() || null,
-    sizeOptions: normalizeVariantOptions(data.sizeOptions),
+    sizeOptions: normalizePricedOptions(data.sizeOptions),
     allowCustomSize:
-      data.allowCustomSize === true && normalizeVariantOptions(data.sizeOptions).length > 0,
+      data.allowCustomSize === true && normalizePricedOptions(data.sizeOptions).length > 0,
+    variantOptions: normalizePricedOptions(data.variantOptions),
     requiresHeightInput: data.requiresHeightInput === true,
     heightInputLabel:
       data.requiresHeightInput === true ? normalizeHeightInputLabel(data.heightInputLabel) : null,

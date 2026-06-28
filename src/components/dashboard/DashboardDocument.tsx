@@ -1,3 +1,4 @@
+﻿/* eslint-disable @next/next/no-head-element */
 import type { ReactNode } from 'react';
 import { fontVariables } from '@/lib/fonts';
 import {
@@ -9,7 +10,7 @@ import '@/app/globals.css';
 
 type Props = {
   children: ReactNode;
-  /** When true, renders without the dark chrome — used by the preview iframe. */
+  /** When true, renders without the dark chrome, used by the preview iframe. */
   bare?: boolean;
   /** Document language attribute. Defaults to `en` since the dashboard UI is in English. */
   lang?: string;

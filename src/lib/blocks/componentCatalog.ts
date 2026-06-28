@@ -76,6 +76,46 @@ export const COMPONENT_LIBRARY_GROUPS: ComponentLibraryGroup[] = [
           ar: 'شبكة صور للمجموعات، الإطلالات، المواقع، قصص قبل وبعد، أو أي صفحة تحتاج إلى تصفح بصري سريع.',
         },
       },
+      {
+        type: 'shadcnNavbar',
+        label: 'Premium navbar',
+        hint: 'Souqna premium routing chrome',
+        tier: 'pro',
+        description: {
+          en: 'A paid storefront navigation block using real Souqna routes, logo, product index, policy links, and cart actions.',
+          ar: 'شريط تنقل مدفوع يستخدم روابط سوقنا الحقيقية والشعار وصفحة المنتجات والسياسات والسلة.',
+        },
+      },
+      {
+        type: 'shadcnHero',
+        label: 'Premium hero',
+        hint: 'Souqna premium ecommerce hero',
+        tier: 'pro',
+        description: {
+          en: 'A premium ecommerce hero built for live products, bilingual copy, strong CTAs, and mobile-first commerce layouts.',
+          ar: 'واجهة تجارة مميزة للمنتجات الحية والنص ثنائي اللغة وأزرار واضحة وتجربة جوال أفضل.',
+        },
+      },
+      {
+        type: 'shadcnTrustStrip',
+        label: 'Trust strip',
+        hint: 'Checkout, delivery, support proof',
+        tier: 'pro',
+        description: {
+          en: 'A compact proof strip for delivery, payment, support, and store trust points merchants can edit.',
+          ar: 'شريط ثقة مختصر للتوصيل والدفع والدعم ونقاط الثقة التي يمكن للتاجر تعديلها.',
+        },
+      },
+      {
+        type: 'shadcnFooter',
+        label: 'Premium footer',
+        hint: 'Routing, policies, WhatsApp',
+        tier: 'pro',
+        description: {
+          en: 'A commerce footer with store routing, policy links, and WhatsApp support when the store phone is configured.',
+          ar: 'تذييل تجاري بروابط المتجر والسياسات ودعم واتساب عند إعداد رقم المتجر.',
+        },
+      },
     ],
   },
   {
@@ -107,6 +147,86 @@ export const COMPONENT_LIBRARY_GROUPS: ComponentLibraryGroup[] = [
         description: {
           en: 'A single hero product pulled from the catalogue. Use it to spotlight a best seller, launch item, or anchor offer.',
           ar: 'منتج واحد بارز من الكتالوج. استخدمه لإبراز الأكثر مبيعاً أو منتج الإطلاق أو العرض الأساسي.',
+        },
+      },
+      {
+        type: 'shadcnCategories',
+        label: 'Premium categories',
+        hint: 'Live category tiles',
+        tier: 'pro',
+        description: {
+          en: 'Visual category browsing powered by the store catalogue so shoppers can enter product families quickly.',
+          ar: 'تصفح بصري للتصنيفات مرتبط بكتالوج المتجر حتى يدخل العملاء إلى مجموعات المنتجات بسرعة.',
+        },
+      },
+      {
+        type: 'shadcnProductCard',
+        label: 'Premium cards',
+        hint: 'Souqna premium product cards',
+        tier: 'pro',
+        description: {
+          en: 'Premium product cards with real prices, images, availability, detail links, and add-to-cart support.',
+          ar: 'بطاقات منتجات مميزة تعرض الأسعار والصور والتوفر وروابط التفاصيل والإضافة للسلة.',
+        },
+      },
+      {
+        type: 'shadcnProductList',
+        label: 'Premium list',
+        hint: 'High-signal product rows',
+        tier: 'pro',
+        description: {
+          en: 'A clean product list for best sellers, edits, and comparison-heavy catalogue sections.',
+          ar: 'قائمة منتجات نظيفة للأكثر مبيعاً والمختارات والأقسام التي تحتاج مقارنة سريعة.',
+        },
+      },
+      {
+        type: 'shadcnProductDetail',
+        label: 'Premium detail',
+        hint: 'Selected product buy surface',
+        tier: 'atelier',
+        description: {
+          en: 'A Max+ product detail surface for one selected product with image, price, description, and buying action.',
+          ar: 'واجهة تفاصيل منتج في Max+ لمنتج محدد مع الصورة والسعر والوصف وزر الشراء.',
+        },
+      },
+      {
+        type: 'shadcnQuickView',
+        label: 'Quick view',
+        hint: 'Compact product checkout card',
+        tier: 'atelier',
+        description: {
+          en: 'A compact Max+ quick-view product card for launch pages and short product stories.',
+          ar: 'بطاقة عرض سريع مضغوطة في Max+ لصفحات الإطلاق وقصص المنتجات القصيرة.',
+        },
+      },
+      {
+        type: 'shadcnReviews',
+        label: 'Reviews',
+        hint: 'Bilingual social proof',
+        tier: 'pro',
+        description: {
+          en: 'Editable bilingual review cards for social proof, product trust, and premium storefront credibility.',
+          ar: 'بطاقات تقييم قابلة للتعديل باللغتين لتعزيز الثقة ومصداقية واجهة المتجر.',
+        },
+      },
+      {
+        type: 'shadcnOrderSummary',
+        label: 'Order summary',
+        hint: 'Checkout-inspired value stack',
+        tier: 'atelier',
+        description: {
+          en: 'A Max+ checkout-inspired summary section for payment confidence, totals, and order reassurance.',
+          ar: 'قسم ملخص مستوحى من الدفع في Max+ لتعزيز الثقة بالمبالغ والطلب.',
+        },
+      },
+      {
+        type: 'shadcnOfferModal',
+        label: 'Offer module',
+        hint: 'Launch discount preview',
+        tier: 'atelier',
+        description: {
+          en: 'A controlled Max+ offer module for launch edits, discount messaging, and highlighted product rails.',
+          ar: 'وحدة عرض مضبوطة في Max+ لإطلاق العروض ورسائل الخصم وإبراز المنتجات.',
         },
       },
       {
@@ -244,7 +364,7 @@ export const COMPONENT_LIBRARY_GROUPS: ComponentLibraryGroup[] = [
       {
         type: 'taqim',
         label: 'Bundle (Taqim)',
-        hint: '3 variants · product/bundle picker',
+        hint: '3 layouts · product/bundle picker',
         description: {
           en: 'A bundle and complete-the-look block that reads Taqim settings and turns related products into one higher-value offer.',
           ar: 'كتلة للباقات وإكمال الإطلالة تقرأ إعدادات تقييم وتحول المنتجات المرتبطة إلى عرض أعلى قيمة.',
@@ -253,7 +373,7 @@ export const COMPONENT_LIBRARY_GROUPS: ComponentLibraryGroup[] = [
       {
         type: 'mawid',
         label: 'Countdown (Mawid)',
-        hint: '3 variants · product/time picker',
+        hint: '3 layouts · product/time picker',
         description: {
           en: 'A countdown and scheduling block for launches, appointments, timed offers, pre-orders, and live moments.',
           ar: 'كتلة عد تنازلي وجدولة للإطلاقات والمواعيد والعروض المؤقتة والطلبات المسبقة واللحظات المباشرة.',
@@ -332,7 +452,7 @@ export const COMPONENT_LIBRARY_GROUPS: ComponentLibraryGroup[] = [
       {
         type: 'depthShowcase',
         label: 'Depth showcase',
-        hint: 'React Bits parallax card · one per page',
+        hint: 'Parallax depth card · one per page',
         tier: 'pro',
         description: {
           en: 'A parallax depth card for one strong image and short story. Use it sparingly for premium highlights.',
@@ -347,6 +467,16 @@ export const COMPONENT_LIBRARY_GROUPS: ComponentLibraryGroup[] = [
         description: {
           en: 'A narrow animated aurora strip for short feature breaks, atmospheric transitions, and premium visual rhythm.',
           ar: 'شريط أورورا متحرك ضيق لفواصل المزايا القصيرة والانتقالات البصرية وإيقاع الصفحة المميز.',
+        },
+      },
+      {
+        type: 'curvedLoop',
+        label: 'Curved loop',
+        hint: 'Curved text loop · draggable',
+        tier: 'pro',
+        description: {
+          en: 'A curved text marquee for premium campaign lines, product suite statements, and moving editorial separators.',
+          ar: 'شريط نصي منحني لعبارات الحملات الفاخرة ورسائل حزم المنتجات والفواصل التحريرية المتحركة.',
         },
       },
       {

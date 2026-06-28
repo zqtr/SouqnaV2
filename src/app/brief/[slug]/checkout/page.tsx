@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getStorefront } from '@/lib/brief';
 import {
-  checkoutPaymentMethodsForPlan,
+  checkoutPaymentMethodsForBuyer,
   getStorefrontCheckoutSettings,
   getStorefrontPolicies,
 } from '@/lib/storefrontSettings';
@@ -41,17 +41,15 @@ export default async function CheckoutPage({ params }: Props) {
     getPlan(storefront.clerkUserId),
   ]);
   const canAcceptOnlinePayments = planUnlocksOnlinePayments(ownerPlan);
+  const readyPaymentMethods = rawCheckout.paymentMethods.filter(
+    (m) =>
+      (m !== 'pay_link' || rawCheckout.payLink) &&
+      (m !== 'skipcash' || rawCheckout.skipCash?.enabled) &&
+      (m !== 'sadad' || rawCheckout.sadad?.enabled),
+  );
   const checkout = {
     ...rawCheckout,
-    paymentMethods: checkoutPaymentMethodsForPlan(
-      rawCheckout.paymentMethods.filter(
-        (m) =>
-          (m !== 'pay_link' || rawCheckout.payLink) &&
-          (m !== 'skipcash' || rawCheckout.skipCash?.enabled) &&
-          (m !== 'sadad' || rawCheckout.sadad?.enabled),
-      ),
-      canAcceptOnlinePayments,
-    ),
+    paymentMethods: checkoutPaymentMethodsForBuyer(readyPaymentMethods, canAcceptOnlinePayments),
     payLink: rawCheckout.payLink,
   };
 
@@ -145,6 +143,7 @@ export default async function CheckoutPage({ params }: Props) {
             storefrontSlug={slug}
             storefrontBaseHref={storefrontBaseUrl(slug)}
             businessName={storefront.businessName}
+            logoUrl={storefront.logoUrl}
             locale={storefront.locale}
             checkout={checkout}
             policies={policies}

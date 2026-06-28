@@ -19,6 +19,8 @@ type SouqyMountProps = {
   products: Product[];
   fallback: ReactNode;
   categoriesBySlug?: Map<string, Set<string>>;
+  navPages?: ChromeNavPage[];
+  legalPolicies?: ChromeLegalPolicy[];
 };
 const SouqyMount = RawSouqyMount as unknown as (props: SouqyMountProps) => JSX.Element;
 import { BlockRenderer } from './BlockRenderer';
@@ -136,12 +138,14 @@ export function Storefront({
   const cartEnabled = !showcaseOnly && data.checkout.paymentMethods.length > 0;
   const cartCurrency = data.checkout.currency;
   const chromeProps = {
+    storefront: data,
     storefrontSlug: data.slug,
     storefrontBaseHref: storefrontBaseUrl(data.slug),
     enabled: cartEnabled,
     currency: cartCurrency,
     navPages,
     legalPolicies,
+    chrome: data.themeOverrides.commerceChrome,
   };
   // Theme overrides win over the founder's palette pick (the Theme page
   // is the more recent, more granular surface).
@@ -185,20 +189,20 @@ export function Storefront({
       <div style={wrapperStyle} dir={data.locale === 'ar' ? 'rtl' : 'ltr'}>
         <PremiumCursor effect={data.themeOverrides.cursorEffect} />
         <BlockBackgroundFrame effect={data.themeOverrides.backgroundEffect}>
-        <StorefrontChrome {...chromeProps}>
-          {overrideMain}
-          {showSouqnaSignature ? (
-            <SouqnaSignature locale={data.locale} verified={Boolean(data.crNumber)} />
-          ) : null}
-          <CustomerTools data={data} showcaseOnly={showcaseOnly} />
-          {hasCurrency ? <CurrencyToggle storefrontSlug={data.slug} /> : null}
-          <AppScripts storefrontSlug={data.slug} installedAppIds={installedApps} />
-          <MawidBanner
-            storefrontSlug={data.slug}
-            installedAppIds={installedApps}
-            locale={data.locale}
-          />
-        </StorefrontChrome>
+          <StorefrontChrome {...chromeProps}>
+            {overrideMain}
+            {showSouqnaSignature ? (
+              <SouqnaSignature locale={data.locale} verified={Boolean(data.crNumber)} />
+            ) : null}
+            <CustomerTools data={data} showcaseOnly={showcaseOnly} />
+            {hasCurrency ? <CurrencyToggle storefrontSlug={data.slug} /> : null}
+            <AppScripts storefrontSlug={data.slug} installedAppIds={installedApps} />
+            <MawidBanner
+              storefrontSlug={data.slug}
+              installedAppIds={installedApps}
+              locale={data.locale}
+            />
+          </StorefrontChrome>
         </BlockBackgroundFrame>
       </div>
     );
@@ -209,36 +213,41 @@ export function Storefront({
       <div style={wrapperStyle} dir={data.locale === 'ar' ? 'rtl' : 'ltr'}>
         <PremiumCursor effect={data.themeOverrides.cursorEffect} />
         <BlockBackgroundFrame effect={data.themeOverrides.backgroundEffect}>
-        <StorefrontChrome {...chromeProps}>
-          <SouqyMount
-            data={data}
+          <StorefrontChrome {...chromeProps}>
+            <SouqyMount
+              data={data}
             products={products}
             categoriesBySlug={categories}
+            navPages={navPages}
+            legalPolicies={legalPolicies}
             fallback={
               <FallbackToBlockPipeline
-                data={data}
-                products={products}
-                copy={copy}
-                vocabulary={vocabulary}
-                blocks={blocks}
-                selectable={selectable}
-                categoriesBySlug={categories}
-              />
-            }
-          />
-          <StorefrontPoliciesPanel storefront={data} locale={policyLocale} />
-          {showSouqnaSignature ? (
-            <SouqnaSignature locale={data.locale} verified={Boolean(data.crNumber)} />
-          ) : null}
-          <CustomerTools data={data} showcaseOnly={showcaseOnly} />
-          {hasCurrency ? <CurrencyToggle storefrontSlug={data.slug} /> : null}
-          <AppScripts storefrontSlug={data.slug} installedAppIds={installedApps} />
-          <MawidBanner
-            storefrontSlug={data.slug}
-            installedAppIds={installedApps}
-            locale={data.locale}
-          />
-        </StorefrontChrome>
+                  data={data}
+                  products={products}
+                  copy={copy}
+                  vocabulary={vocabulary}
+                  blocks={blocks}
+                  selectable={selectable}
+                  categoriesBySlug={categories}
+                  navPages={navPages}
+                  legalPolicies={legalPolicies}
+                  installedApps={installedApps}
+                />
+              }
+            />
+            <StorefrontPoliciesPanel storefront={data} locale={policyLocale} />
+            {showSouqnaSignature ? (
+              <SouqnaSignature locale={data.locale} verified={Boolean(data.crNumber)} />
+            ) : null}
+            <CustomerTools data={data} showcaseOnly={showcaseOnly} />
+            {hasCurrency ? <CurrencyToggle storefrontSlug={data.slug} /> : null}
+            <AppScripts storefrontSlug={data.slug} installedAppIds={installedApps} />
+            <MawidBanner
+              storefrontSlug={data.slug}
+              installedAppIds={installedApps}
+              locale={data.locale}
+            />
+          </StorefrontChrome>
         </BlockBackgroundFrame>
       </div>
     );
@@ -255,37 +264,40 @@ export function Storefront({
       isRtl: data.locale === 'ar',
       isPreview: selectable,
       categoriesBySlug: categories,
+      navPages,
+      legalPolicies,
+      installedAppIds: installedApps,
     };
     return (
       <div style={wrapperStyle} dir={data.locale === 'ar' ? 'rtl' : 'ltr'}>
         <PremiumCursor effect={data.themeOverrides.cursorEffect} />
         <BlockBackgroundFrame effect={data.themeOverrides.backgroundEffect}>
-        <StorefrontChrome {...chromeProps}>
-          <main
-            style={{
-              maxWidth: 'min(1280px, 92vw)',
-              marginInline: 'auto',
-              paddingBlock: 'clamp(24px, 4vw, 56px)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--sf-section-y)',
-            }}
-          >
-            <BlockRenderer blocks={blocks} ctx={ctx} selectable={selectable} />
-          </main>
-          <StorefrontPoliciesPanel storefront={data} locale={policyLocale} />
-          {showSouqnaSignature ? (
-            <SouqnaSignature locale={data.locale} verified={Boolean(data.crNumber)} />
-          ) : null}
-          <CustomerTools data={data} showcaseOnly={showcaseOnly} />
-          {hasCurrency ? <CurrencyToggle storefrontSlug={data.slug} /> : null}
-          <AppScripts storefrontSlug={data.slug} installedAppIds={installedApps} />
-          <MawidBanner
-            storefrontSlug={data.slug}
-            installedAppIds={installedApps}
-            locale={data.locale}
-          />
-        </StorefrontChrome>
+          <StorefrontChrome {...chromeProps}>
+            <main
+              style={{
+                maxWidth: 'min(1280px, 92vw)',
+                marginInline: 'auto',
+                paddingBlock: 'clamp(24px, 4vw, 56px)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 'var(--sf-section-y)',
+              }}
+            >
+              <BlockRenderer blocks={blocks} ctx={ctx} selectable={selectable} />
+            </main>
+            <StorefrontPoliciesPanel storefront={data} locale={policyLocale} />
+            {showSouqnaSignature ? (
+              <SouqnaSignature locale={data.locale} verified={Boolean(data.crNumber)} />
+            ) : null}
+            <CustomerTools data={data} showcaseOnly={showcaseOnly} />
+            {hasCurrency ? <CurrencyToggle storefrontSlug={data.slug} /> : null}
+            <AppScripts storefrontSlug={data.slug} installedAppIds={installedApps} />
+            <MawidBanner
+              storefrontSlug={data.slug}
+              installedAppIds={installedApps}
+              locale={data.locale}
+            />
+          </StorefrontChrome>
         </BlockBackgroundFrame>
       </div>
     );
@@ -332,6 +344,9 @@ function FallbackToBlockPipeline({
   blocks,
   selectable,
   categoriesBySlug,
+  navPages,
+  legalPolicies,
+  installedApps,
 }: {
   data: StorefrontData;
   products: Product[];
@@ -340,6 +355,9 @@ function FallbackToBlockPipeline({
   blocks: Block[];
   selectable: boolean;
   categoriesBySlug: Map<string, Set<string>>;
+  navPages: ChromeNavPage[];
+  legalPolicies: ChromeLegalPolicy[];
+  installedApps: string[];
 }): ReactNode {
   const ctx: BlockContext = {
     storefront: data,
@@ -351,6 +369,9 @@ function FallbackToBlockPipeline({
     isRtl: data.locale === 'ar',
     isPreview: selectable,
     categoriesBySlug,
+    navPages,
+    legalPolicies,
+    installedAppIds: installedApps,
   };
   if (blocks.length === 0) {
     blocks = bootBlocksFromStorefront(data);

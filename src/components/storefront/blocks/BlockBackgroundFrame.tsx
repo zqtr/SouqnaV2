@@ -8,7 +8,7 @@ import {
   HalftoneWaveSurface,
   MetallicSwirlSurface,
   SilkWavesSurface,
-} from '@/components/react-bits/PremiumSurfaces';
+} from '@/components/souqna-motion/PremiumSurfaces';
 
 export function BlockBackgroundFrame({
   effect,

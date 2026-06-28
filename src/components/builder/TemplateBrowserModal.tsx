@@ -1,17 +1,13 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { type TemplateId } from '@/lib/brief';
 import { templatePresets } from '@/lib/templates';
+import { templateDescription, templateNameParts } from '@/lib/templateDisplay';
 import { PLAN_LIMITS, planAtLeast, type Plan } from '@/lib/plans';
 import { TemplatePreview } from '@/components/templates/previews';
+import { useBuilderCopy } from './BuilderCopyContext';
 
 type Props = {
   slug: string;
@@ -31,6 +27,22 @@ type Props = {
   onPick: (id: TemplateId) => void;
   /** Same CTA on a locked template — the parent surfaces an upsell. */
   onPickLocked: (id: TemplateId) => void;
+};
+
+type TemplateBrowserCopy = {
+  title: string;
+  subtitle: string;
+  close: string;
+  listLabel: string;
+  iframeTitle: (label: string) => string;
+  current: string;
+  useTemplate: string;
+  upgradeToUse: string;
+  paidSection: string;
+  upgradeBadge: string;
+  lockedAria: string;
+  previous: string;
+  next: string;
 };
 
 /**
@@ -68,13 +80,50 @@ export function TemplateBrowserModal({
   onPick,
   onPickLocked,
 }: Props) {
+  const { locale } = useBuilderCopy();
+  const copy: TemplateBrowserCopy =
+    locale === 'ar'
+      ? {
+          title: 'تصفّح القوالب',
+          subtitle: 'معاينات مباشرة باستخدام منتجاتك وفئاتك',
+          close: 'إغلاق متصفح القوالب',
+          listLabel: 'قائمة القوالب',
+          iframeTitle: (label) => `معاينة قالب · ${label}`,
+          current: 'الحالي',
+          useTemplate: 'استخدم القالب',
+          upgradeToUse: 'ترقية للاستخدام',
+          paidSection: 'قوالب Pro / Pro+ / Max+',
+          upgradeBadge: 'ترقية',
+          lockedAria: 'مغلق — يتطلب ترقية الخطة',
+          previous: 'القالب السابق',
+          next: 'القالب التالي',
+        }
+      : {
+          title: 'Browse templates',
+          subtitle: 'Live previews using your products + categories',
+          close: 'Close template browser',
+          listLabel: 'Template list',
+          iframeTitle: (label) => `Template preview · ${label}`,
+          current: 'Current',
+          useTemplate: 'Use this template',
+          upgradeToUse: 'Upgrade to use',
+          paidSection: 'Pro / Pro+ / Max+',
+          upgradeBadge: 'Upgrade',
+          lockedAria: 'Locked — requires plan upgrade',
+          previous: 'Previous template',
+          next: 'Next template',
+        };
   const allTemplates = useMemo(
     () => [...freeTemplates, ...proTemplates],
     [freeTemplates, proTemplates],
   );
 
   const initialFocus = useMemo(
-    () => Math.max(0, allTemplates.findIndex((id) => id === activeTemplate)),
+    () =>
+      Math.max(
+        0,
+        allTemplates.findIndex((id) => id === activeTemplate),
+      ),
     [allTemplates, activeTemplate],
   );
 
@@ -162,28 +211,28 @@ export function TemplateBrowserModal({
 
   // Keep the focused row in view as the user arrows through the list.
   useEffect(() => {
-    const el = listRef.current?.querySelector<HTMLElement>(
-      `[data-template-row="${focused}"]`,
-    );
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-template-row="${focused}"]`);
     if (el) el.scrollIntoView({ block: 'nearest' });
   }, [focused]);
 
-  const [latinLabel, arabicLabel] = focusedPreset.label
-    .split('·')
-    .map((s) => s.trim());
+  const { primary: focusedPrimary, secondary: focusedSecondary } = templateNameParts(
+    focusedPreset.label,
+    isRtl,
+  );
+  const focusedDescription = templateDescription(focusedPreset, locale === 'ar');
 
   const ctaLabel = isCurrent
-    ? 'Currently active'
+    ? copy.current
     : focusedUnlocked
-      ? 'Use this template'
-      : 'Upgrade to use';
+      ? copy.useTemplate
+      : copy.upgradeToUse;
   const ctaDisabled = isCurrent;
 
   return (
     <motion.div
       role="dialog"
       aria-modal="true"
-      aria-label="Browse templates"
+      aria-label={copy.title}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -220,7 +269,7 @@ export function TemplateBrowserModal({
               color: 'var(--bld-accent)',
             }}
           >
-            Browse templates
+            {copy.title}
           </span>
           <span
             style={{
@@ -229,13 +278,13 @@ export function TemplateBrowserModal({
               color: 'var(--bld-text-muted)',
             }}
           >
-            Live previews using your products + categories
+            {copy.subtitle}
           </span>
         </div>
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close template browser"
+          aria-label={copy.close}
           style={{
             width: 32,
             height: 32,
@@ -278,6 +327,9 @@ export function TemplateBrowserModal({
       >
         <aside
           ref={listRef}
+          role="listbox"
+          aria-label={copy.listLabel}
+          aria-activedescendant={`template-option-${focused}`}
           style={{
             borderInlineEnd: '1px solid var(--bld-divider)',
             background: 'var(--bld-surface)',
@@ -288,16 +340,15 @@ export function TemplateBrowserModal({
             gap: 4,
           }}
         >
-          <SectionLabel>Free</SectionLabel>
           {freeTemplates.map((id) =>
-            renderRow(id, currentPlan, focused, activeTemplate, pendingTemplate, isRtl, (next) => {
+            renderRow(id, currentPlan, focused, activeTemplate, pendingTemplate, isRtl, copy, (next) => {
               const i = allTemplates.indexOf(next);
               if (i >= 0) setFocusIdx(i);
             }),
           )}
-          {proTemplates.length ? <SectionLabel>Paid templates</SectionLabel> : null}
+          {proTemplates.length ? <SectionLabel>{copy.paidSection}</SectionLabel> : null}
           {proTemplates.map((id) =>
-            renderRow(id, currentPlan, focused, activeTemplate, pendingTemplate, isRtl, (next) => {
+            renderRow(id, currentPlan, focused, activeTemplate, pendingTemplate, isRtl, copy, (next) => {
               const i = allTemplates.indexOf(next);
               if (i >= 0) setFocusIdx(i);
             }),
@@ -329,7 +380,7 @@ export function TemplateBrowserModal({
             <iframe
               key={focused}
               src={`/account/${slug}/preview/template/${focused}`}
-              title={`Template preview · ${focusedPreset.label}`}
+              title={copy.iframeTitle(focusedPrimary)}
               onLoad={() => setIframeLoaded(true)}
               style={{
                 flex: 1,
@@ -388,12 +439,14 @@ export function TemplateBrowserModal({
             direction="prev"
             isRtl={isRtl}
             disabled={focusIdx <= 0}
+            label={copy.previous}
             onClick={goPrev}
           />
           <ArrowButton
             direction="next"
             isRtl={isRtl}
             disabled={focusIdx >= allTemplates.length - 1}
+            label={copy.next}
             onClick={goNext}
           />
         </div>
@@ -418,8 +471,8 @@ export function TemplateBrowserModal({
               whiteSpace: 'nowrap',
             }}
           >
-            {latinLabel ?? focused}
-            {arabicLabel ? (
+            {focusedPrimary ?? focused}
+            {!isRtl && focusedSecondary ? (
               <span
                 style={{
                   marginInlineStart: 8,
@@ -427,7 +480,7 @@ export function TemplateBrowserModal({
                   color: 'var(--bld-text-muted)',
                 }}
               >
-                · {arabicLabel}
+                · {focusedSecondary}
               </span>
             ) : null}
             {isCurrent ? (
@@ -446,7 +499,7 @@ export function TemplateBrowserModal({
                   fontWeight: 600,
                 }}
               >
-                Current
+                {copy.current}
               </span>
             ) : null}
           </span>
@@ -460,7 +513,7 @@ export function TemplateBrowserModal({
               whiteSpace: 'nowrap',
             }}
           >
-            {focusedPreset.description}
+            {focusedDescription}
           </span>
         </div>
         <button
@@ -510,6 +563,7 @@ function renderRow(
   activeTemplate: TemplateId,
   pendingTemplate: TemplateId | null,
   isRtl: boolean,
+  copy: TemplateBrowserCopy,
   onSelect: (id: TemplateId) => void,
 ) {
   const preset = templatePresets[id];
@@ -517,14 +571,25 @@ function renderRow(
   const isFocused = id === focused;
   const isActive = id === activeTemplate;
   const isPending = id === pendingTemplate && !isActive;
-  const [latin] = preset.label.split('·').map((s) => s.trim());
+  const { primary } = templateNameParts(preset.label, isRtl);
   return (
     <motion.button
       key={id}
+      id={`template-option-${id}`}
       type="button"
+      role="option"
       data-template-row={id}
       onClick={() => onSelect(id)}
-      aria-current={isFocused ? 'true' : undefined}
+      aria-current={isActive ? 'true' : undefined}
+      aria-selected={isFocused}
+      aria-label={[
+        primary ?? id,
+        preset.tier !== 'free' ? PLAN_LIMITS[preset.tier].label : null,
+        isActive ? copy.current : null,
+        !unlocked ? copy.lockedAria : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')}
       animate={!unlocked ? { y: [0, -2, 0] } : undefined}
       transition={!unlocked ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' } : undefined}
       style={{
@@ -567,6 +632,14 @@ function renderRow(
           variant="rail"
           locale={isRtl ? 'ar' : 'en'}
           dimmed={!unlocked}
+          ariaLabel={
+            isRtl ? `معاينة قالب ${primary}` : `${primary} template preview`
+          }
+          ariaDescription={
+            isRtl
+              ? `تمثيل مرئي لقالب ${primary} باستخدام ألوانه.`
+              : `Live representation of the ${primary} template using its palette.`
+          }
         />
       </span>
       <span
@@ -587,19 +660,21 @@ function renderRow(
             whiteSpace: 'nowrap',
           }}
         >
-          {latin ?? id}
+          {primary ?? id}
         </span>
-        <span
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 9,
-            letterSpacing: '0.14em',
-            textTransform: 'uppercase',
-            color: 'var(--bld-text-faint)',
-          }}
-        >
-          {PLAN_LIMITS[preset.tier].label}
-        </span>
+        {preset.tier !== 'free' ? (
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: 'var(--bld-text-faint)',
+            }}
+          >
+            {PLAN_LIMITS[preset.tier].label}
+          </span>
+        ) : null}
       </span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         {!unlocked ? (
@@ -618,7 +693,7 @@ function renderRow(
               whiteSpace: 'nowrap',
             }}
           >
-            Upgrade
+            {copy.upgradeBadge}
           </span>
         ) : null}
         {!unlocked ? (
@@ -631,7 +706,7 @@ function renderRow(
             strokeWidth="2.4"
             strokeLinecap="round"
             strokeLinejoin="round"
-            aria-label="Locked — requires plan upgrade"
+            aria-label={copy.lockedAria}
           >
             <rect x="4" y="11" width="16" height="10" rx="2" />
             <path d="M8 11V7a4 4 0 1 1 8 0v4" />
@@ -651,7 +726,7 @@ function renderRow(
               fontWeight: 600,
             }}
           >
-            Current
+            {copy.current}
           </span>
         ) : null}
       </span>
@@ -680,20 +755,18 @@ function ArrowButton({
   direction,
   isRtl,
   disabled,
+  label,
   onClick,
 }: {
   direction: 'prev' | 'next';
   isRtl: boolean;
   disabled: boolean;
+  label: string;
   onClick: () => void;
 }) {
   // Arrow points the visual direction. RTL flips the chevron so "next"
   // (advance forward through the list) still reads correctly.
-  const points =
-    (direction === 'next') !== isRtl
-      ? '9 18 15 12 9 6'
-      : '15 18 9 12 15 6';
-  const label = direction === 'next' ? 'Next template' : 'Previous template';
+  const points = (direction === 'next') !== isRtl ? '9 18 15 12 9 6' : '15 18 9 12 15 6';
   return (
     <button
       type="button"

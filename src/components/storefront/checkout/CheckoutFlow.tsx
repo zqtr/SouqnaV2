@@ -1,15 +1,30 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, useTransition } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCart } from '../cart/CartContext';
 import { applyDiscountCode, createOrder } from '@/app/actions/checkout';
 import type {
+  CheckoutAddressDesign,
+  CheckoutButtonStyle,
+  CheckoutOrderSummaryLayout,
+  CheckoutPaymentCardStyle,
   CheckoutSettings,
   PaymentMethod,
   PolicyKey,
   StorefrontPolicies,
+  CheckoutTrustBadge,
 } from '@/lib/storefrontSettings';
+import {
+  checkoutDeliveryFeeForBuyer,
+  checkoutPaymentMethodsForBuyer,
+} from '@/lib/storefrontSettings';
+import {
+  checkoutExperienceBackground,
+  checkoutExperienceColorScheme,
+  checkoutExperienceVars,
+  isRedirectPaymentMethod,
+} from '@/lib/checkoutExperience';
 
 /**
  * Buyer-facing 4-step checkout. Reads the cart from the storefront
@@ -88,6 +103,7 @@ function getStrings(locale: 'en' | 'ar') {
       next: 'التالي',
       placeOrder: 'تأكيد الطلب',
       placing: 'جارٍ الإرسال…',
+      continuePayment: 'متابعة الدفع',
       name: 'الاسم الكامل',
       phone: 'رقم الهاتف',
       email: 'البريد الإلكتروني (اختياري)',
@@ -101,6 +117,7 @@ function getStrings(locale: 'en' | 'ar') {
       cod: 'الدفع عند الاستلام',
       bank: 'تحويل بنكي',
       fawran: 'Fawran',
+      paymentUnavailable: 'لا توجد طريقة دفع متاحة لهذه المدينة.',
       payLink: 'الدفع الإلكتروني',
       skipCash: 'الدفع عبر SkipCash',
       sadad: 'الدفع عبر SADAD',
@@ -154,6 +171,7 @@ function getStrings(locale: 'en' | 'ar') {
     next: 'Next',
     placeOrder: 'Place order',
     placing: 'Placing order…',
+    continuePayment: 'Continue payment',
     name: 'Full name',
     phone: 'Phone number',
     email: 'Email (optional)',
@@ -175,6 +193,7 @@ function getStrings(locale: 'en' | 'ar') {
     requiredField: 'Required',
     invalidPhone: 'Enter a valid phone number',
     invalidEmail: 'Enter a valid email',
+    paymentUnavailable: 'No payment method is available for this delivery city.',
     acceptedPolicies: 'Required agreements',
     mustAccept:
       'Please accept every required agreement and message opt-in before placing the order.',
@@ -213,6 +232,7 @@ export function CheckoutFlow({
   storefrontSlug,
   storefrontBaseHref,
   businessName,
+  logoUrl,
   locale,
   checkout,
   policies,
@@ -223,9 +243,10 @@ export function CheckoutFlow({
    * `https://shop.souqna.qa`). Computed server-side and threaded
    * through so policy-acceptance links resolve from any rendering
    * context (apex, dev, builder preview).
-   */
+  */
   storefrontBaseHref: string;
   businessName: string;
+  logoUrl: string | null;
   locale: 'en' | 'ar';
   checkout: CheckoutSettings;
   policies: StorefrontPolicies;
@@ -235,8 +256,15 @@ export function CheckoutFlow({
   const pathname = usePathname();
   const t = getStrings(locale);
   const checkoutRootHref = checkoutRootHrefForPath(pathname, storefrontSlug);
+  const storefrontRootHref =
+    checkoutRootHref === '/checkout' ? '/' : `/brief/${storefrontSlug}`;
   const policyBaseHref =
     checkoutRootHref === '/checkout' ? storefrontBaseHref : `/brief/${storefrontSlug}`;
+  const experience = checkout.experience;
+  const heroTitle = experience.heroTitle || businessName;
+  const summaryLayout = experience.orderSummaryLayout;
+  const checkoutVars = checkoutExperienceVars(experience) as React.CSSProperties;
+  const checkoutColorScheme = checkoutExperienceColorScheme(experience);
 
   // Step machine. We validate as the buyer attempts to advance (not as
   // they type) so error live-regions only fire on intent.
@@ -272,6 +300,27 @@ export function CheckoutFlow({
   const [pending, start] = useTransition();
   const [promoPending, startPromo] = useTransition();
   const liveRegionRef = useRef<HTMLDivElement | null>(null);
+  const availablePaymentMethods = useMemo(
+    () =>
+      checkoutPaymentMethodsForBuyer(checkout.paymentMethods, true, {
+        city: address.city,
+        rules: checkout.experience.paymentAvailabilityRules,
+        souqnaCity: checkout.experience.souqnaCity,
+      }),
+    [
+      address.city,
+      checkout.experience.paymentAvailabilityRules,
+      checkout.experience.souqnaCity,
+      checkout.paymentMethods,
+    ],
+  );
+
+  useEffect(() => {
+    if (availablePaymentMethods.length === 0) return;
+    if (!availablePaymentMethods.includes(paymentMethod)) {
+      setPaymentMethod(availablePaymentMethods[0]!);
+    }
+  }, [availablePaymentMethods, paymentMethod]);
 
   // Empty cart: bounce back to the storefront. We do this in an effect
   // so the cart can hydrate first — going off [].length === 0 at first
@@ -283,12 +332,17 @@ export function CheckoutFlow({
       return;
     }
     if (cart.items.length === 0 && !pending) {
-      router.replace('/');
+      router.replace(storefrontRootHref);
     }
-  }, [cart.items.length, pending, router]);
+  }, [cart.items.length, pending, router, storefrontRootHref]);
 
   const cartSignature = cart.items
-    .map((it) => `${it.productId}:${it.quantity}:${it.variantLabel ?? ''}:${it.priceQar}`)
+    .map(
+      (it) =>
+        `${it.productId}:${it.quantity}:${it.variantLabel ?? ''}:${JSON.stringify(
+          it.customInputs ?? {},
+        )}:${it.priceQar}`,
+    )
     .join('|');
   useEffect(() => {
     setAppliedDiscount(null);
@@ -297,7 +351,14 @@ export function CheckoutFlow({
   }, [cartSignature, address.city, address.country]);
 
   const subtotal = cart.subtotalQar;
-  const shipping = cart.items.length > 0 ? (checkout.shippingFlatQar ?? 0) : 0;
+  const shipping =
+    cart.items.length > 0
+      ? checkoutDeliveryFeeForBuyer(
+          checkout.shippingFlatQar ?? 0,
+          address.city,
+          checkout.experience.souqnaCity,
+        )
+      : 0;
   const discount = appliedDiscount?.discountQar ?? 0;
   const total = Math.max(subtotal + shipping - discount, 0);
 
@@ -315,7 +376,9 @@ export function CheckoutFlow({
       const v = validateAddress(address, t);
       if (v) return setError(v);
     } else if (id === 'payment') {
-      // Always valid: the radio always has one selection.
+      if (!availablePaymentMethods.includes(paymentMethod)) {
+        return setError({ message: t.paymentUnavailable, field: 'paymentMethod' });
+      }
     }
     go(Math.min(stepIdx + 1, STEPS.length - 1));
   }
@@ -406,6 +469,9 @@ export function CheckoutFlow({
     if (!requiredAccepted) {
       return setError({ message: t.mustAccept, field: 'acceptedPolicies' });
     }
+    if (!availablePaymentMethods.includes(paymentMethod)) {
+      return setError({ message: t.paymentUnavailable, field: 'paymentMethod' });
+    }
     const acceptedKeys = requiredPolicyKeys.filter((k) => accepted[k]);
     if (buyerConsents.cookies) {
       document.cookie = 'souqna-checkout-consent=accepted; path=/; max-age=31536000; SameSite=Lax';
@@ -467,7 +533,30 @@ export function CheckoutFlow({
   }
 
   return (
-    <div>
+    <div
+      className="souqna-checkout-experience"
+      style={{
+        ...checkoutVars,
+        ['--sf-ground' as string]: 'var(--sq-checkout-surface)',
+        ['--sf-ink' as string]: 'var(--sq-checkout-text)',
+        ['--sf-accent' as string]: 'var(--sq-checkout-accent)',
+        background: checkoutExperienceBackground(experience),
+        color: 'var(--sq-checkout-text)',
+        colorScheme: checkoutColorScheme,
+        borderRadius: 28,
+        border: '1px solid color-mix(in srgb, var(--sq-checkout-text) 10%, transparent)',
+        boxShadow: '0 24px 70px color-mix(in srgb, var(--sq-checkout-text) 12%, transparent)',
+        padding: 'clamp(18px, 3vw, 30px)',
+        isolation: 'isolate',
+      }}
+    >
+      {experience.customCss ? <style>{experience.customCss}</style> : null}
+      <CheckoutBrandHeader
+        businessName={businessName}
+        logoUrl={logoUrl}
+        locale={locale}
+        providerReady={availablePaymentMethods.some((method) => isRedirectPaymentMethod(method))}
+      />
       <Stepper stepIdx={stepIdx} stepCount={STEPS.length} t={t} locale={locale} />
 
       <h1
@@ -476,16 +565,41 @@ export function CheckoutFlow({
           fontFamily: 'var(--font-serif, var(--font-sans))',
           fontWeight: 400,
           fontSize: 'clamp(22px, 3vw, 30px)',
-          letterSpacing: '-0.01em',
+          letterSpacing: 0,
         }}
       >
-        {businessName}
+        {heroTitle}
       </h1>
+      {experience.heroSubtitle ? (
+        <p
+          style={{
+            margin: '8px 0 0',
+            maxWidth: 620,
+            fontSize: 14,
+            lineHeight: 1.55,
+            color: 'color-mix(in srgb, currentColor 66%, transparent)',
+          }}
+        >
+          {experience.heroSubtitle}
+        </p>
+      ) : null}
+      <TrustBadges
+        badges={experience.trustBadges}
+        customBadges={experience.customTrustBadges.map((badge) =>
+          locale === 'ar' ? badge.labelAr : badge.labelEn,
+        )}
+        locale={locale}
+      />
 
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 360px)',
+          gridTemplateColumns:
+            summaryLayout === 'bottom'
+              ? 'minmax(0, 1fr)'
+              : summaryLayout === 'compact'
+                ? 'minmax(0, 1fr) minmax(240px, 300px)'
+                : 'minmax(0, 1fr) minmax(280px, 360px)',
           gap: 32,
           marginTop: 24,
         }}
@@ -497,11 +611,20 @@ export function CheckoutFlow({
             <ContactStep contact={contact} setContact={setContact} t={t} error={error} />
           )}
           {STEPS[stepIdx]!.id === 'address' && (
-            <AddressStep address={address} setAddress={setAddress} t={t} error={error} />
+            <AddressStep
+              address={address}
+              setAddress={setAddress}
+              t={t}
+              error={error}
+              locale={locale}
+              addressDesign={checkout.addressDesign}
+              deliveryNotes={experience.deliveryNotes}
+            />
           )}
           {STEPS[stepIdx]!.id === 'payment' && (
             <PaymentStep
               checkout={checkout}
+              paymentMethods={availablePaymentMethods}
               method={paymentMethod}
               setMethod={setPaymentMethod}
               t={t}
@@ -559,7 +682,11 @@ export function CheckoutFlow({
               {t.back}
             </button>
             {STEPS[stepIdx]!.id !== 'review' ? (
-              <button type="button" onClick={tryAdvance} style={primaryBtnStyle(false)}>
+              <button
+                type="button"
+                onClick={tryAdvance}
+                style={primaryBtnStyle(false, experience.buttonStyle)}
+              >
                 {t.next}
               </button>
             ) : (
@@ -567,9 +694,13 @@ export function CheckoutFlow({
                 type="button"
                 onClick={submit}
                 disabled={pending}
-                style={primaryBtnStyle(pending)}
+                style={primaryBtnStyle(pending, experience.buttonStyle)}
               >
-                {pending ? t.placing : t.placeOrder}
+                {pending
+                  ? t.placing
+                  : isRedirectPaymentMethod(paymentMethod)
+                    ? t.continuePayment
+                    : t.placeOrder}
               </button>
             )}
           </nav>
@@ -591,6 +722,7 @@ export function CheckoutFlow({
           promoPending={promoPending}
           promoMessage={promoMessage}
           promoError={promoError}
+          layout={summaryLayout}
         />
       </div>
     </div>
@@ -607,6 +739,180 @@ function ResponsiveGridStyle() {
       }
     `}</style>
   );
+}
+
+function CheckoutBrandHeader({
+  businessName,
+  logoUrl,
+  locale,
+  providerReady,
+}: {
+  businessName: string;
+  logoUrl: string | null;
+  locale: 'en' | 'ar';
+  providerReady: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 14,
+        marginBottom: 18,
+        padding: 12,
+        borderRadius: 20,
+        background: 'color-mix(in srgb, var(--sq-checkout-surface) 82%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--sq-checkout-text) 10%, transparent)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+        <span
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 15,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            background:
+              'linear-gradient(135deg, var(--sq-checkout-accent), color-mix(in srgb, var(--sq-checkout-accent) 58%, #d6ad57))',
+            color: 'var(--sq-checkout-button-text)',
+            fontWeight: 800,
+            flex: '0 0 auto',
+          }}
+        >
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoUrl}
+              alt={businessName}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : (
+            businessName.trim().slice(0, 1).toUpperCase()
+          )}
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <strong
+            style={{
+              display: 'block',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 15,
+            }}
+          >
+            {businessName}
+          </strong>
+          <span
+            style={{
+              color: 'color-mix(in srgb, var(--sq-checkout-text) 62%, transparent)',
+              fontSize: 12,
+            }}
+          >
+            {providerReady
+              ? locale === 'ar'
+                ? 'الدفع الإلكتروني جاهز'
+                : 'Online payment ready'
+              : locale === 'ar'
+                ? 'تأكيد آمن للطلب'
+                : 'Secure order confirmation'}
+          </span>
+        </div>
+      </div>
+      {providerReady ? (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            borderRadius: 999,
+            padding: '7px 10px',
+            background: 'color-mix(in srgb, var(--sq-checkout-accent) 12%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--sq-checkout-accent) 24%, transparent)',
+            color: 'var(--sq-checkout-accent)',
+            fontSize: 12,
+            fontWeight: 800,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {locale === 'ar' ? 'متابعة الدفع' : 'Continue payment'}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function TrustBadges({
+  badges,
+  customBadges,
+  locale,
+}: {
+  badges: CheckoutTrustBadge[];
+  customBadges: string[];
+  locale: 'en' | 'ar';
+}) {
+  const visibleCustomBadges = customBadges.filter((badge) => badge.trim().length > 0);
+  if (badges.length === 0 && visibleCustomBadges.length === 0) return null;
+  return (
+    <div
+      aria-label={locale === 'ar' ? 'شارات الثقة' : 'Checkout trust badges'}
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginTop: 14,
+      }}
+    >
+      {badges.map((badge) => (
+        <span
+          key={badge}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            borderRadius: 999,
+            padding: '6px 10px',
+            border: '1px solid color-mix(in srgb, var(--sq-checkout-accent) 24%, transparent)',
+            background: 'color-mix(in srgb, var(--sq-checkout-accent) 8%, transparent)',
+            color: 'var(--sq-checkout-accent)',
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          {trustBadgeLabel(badge, locale)}
+        </span>
+      ))}
+      {visibleCustomBadges.map((badge, index) => (
+        <span
+          key={`${badge}-${index}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            borderRadius: 999,
+            padding: '6px 10px',
+            border: '1px solid color-mix(in srgb, var(--sq-checkout-accent) 28%, transparent)',
+            background: 'color-mix(in srgb, var(--sq-checkout-accent) 12%, transparent)',
+            color: 'var(--sq-checkout-accent)',
+            fontSize: 12,
+            fontWeight: 700,
+          }}
+        >
+          {badge}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function trustBadgeLabel(badge: CheckoutTrustBadge, locale: 'en' | 'ar') {
+  const labels: Record<CheckoutTrustBadge, { en: string; ar: string }> = {
+    secure_checkout: { en: 'Secure checkout', ar: 'دفع آمن' },
+    fast_confirmation: { en: 'Fast confirmation', ar: 'تأكيد سريع' },
+    whatsapp_support: { en: 'WhatsApp support', ar: 'دعم واتساب' },
+    local_delivery: { en: 'Local delivery', ar: 'توصيل محلي' },
+  };
+  return labels[badge][locale];
 }
 
 function Stepper({
@@ -636,7 +942,7 @@ function Stepper({
           style={{
             width: `${pct}%`,
             height: '100%',
-            background: 'var(--sf-accent, var(--color-gold-deep))',
+            background: 'var(--sq-checkout-accent)',
             transition: 'width 240ms ease',
           }}
         />
@@ -759,80 +1065,447 @@ function AddressStep({
   setAddress,
   t,
   error,
+  locale,
+  addressDesign,
+  deliveryNotes,
+}: {
+  address: Address;
+  setAddress: (a: Address) => void;
+  t: Strings;
+  error: { message: string; field?: string } | null;
+  locale: 'en' | 'ar';
+  addressDesign: CheckoutAddressDesign;
+  deliveryNotes: string | null;
+}) {
+  const titleId = useId();
+  const design = addressDesign ?? 'qatar_plate';
+  return (
+    <section aria-labelledby={titleId}>
+      <StepHeader id={titleId} title={t.addressTitle} subtitle={t.addressSubtitle} />
+      {deliveryNotes ? <DeliveryNotesBlock>{deliveryNotes}</DeliveryNotesBlock> : null}
+      {design === 'classic' ? (
+        <ClassicAddressFields address={address} setAddress={setAddress} t={t} error={error} />
+      ) : (
+        <div style={fieldStackStyle()}>
+          {design === 'qatar_plate' ? (
+            <QatarAddressPlate
+              address={address}
+              setAddress={setAddress}
+              locale={locale}
+              error={error}
+            />
+          ) : (
+            <SoftAddressFields
+              address={address}
+              setAddress={setAddress}
+              locale={locale}
+              error={error}
+            />
+          )}
+          <AddressSupportFields address={address} setAddress={setAddress} t={t} error={error} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DeliveryNotesBlock({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        margin: '0 0 14px',
+        padding: 12,
+        borderRadius: 12,
+        border: '1px dashed color-mix(in srgb, var(--sf-accent, currentColor) 34%, transparent)',
+        background: 'color-mix(in srgb, var(--sf-accent, currentColor) 7%, transparent)',
+        color: 'color-mix(in srgb, currentColor 74%, transparent)',
+        fontSize: 13,
+        lineHeight: 1.5,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ClassicAddressFields({
+  address,
+  setAddress,
+  t,
+  error,
 }: {
   address: Address;
   setAddress: (a: Address) => void;
   t: Strings;
   error: { message: string; field?: string } | null;
 }) {
-  const titleId = useId();
   return (
-    <section aria-labelledby={titleId}>
-      <StepHeader id={titleId} title={t.addressTitle} subtitle={t.addressSubtitle} />
-      <div style={fieldStackStyle()}>
+    <div style={fieldStackStyle()}>
+      <Field
+        label={t.line1}
+        value={address.line1}
+        onChange={(v) => setAddress({ ...address, line1: v })}
+        required
+        autoComplete="address-line1"
+        error={error?.field === 'address.line1' ? error.message : undefined}
+      />
+      <Field
+        label={t.line2}
+        value={address.line2}
+        onChange={(v) => setAddress({ ...address, line2: v })}
+        autoComplete="address-line2"
+      />
+      <div style={twoColStyle()}>
         <Field
-          label={t.line1}
+          label={t.area}
+          value={address.area}
+          onChange={(v) => setAddress({ ...address, area: v })}
+        />
+        <Field
+          label={t.city}
+          value={address.city}
+          onChange={(v) => setAddress({ ...address, city: v })}
+          required
+          autoComplete="address-level2"
+          error={error?.field === 'address.city' ? error.message : undefined}
+        />
+      </div>
+      <div style={twoColStyle()}>
+        <SelectField
+          label={t.country}
+          value={address.country}
+          onChange={(v) => setAddress({ ...address, country: v })}
+          options={COUNTRIES.map((c) => ({ value: c, label: c }))}
+          required
+        />
+        <Field
+          label={t.zip}
+          value={address.zip}
+          onChange={(v) => setAddress({ ...address, zip: v })}
+          autoComplete="postal-code"
+        />
+      </div>
+      <Field
+        label={t.notes}
+        value={address.notes}
+        onChange={(v) => setAddress({ ...address, notes: v })}
+        textarea
+      />
+    </div>
+  );
+}
+
+function AddressSupportFields({
+  address,
+  setAddress,
+  t,
+  error,
+}: {
+  address: Address;
+  setAddress: (a: Address) => void;
+  t: Strings;
+  error: { message: string; field?: string } | null;
+}) {
+  return (
+    <>
+      <div style={twoColStyle()}>
+        <Field
+          label={t.city}
+          value={address.city}
+          onChange={(v) => setAddress({ ...address, city: v })}
+          required
+          autoComplete="address-level2"
+          error={error?.field === 'address.city' ? error.message : undefined}
+        />
+        <SelectField
+          label={t.country}
+          value={address.country}
+          onChange={(v) => setAddress({ ...address, country: v })}
+          options={COUNTRIES.map((c) => ({ value: c, label: c }))}
+          required
+        />
+      </div>
+      <Field
+        label={t.notes}
+        value={address.notes}
+        onChange={(v) => setAddress({ ...address, notes: v })}
+        textarea
+      />
+    </>
+  );
+}
+
+function SoftAddressFields({
+  address,
+  setAddress,
+  locale,
+  error,
+}: {
+  address: Address;
+  setAddress: (a: Address) => void;
+  locale: 'en' | 'ar';
+  error: { message: string; field?: string } | null;
+}) {
+  const labels = addressPlateLabels(locale);
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+        gap: 12,
+        padding: 14,
+        borderRadius: 18,
+        border: '1px solid color-mix(in srgb, currentColor 12%, transparent)',
+        background:
+          'linear-gradient(135deg, color-mix(in srgb, var(--sf-accent, #c7a45b) 13%, var(--sf-ground)), var(--sf-ground))',
+        boxShadow: '0 16px 40px color-mix(in srgb, #000 8%, transparent)',
+      }}
+    >
+      <div style={{ gridColumn: '1 / -1' }}>
+        <Field
+          label={labels.house}
           value={address.line1}
           onChange={(v) => setAddress({ ...address, line1: v })}
           required
           autoComplete="address-line1"
+          inputMode="numeric"
           error={error?.field === 'address.line1' ? error.message : undefined}
         />
-        <Field
-          label={t.line2}
-          value={address.line2}
-          onChange={(v) => setAddress({ ...address, line2: v })}
-          autoComplete="address-line2"
+      </div>
+      <Field
+        label={labels.zone}
+        value={address.area}
+        onChange={(v) => setAddress({ ...address, area: v })}
+        inputMode="numeric"
+      />
+      <Field
+        label={labels.street}
+        value={address.line2}
+        onChange={(v) => setAddress({ ...address, line2: v })}
+        autoComplete="address-line2"
+      />
+    </div>
+  );
+}
+
+function QatarAddressPlate({
+  address,
+  setAddress,
+  locale,
+  error,
+}: {
+  address: Address;
+  setAddress: (a: Address) => void;
+  locale: 'en' | 'ar';
+  error: { message: string; field?: string } | null;
+}) {
+  const labels = addressPlateLabels(locale);
+  return (
+    <div
+      style={{
+        position: 'relative',
+        display: 'grid',
+        gap: 5,
+        padding: 13,
+        borderRadius: 20,
+        background: 'linear-gradient(180deg, #e7d6ac, #c8ad76)',
+        border: '1px solid #8c7653',
+        boxShadow:
+          '0 22px 50px color-mix(in srgb, #000 18%, transparent), inset 0 0 0 2px rgba(255,255,255,0.38)',
+      }}
+    >
+      <PlateScrew inline="start" block="start" />
+      <PlateScrew inline="end" block="start" />
+      <PlateScrew inline="start" block="end" />
+      <PlateScrew inline="end" block="end" />
+      <div
+        style={{
+          borderRadius: 14,
+          overflow: 'hidden',
+          border: '1px solid rgba(255,255,255,0.38)',
+          background: '#043f7f',
+          boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.18)',
+        }}
+      >
+        <PlateInput
+          labelEn="House / Building No."
+          labelAr="رقم المنزل / المبنى"
+          label={labels.house}
+          value={address.line1}
+          onChange={(v) => setAddress({ ...address, line1: v })}
+          placeholder="4"
+          required
+          autoComplete="address-line1"
+          inputMode="numeric"
+          large
+          error={error?.field === 'address.line1' ? error.message : undefined}
         />
-        <div style={twoColStyle()}>
-          <Field
-            label={t.area}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 0.86fr) minmax(0, 1.14fr)',
+            gap: 1,
+            borderTop: '1px solid rgba(255,255,255,0.36)',
+          }}
+        >
+          <PlateInput
+            labelEn="Zone"
+            labelAr="منطقة"
+            label={labels.zone}
             value={address.area}
             onChange={(v) => setAddress({ ...address, area: v })}
+            placeholder="38"
+            inputMode="numeric"
           />
-          <Field
-            label={t.city}
-            value={address.city}
-            onChange={(v) => setAddress({ ...address, city: v })}
-            required
-            autoComplete="address-level2"
-            error={error?.field === 'address.city' ? error.message : undefined}
-          />
-        </div>
-        <div style={twoColStyle()}>
-          <SelectField
-            label={t.country}
-            value={address.country}
-            onChange={(v) => setAddress({ ...address, country: v })}
-            options={COUNTRIES.map((c) => ({ value: c, label: c }))}
-            required
-          />
-          <Field
-            label={t.zip}
-            value={address.zip}
-            onChange={(v) => setAddress({ ...address, zip: v })}
-            autoComplete="postal-code"
+          <PlateInput
+            labelEn="Street"
+            labelAr="شارع"
+            label={labels.street}
+            value={address.line2}
+            onChange={(v) => setAddress({ ...address, line2: v })}
+            placeholder="856"
+            autoComplete="address-line2"
           />
         </div>
-        <Field
-          label={t.notes}
-          value={address.notes}
-          onChange={(v) => setAddress({ ...address, notes: v })}
-          textarea
-        />
       </div>
-    </section>
+    </div>
   );
+}
+
+function PlateInput({
+  labelEn,
+  labelAr,
+  label,
+  value,
+  onChange,
+  placeholder,
+  required,
+  autoComplete,
+  inputMode,
+  large,
+  error,
+}: {
+  labelEn: string;
+  labelAr: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  required?: boolean;
+  autoComplete?: string;
+  inputMode?: 'text' | 'tel' | 'email' | 'numeric';
+  large?: boolean;
+  error?: string;
+}) {
+  const id = useId();
+  const errorId = error ? `${id}-err` : undefined;
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gap: large ? 5 : 4,
+        padding: large ? '16px 18px 18px' : '11px 12px 12px',
+        background: large
+          ? 'linear-gradient(180deg, #0756a5, #044987)'
+          : 'linear-gradient(180deg, #07529d, #04457f)',
+        color: '#fff',
+      }}
+    >
+      <label
+        htmlFor={id}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          fontSize: large ? 13 : 10.5,
+          lineHeight: 1.2,
+          opacity: 0.9,
+        }}
+      >
+        <span>{labelAr}</span>
+        <span>{labelEn}</span>
+      </label>
+      <input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        autoComplete={autoComplete}
+        inputMode={inputMode}
+        aria-label={label}
+        aria-invalid={Boolean(error) || undefined}
+        aria-describedby={errorId}
+        placeholder={placeholder}
+        style={{
+          width: '100%',
+          border: 'none',
+          borderRadius: large ? 12 : 9,
+          outline: 'none',
+          background: 'rgba(255,255,255,0.1)',
+          boxShadow: error
+            ? 'inset 0 0 0 2px #ffd1d1'
+            : 'inset 0 0 0 1px rgba(255,255,255,0.22)',
+          color: '#fff',
+          padding: large ? '8px 10px' : '7px 8px',
+          textAlign: 'center',
+          fontFamily: large ? 'var(--font-serif, var(--font-sans))' : 'var(--font-mono)',
+          fontSize: large ? 42 : 26,
+          lineHeight: 1,
+          boxSizing: 'border-box',
+        }}
+      />
+      {error ? (
+        <span id={errorId} role="alert" style={{ fontSize: 11, color: '#ffe4e4' }}>
+          {error}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function PlateScrew({ inline, block }: { inline: 'start' | 'end'; block: 'start' | 'end' }) {
+  const style: React.CSSProperties = {
+    position: 'absolute',
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    background: 'radial-gradient(circle at 34% 30%, #f2e7c7, #6d6559 64%, #3f3b35)',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.35)',
+    zIndex: 1,
+  };
+  if (inline === 'start') style.left = 14;
+  else style.right = 14;
+  if (block === 'start') style.top = 14;
+  else style.bottom = 14;
+  return <span aria-hidden style={style} />;
+}
+
+function addressPlateLabels(locale: 'en' | 'ar') {
+  if (locale === 'ar') {
+    return {
+      house: 'رقم المنزل / House No.',
+      zone: 'المنطقة / Zone',
+      street: 'الشارع / Street',
+    };
+  }
+  return {
+    house: 'House No. / رقم المنزل',
+    zone: 'Zone / المنطقة',
+    street: 'Street / الشارع',
+  };
 }
 
 function PaymentStep({
   checkout,
+  paymentMethods,
   method,
   setMethod,
   t,
   locale,
 }: {
   checkout: CheckoutSettings;
+  paymentMethods: PaymentMethod[];
   method: PaymentMethod;
   setMethod: (m: PaymentMethod) => void;
   t: Strings;
@@ -843,12 +1516,16 @@ function PaymentStep({
     <section aria-labelledby={titleId}>
       <StepHeader id={titleId} title={t.paymentTitle} subtitle={t.paymentSubtitle} />
       <div role="radiogroup" aria-labelledby={titleId} style={fieldStackStyle()}>
-        {checkout.paymentMethods.includes('cod') && (
+        {paymentMethods.length === 0 ? (
+          <p style={paymentBodyStyle()}>{t.paymentUnavailable}</p>
+        ) : null}
+        {paymentMethods.includes('cod') && (
           <PaymentCard
             id="cod"
             checked={method === 'cod'}
             onSelect={() => setMethod('cod')}
             title={t.cod}
+            cardStyle={checkout.experience.paymentCardStyle}
           >
             <p style={paymentBodyStyle()}>
               {locale === 'ar'
@@ -857,12 +1534,13 @@ function PaymentStep({
             </p>
           </PaymentCard>
         )}
-        {checkout.paymentMethods.includes('bank_transfer') && (
+        {paymentMethods.includes('bank_transfer') && (
           <PaymentCard
             id="bank_transfer"
             checked={method === 'bank_transfer'}
             onSelect={() => setMethod('bank_transfer')}
             title={t.bank}
+            cardStyle={checkout.experience.paymentCardStyle}
           >
             {checkout.bankDetails ? (
               <BankDetailsCard details={checkout.bankDetails} t={t} />
@@ -871,12 +1549,13 @@ function PaymentStep({
             )}
           </PaymentCard>
         )}
-        {checkout.paymentMethods.includes('fawran') && (
+        {paymentMethods.includes('fawran') && (
           <PaymentCard
             id="fawran"
             checked={method === 'fawran'}
             onSelect={() => setMethod('fawran')}
             title={t.fawran}
+            cardStyle={checkout.experience.paymentCardStyle}
           >
             <p style={paymentBodyStyle()}>
               {checkout.bankDetails?.notes ??
@@ -886,12 +1565,13 @@ function PaymentStep({
             </p>
           </PaymentCard>
         )}
-        {checkout.paymentMethods.includes('pay_link') && (
+        {paymentMethods.includes('pay_link') && (
           <PaymentCard
             id="pay_link"
             checked={method === 'pay_link'}
             onSelect={() => setMethod('pay_link')}
             title={t.payLink}
+            cardStyle={checkout.experience.paymentCardStyle}
           >
             {checkout.payLink ? (
               <div
@@ -911,12 +1591,13 @@ function PaymentStep({
             ) : null}
           </PaymentCard>
         )}
-        {checkout.paymentMethods.includes('skipcash') && (
+        {paymentMethods.includes('skipcash') && (
           <PaymentCard
             id="skipcash"
             checked={method === 'skipcash'}
             onSelect={() => setMethod('skipcash')}
             title={t.skipCash}
+            cardStyle={checkout.experience.paymentCardStyle}
           >
             <p style={paymentBodyStyle()}>
               {locale === 'ar'
@@ -925,12 +1606,13 @@ function PaymentStep({
             </p>
           </PaymentCard>
         )}
-        {checkout.paymentMethods.includes('sadad') && (
+        {paymentMethods.includes('sadad') && (
           <PaymentCard
             id="sadad"
             checked={method === 'sadad'}
             onSelect={() => setMethod('sadad')}
             title={t.sadad}
+            cardStyle={checkout.experience.paymentCardStyle}
           >
             <p style={paymentBodyStyle()}>
               {locale === 'ar'
@@ -949,28 +1631,36 @@ function PaymentCard({
   checked,
   onSelect,
   title,
+  cardStyle,
   children,
 }: {
   id: string;
   checked: boolean;
   onSelect: () => void;
   title: string;
+  cardStyle: CheckoutPaymentCardStyle;
   children: React.ReactNode;
 }) {
+  const compact = cardStyle === 'compact';
+  const bordered = cardStyle === 'bordered';
   return (
     <label
       style={{
         display: 'flex',
         alignItems: 'flex-start',
-        gap: 14,
-        padding: 16,
-        borderRadius: 12,
+        gap: compact ? 10 : 14,
+        padding: compact ? 12 : 16,
+        borderRadius: compact ? 10 : 12,
         border: checked
-          ? '1.5px solid var(--sf-accent, var(--color-gold-deep))'
-          : '1px solid color-mix(in srgb, currentColor 14%, transparent)',
+          ? '1.5px solid var(--sq-checkout-accent)'
+          : bordered
+            ? '1px solid color-mix(in srgb, currentColor 22%, transparent)'
+            : '1px solid color-mix(in srgb, currentColor 14%, transparent)',
         background: checked
-          ? 'color-mix(in srgb, var(--sf-accent, var(--color-gold-deep)) 6%, transparent)'
-          : 'transparent',
+          ? 'color-mix(in srgb, var(--sq-checkout-accent) 8%, transparent)'
+          : bordered
+            ? 'transparent'
+            : 'color-mix(in srgb, var(--sf-ink, currentColor) 2.5%, transparent)',
         cursor: 'pointer',
       }}
     >
@@ -983,7 +1673,9 @@ function PaymentCard({
         style={{ marginTop: 4 }}
       />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 6 }}>{title}</div>
+        <div style={{ fontSize: compact ? 14 : 15, fontWeight: 500, marginBottom: compact ? 3 : 6 }}>
+          {title}
+        </div>
         {children}
       </div>
     </label>
@@ -1597,6 +2289,7 @@ function OrderSummary({
   promoPending,
   promoMessage,
   promoError,
+  layout,
 }: {
   t: Strings;
   items: ReturnType<typeof useCart>['items'];
@@ -1613,20 +2306,25 @@ function OrderSummary({
   promoPending: boolean;
   promoMessage: string | null;
   promoError: string | null;
+  layout: CheckoutOrderSummaryLayout;
 }) {
   const promoInputId = useId();
   const promoStatusId = `${promoInputId}-status`;
+  const compact = layout === 'compact';
+  const bottom = layout === 'bottom';
   return (
     <aside
       aria-label={t.orderSummary}
       style={{
-        padding: 18,
-        borderRadius: 12,
+        padding: compact ? 14 : 18,
+        borderRadius: compact ? 10 : 12,
         border: '1px solid color-mix(in srgb, currentColor 12%, transparent)',
-        background: 'color-mix(in srgb, var(--sf-ink, currentColor) 3%, transparent)',
+        background: compact
+          ? 'color-mix(in srgb, var(--sf-ink, currentColor) 2%, transparent)'
+          : 'color-mix(in srgb, var(--sf-ink, currentColor) 3%, transparent)',
         height: 'fit-content',
-        position: 'sticky',
-        top: 24,
+        position: bottom ? 'static' : 'sticky',
+        top: bottom ? undefined : 24,
       }}
     >
       <h2
@@ -1682,6 +2380,18 @@ function OrderSummary({
                   }}
                 >
                   Size: {it.variantLabel}
+                </div>
+              ) : null}
+              {it.customInputs?.variant ? (
+                <div
+                  style={{
+                    marginTop: 2,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    color: 'color-mix(in srgb, currentColor 58%, transparent)',
+                  }}
+                >
+                  {it.customInputs.variantLabel || 'Variant'}: {it.customInputs.variant}
                 </div>
               ) : null}
               {it.customInputs?.height ? (
@@ -1965,7 +2675,7 @@ function inputStyle(invalid: boolean): React.CSSProperties {
     border: invalid
       ? '1.5px solid var(--color-maroon, #8b3a3a)'
       : '1px solid color-mix(in srgb, currentColor 18%, transparent)',
-    background: 'var(--sf-ground, var(--surface-bg))',
+    background: 'var(--sq-checkout-surface, var(--sf-ground, var(--surface-bg)))',
     color: 'inherit',
     fontFamily: 'inherit',
     fontSize: 14,
@@ -1993,13 +2703,36 @@ function subtleStyle(): React.CSSProperties {
   return { color: 'color-mix(in srgb, currentColor 65%, transparent)', fontSize: 13 };
 }
 
-function primaryBtnStyle(disabled: boolean): React.CSSProperties {
+function primaryBtnStyle(
+  disabled: boolean,
+  style: CheckoutButtonStyle = 'solid',
+): React.CSSProperties {
+  const styles: Record<CheckoutButtonStyle, Pick<React.CSSProperties, 'background' | 'color' | 'border'>> = {
+    solid: {
+      background: 'var(--sq-checkout-text)',
+      color: 'var(--sq-checkout-surface)',
+      border: '1px solid var(--sq-checkout-text)',
+    },
+    maroon: {
+      background: 'var(--sq-checkout-accent)',
+      color: 'var(--sq-checkout-button-text)',
+      border: '1px solid var(--sq-checkout-accent)',
+    },
+    gold: {
+      background: 'var(--sq-checkout-accent)',
+      color: 'var(--sq-checkout-button-text)',
+      border: '1px solid var(--sq-checkout-accent)',
+    },
+    outline: {
+      background: 'transparent',
+      color: 'var(--sq-checkout-accent)',
+      border: '1px solid var(--sq-checkout-accent)',
+    },
+  };
   return {
     padding: '11px 20px',
     borderRadius: 999,
-    background: 'var(--sf-ink, var(--ink-strong))',
-    color: 'var(--sf-ground, var(--surface-bg))',
-    border: 'none',
+    ...styles[style],
     fontSize: 13.5,
     fontWeight: 500,
     cursor: disabled ? 'not-allowed' : 'pointer',

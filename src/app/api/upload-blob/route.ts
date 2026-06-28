@@ -8,7 +8,10 @@ import {
   getStorefrontStorageUsedBytes,
   isFileNamespace,
   remainingStorefrontStorageBytes,
+  storageLimitBytesForPlan,
 } from '@/lib/files';
+import { STOREFRONT_UPLOAD_CONTENT_TYPES } from '@/lib/media';
+import { getPlan } from '@/lib/billing';
 
 /**
  * Single client-upload endpoint for dashboard assets. Paths must be
@@ -50,22 +53,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const owner = await assertStorefrontOwner(storefrontSlug, userId);
         if (!owner) throw new Error('forbidden');
 
-        const usedBytes = await getStorefrontStorageUsedBytes(storefrontSlug);
-        const remainingBytes = remainingStorefrontStorageBytes(usedBytes);
+        const [usedBytes, plan] = await Promise.all([
+          getStorefrontStorageUsedBytes(storefrontSlug),
+          getPlan(owner.clerkUserId),
+        ]);
+        const storageLimitBytes = storageLimitBytesForPlan(plan);
+        const remainingBytes = remainingStorefrontStorageBytes(usedBytes, storageLimitBytes);
         if (payload.size > remainingBytes) {
           throw new Error('storage_quota_exceeded');
         }
 
         return {
-          allowedContentTypes: [
-            'image/png',
-            'image/jpeg',
-            'image/jpg',
-            'image/webp',
-            'image/svg+xml',
-            'image/x-icon',
-            'image/vnd.microsoft.icon',
-          ],
+          allowedContentTypes: [...STOREFRONT_UPLOAD_CONTENT_TYPES],
           maximumSizeInBytes: Math.min(MAX_UPLOAD_BYTES, remainingBytes),
           addRandomSuffix: true,
           tokenPayload: JSON.stringify({

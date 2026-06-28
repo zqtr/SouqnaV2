@@ -16,7 +16,7 @@
  *
  *     {
  *       slug: string,
- *       paymentMethods: Array<'cod'|'bank_transfer'|'skipcash'|'sadad'|'pay_link'>,
+ *       paymentMethods: Array<'cod'|'fawran'|'bank_transfer'|'skipcash'|'sadad'|'pay_link'>,
  *       bankDetails: { accountName, iban, bankName, swift?, notes? } | null,
  *       skipCash: { clientId, keyId, keySecret, webhookKey?, confirmCr? } | null,
  *       sadad: { merchantId, website, secretKey } | null,
@@ -24,6 +24,7 @@
  *       currency: string,
  *       minOrderQar: number | null,
  *       shippingFlatQar: number | null,
+ *       addressDesign: 'qatar_plate'|'soft_card'|'classic',
  *       thankYou: { title?, message?, ctaLabel?, ctaUrl?, showOrderSummary }
  *     }
  *
@@ -44,7 +45,15 @@ import { assertStorefrontOwner } from '@/lib/products';
 import { recordAudit } from '@/lib/audit';
 import { PALETTE_IDS } from '@/lib/palettes';
 import {
+  CHECKOUT_ADDRESS_DESIGNS,
+  CHECKOUT_BACKGROUND_PRESETS,
+  CHECKOUT_BUTTON_STYLES,
+  CHECKOUT_ORDER_SUMMARY_LAYOUTS,
+  CHECKOUT_PAYMENT_CARD_STYLES,
+  CHECKOUT_THANK_YOU_STYLES,
+  CHECKOUT_TRUST_BADGES,
   CONFIGURABLE_PAYMENT_METHODS,
+  SOUQNA_CITY_REGIONS,
   checkoutPaymentMethodsForPlan,
   isOnlinePaymentMethod,
   POLICY_KEYS,
@@ -53,8 +62,18 @@ import {
   writeStorefrontSkipCashSetup,
   writeStorefrontPolicies,
   type CheckoutSettings,
+  type CheckoutAddressDesign,
+  type CheckoutBackgroundPreset,
+  type CheckoutButtonStyle,
+  type CheckoutCustomColors,
+  type CheckoutCustomTrustBadge,
+  type CheckoutOrderSummaryLayout,
+  type CheckoutPaymentCardStyle,
+  type CheckoutThankYouStyle,
+  type CheckoutTrustBadge,
   type PaymentMethod,
   type PolicyKey,
+  type SouqnaCityRegion,
   type StorefrontPolicies,
 } from '@/lib/storefrontSettings';
 import { encryptToken } from '@/lib/apps/crypto';
@@ -358,6 +377,126 @@ const ThankYouSchema = z.object({
   showOrderSummary: z.boolean().optional(),
 });
 
+const nullableHexColor = z
+  .string()
+  .trim()
+  .max(9)
+  .nullable()
+  .transform((value) => (value && value.length > 0 ? value : null))
+  .refine((value) => value === null || /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(value), {
+    message: 'Use a hex color like #8B3A3A.',
+  });
+
+const CustomColorsSchema = z.object({
+  background: nullableHexColor.optional(),
+  surface: nullableHexColor.optional(),
+  accent: nullableHexColor.optional(),
+  text: nullableHexColor.optional(),
+  buttonText: nullableHexColor.optional(),
+}).transform(
+  (colors): CheckoutCustomColors => ({
+    background: colors.background ?? null,
+    surface: colors.surface ?? null,
+    accent: colors.accent ?? null,
+    text: colors.text ?? null,
+    buttonText: colors.buttonText ?? null,
+  }),
+);
+
+const CustomTrustBadgeSchema = z.object({
+  labelEn: z.string().trim().max(48).optional().default(''),
+  labelAr: z.string().trim().max(48).optional().default(''),
+});
+
+const SouqnaCityRuleSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  city: z.string().trim().min(1).max(80),
+  region: z
+    .enum(SOUQNA_CITY_REGIONS as unknown as [SouqnaCityRegion, ...SouqnaCityRegion[]])
+    .default('custom'),
+  enabled: z.boolean().default(true),
+  paymentMethods: z
+    .array(z.enum(CONFIGURABLE_PAYMENT_METHODS as unknown as [PaymentMethod, ...PaymentMethod[]]))
+    .min(1)
+    .max(CONFIGURABLE_PAYMENT_METHODS.length)
+    .transform((arr) => Array.from(new Set(arr)) as PaymentMethod[]),
+  deliveryFeeQar: z.number().int().min(0).max(1_000_000).nullable(),
+});
+
+const SouqnaCitySettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+  autoMatchNearest: z.boolean().default(true),
+  rules: z
+    .array(SouqnaCityRuleSchema)
+    .max(30)
+    .transform((rules) => {
+      const seen = new Set<string>();
+      return rules.filter((rule) => {
+        const key = rule.city.trim().toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }),
+});
+
+const CheckoutExperienceSchema = z.object({
+  heroTitle: nullableTrimmedText(120).optional(),
+  heroSubtitle: nullableTrimmedText(240).optional(),
+  backgroundPreset: z
+    .enum(
+      CHECKOUT_BACKGROUND_PRESETS as unknown as [
+        CheckoutBackgroundPreset,
+        ...CheckoutBackgroundPreset[],
+      ],
+    )
+    .optional(),
+  customColors: CustomColorsSchema.optional(),
+  customCss: nullableTrimmedText(2500).optional(),
+  buttonStyle: z
+    .enum(CHECKOUT_BUTTON_STYLES as unknown as [CheckoutButtonStyle, ...CheckoutButtonStyle[]])
+    .optional(),
+  trustBadges: z
+    .array(z.enum(CHECKOUT_TRUST_BADGES as unknown as [CheckoutTrustBadge, ...CheckoutTrustBadge[]]))
+    .optional()
+    .transform((arr) => (arr ? Array.from(new Set(arr)) : undefined)),
+  customTrustBadges: z
+    .array(CustomTrustBadgeSchema)
+    .max(6)
+    .optional()
+    .transform((items) =>
+      items
+        ?.map((item) => ({
+          labelEn: (item.labelEn || item.labelAr).trim(),
+          labelAr: (item.labelAr || item.labelEn).trim(),
+        }))
+        .filter((item): item is CheckoutCustomTrustBadge =>
+          Boolean(item.labelEn || item.labelAr),
+        ),
+    ),
+  deliveryNotes: nullableTrimmedText(420).optional(),
+  paymentCardStyle: z
+    .enum(
+      CHECKOUT_PAYMENT_CARD_STYLES as unknown as [
+        CheckoutPaymentCardStyle,
+        ...CheckoutPaymentCardStyle[],
+      ],
+    )
+    .optional(),
+  orderSummaryLayout: z
+    .enum(
+      CHECKOUT_ORDER_SUMMARY_LAYOUTS as unknown as [
+        CheckoutOrderSummaryLayout,
+        ...CheckoutOrderSummaryLayout[],
+      ],
+    )
+    .optional(),
+  thankYouStyle: z
+    .enum(CHECKOUT_THANK_YOU_STYLES as unknown as [CheckoutThankYouStyle, ...CheckoutThankYouStyle[]])
+    .optional(),
+  souqnaCity: SouqnaCitySettingsSchema.optional(),
+});
+
 const CheckoutInputSchema = z.object({
   slug: z.string().trim().min(1).max(64),
   paymentMethods: z
@@ -381,10 +520,30 @@ const CheckoutInputSchema = z.object({
     .default('QAR'),
   minOrderQar: z.number().int().min(0).max(1_000_000).nullable(),
   shippingFlatQar: z.number().int().min(0).max(1_000_000).nullable(),
+  addressDesign: z
+    .enum(CHECKOUT_ADDRESS_DESIGNS as unknown as [CheckoutAddressDesign, ...CheckoutAddressDesign[]])
+    .default('qatar_plate'),
+  experience: CheckoutExperienceSchema.optional(),
   thankYou: ThankYouSchema.optional(),
 });
 
 export type UpdateCheckoutSettingsInput = z.input<typeof CheckoutInputSchema>;
+
+const CheckoutExperienceInputSchema = z.object({
+  slug: z.string().trim().min(1).max(64),
+  addressDesign: z.enum(
+    CHECKOUT_ADDRESS_DESIGNS as unknown as [CheckoutAddressDesign, ...CheckoutAddressDesign[]],
+  ),
+  experience: CheckoutExperienceSchema,
+  thankYou: ThankYouSchema.optional(),
+});
+
+export type UpdateCheckoutExperienceInput = z.input<typeof CheckoutExperienceInputSchema>;
+
+export type CheckoutExperienceActionState =
+  | { status: 'idle' }
+  | { status: 'success'; updatedAt: string; checkout: CheckoutSettings }
+  | { status: 'error'; message: string; field?: string };
 
 function maskIban(iban: string): string {
   const trimmed = iban.replace(/\s+/g, '');
@@ -425,7 +584,7 @@ export async function updateCheckoutSettings(
     return {
       status: 'error',
       message:
-        'Online payments require Pro+ or Max+. Pro can receive orders and WhatsApp notifications with cash on delivery.',
+        'Provider payments require Pro+ or Max+. Free and Pro can receive orders with cash on delivery and Fawran.',
       field: 'paymentMethods',
     };
   }
@@ -582,9 +741,27 @@ export async function updateCheckoutSettings(
     };
   }
 
+  const experience = data.experience
+    ? { ...owner.checkout.experience, ...data.experience }
+    : owner.checkout.experience;
+  if (data.experience?.souqnaCity) {
+    experience.souqnaCity = {
+      ...data.experience.souqnaCity,
+      rules: data.experience.souqnaCity.rules.map((rule) => ({
+        ...rule,
+        paymentMethods: checkoutPaymentMethodsForPlan(rule.paymentMethods, canAcceptOnlinePayments),
+      })),
+    };
+  }
+
   const settings: CheckoutSettings = {
+    enabled: true,
     paymentMethods,
-    bankDetails: paymentMethods.includes('bank_transfer') ? data.bankDetails : null,
+    bankDetails: paymentMethods.includes('bank_transfer')
+      ? data.bankDetails
+      : paymentMethods.includes('fawran')
+        ? owner.checkout.bankDetails
+        : null,
     payLink: paymentMethods.includes('pay_link') ? data.payLink : null,
     skipCash: owner.checkout.skipCash,
     sadad: owner.checkout.sadad,
@@ -592,6 +769,8 @@ export async function updateCheckoutSettings(
     currency: data.currency,
     minOrderQar: data.minOrderQar,
     shippingFlatQar: data.shippingFlatQar,
+    addressDesign: data.addressDesign,
+    experience,
     thankYou: data.thankYou
       ? { ...owner.checkout.thankYou, ...data.thankYou }
       : owner.checkout.thankYou,
@@ -657,6 +836,12 @@ export async function updateCheckoutSettings(
         sadadCredentialsUpdated: providedSadadCredentials,
         minOrderQar: settings.minOrderQar,
         shippingFlatQar: settings.shippingFlatQar,
+        addressDesign: settings.addressDesign,
+        checkoutExperienceCustomized: Boolean(
+          settings.experience.heroTitle ||
+            settings.experience.heroSubtitle ||
+            settings.experience.deliveryNotes,
+        ),
         thankYouCustomized: Boolean(settings.thankYou.title || settings.thankYou.message),
         thankYouCtaConfigured: Boolean(settings.thankYou.ctaLabel && settings.thankYou.ctaUrl),
       },
@@ -669,4 +854,68 @@ export async function updateCheckoutSettings(
   revalidatePath(`/${data.slug}`);
 
   return { status: 'success', updatedAt: new Date().toISOString() };
+}
+
+export async function updateCheckoutExperienceSettings(
+  input: UpdateCheckoutExperienceInput,
+): Promise<CheckoutExperienceActionState> {
+  const parsed = CheckoutExperienceInputSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return {
+      status: 'error',
+      message: issue?.message ?? 'Invalid checkout design settings.',
+      field: issue?.path?.[0] as string | undefined,
+    };
+  }
+
+  const { userId } = await auth();
+  if (!userId) return { status: 'error', message: 'Sign in to save changes.' };
+
+  const owner = await assertStorefrontOwner(parsed.data.slug, userId);
+  if (!owner) return { status: 'error', message: 'Forbidden' };
+
+  const settings: CheckoutSettings = {
+    ...owner.checkout,
+    enabled: true,
+    addressDesign: parsed.data.addressDesign,
+    experience: {
+      ...owner.checkout.experience,
+      ...parsed.data.experience,
+    },
+    thankYou: parsed.data.thankYou
+      ? { ...owner.checkout.thankYou, ...parsed.data.thankYou }
+      : owner.checkout.thankYou,
+  };
+
+  try {
+    await writeStorefrontCheckoutSettings(parsed.data.slug, settings);
+    await recordAudit({
+      storefrontSlug: parsed.data.slug,
+      clerkUserId: userId,
+      action: 'storefront.checkout.experience',
+      targetId: parsed.data.slug,
+      summary: 'Checkout experience updated from Builder',
+      meta: {
+        addressDesign: settings.addressDesign,
+        enabled: settings.enabled,
+        backgroundPreset: settings.experience.backgroundPreset,
+        customColorsConfigured: Object.values(settings.experience.customColors).some(Boolean),
+        customCssConfigured: Boolean(settings.experience.customCss),
+        buttonStyle: settings.experience.buttonStyle,
+        paymentCardStyle: settings.experience.paymentCardStyle,
+        orderSummaryLayout: settings.experience.orderSummaryLayout,
+        thankYouStyle: settings.experience.thankYouStyle,
+        trustBadges: settings.experience.trustBadges,
+        customTrustBadgeCount: settings.experience.customTrustBadges.length,
+      },
+    });
+  } catch {
+    return { status: 'error', message: 'Save failed. Try again.' };
+  }
+
+  revalidatePath('/account', 'layout');
+  revalidatePath(`/${parsed.data.slug}`);
+  revalidatePath(`/brief/${parsed.data.slug}`, 'layout');
+  return { status: 'success', updatedAt: new Date().toISOString(), checkout: settings };
 }

@@ -33,6 +33,7 @@ type Props = {
   locale?: Locale;
   dimmed?: boolean;
   ariaLabel?: string;
+  ariaDescription?: string;
 };
 
 const VARIANT_SIZES: Record<TemplatePreviewVariant, { w: number; h: number }> = {
@@ -56,6 +57,7 @@ export function TemplatePreview({
   locale = 'en',
   dimmed = false,
   ariaLabel,
+  ariaDescription,
 }: Props) {
   const recipe = PREVIEW_RECIPES[templateId];
   const palette = palettes[paletteId];
@@ -69,6 +71,11 @@ export function TemplatePreview({
   const label =
     ariaLabel ??
     (rtl ? `معاينة قالب ${templateId}` : `${templateId} template preview`);
+  const description =
+    ariaDescription ??
+    (rtl
+      ? `تمثيل مرئي لقالب ${templateId} باستخدام ألوانه.`
+      : `Live representation of the ${templateId} template using its palette.`);
 
   return (
     <svg
@@ -81,9 +88,7 @@ export function TemplatePreview({
       style={{ display: 'block', borderRadius: 8, opacity: dimmed ? 0.55 : 1 }}
     >
       <title id={titleId}>{label}</title>
-      <desc>
-        Live representation of the {templateId} template using its palette.
-      </desc>
+      <desc>{description}</desc>
       <rect width={viewW} height={viewH} fill={triplet.ground} />
       <HeroLayer recipe={recipe} triplet={triplet} viewW={viewW} rtl={rtl} />
       <AccentLayer recipe={recipe} triplet={triplet} viewW={viewW} rtl={rtl} />

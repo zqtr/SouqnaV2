@@ -97,7 +97,7 @@ export const PLAN_LIMITS: Record<
     templateCount: 1,
     monthlyPriceQar: 0,
     aiCreditsMonthly: 0,
-    analytics: 'none',
+    analytics: 'basic',
     integrations: 'none',
     support: 'community',
     canRemoveBranding: false,
@@ -112,7 +112,7 @@ export const PLAN_LIMITS: Record<
     label: 'Free',
     labelAr: 'مجاني',
     blurb:
-      'Start with one branded storefront, 10 products, one template, and 25 orders per month. Upgrade to unlock growth tools.',
+      'Start with one branded storefront, 10 products, one template, 25 orders per month, Fawran, and cash on delivery.',
     blurbAr: 'متجر واحد، ثلاثة قوالب بدائية، أداة البناء كاملة. مثالي لأول مئة عملية بيع.',
   },
   starter: {
@@ -137,7 +137,7 @@ export const PLAN_LIMITS: Record<
     label: 'Pro',
     labelAr: 'برو',
     blurb:
-      'Launch with more storefronts, a custom domain, commerce templates, and email plus chat support.',
+      'Launch with more storefronts, a custom domain, commerce templates, Fawran, cash on delivery, and email plus chat support.',
     blurbAr:
       'ثلاثة متاجر، وقوالب تجارة حديثة، ونطاقات مخصصة، ومكتبة التطبيقات الأساسية للإطلاق بالذكاء الاصطناعي.',
   },
@@ -162,7 +162,8 @@ export const PLAN_LIMITS: Record<
     canUseBulkOperations: false,
     label: 'Pro+',
     labelAr: 'برو +',
-    blurb: 'Add Souqy, AI assets, product copy, and growth apps for serious ecommerce growth.',
+    blurb:
+      'Add Souqy, AI assets, growth apps, and payment providers: SADAD, SkipCash, and Tap Payments.',
     blurbAr: 'عشرة متاجر، أنماط مميزة، أصول هوية ذكية، سير عمل مشغّل سوقي، وتكاملات للنمو.',
   },
   atelier: {
@@ -187,7 +188,7 @@ export const PLAN_LIMITS: Record<
     label: 'Max+',
     labelAr: 'ماكس +',
     blurb:
-      'Scale operations with every template, premium blocks, monthly-payment offers, integrations, and team support.',
+      'Scale operations with every template, premium blocks, provider payments, integrations, and team support.',
     blurbAr: 'متاجر غير محدودة، كل القوالب، ٨ مكوّنات مميزة، عروض دفع شهرية، ودعم للفريق.',
   },
 };
@@ -257,6 +258,19 @@ export const PREMIUM_BLOCK_TYPES = [
   'ecommerce4',
   'ecommerce5',
   'ecommerce6',
+  'curvedLoop',
+  'shadcnNavbar',
+  'shadcnHero',
+  'shadcnTrustStrip',
+  'shadcnCategories',
+  'shadcnProductCard',
+  'shadcnProductList',
+  'shadcnProductDetail',
+  'shadcnQuickView',
+  'shadcnReviews',
+  'shadcnOrderSummary',
+  'shadcnOfferModal',
+  'shadcnFooter',
 ] as const;
 
 export type PremiumBlockType = (typeof PREMIUM_BLOCK_TYPES)[number];

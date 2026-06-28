@@ -9,8 +9,26 @@ import {
   CARD_EFFECTS,
   CURSOR_EFFECTS,
   GALLERY_EFFECTS,
+  SHADCN_CATEGORY_VARIANTS,
+  SHADCN_FOOTER_VARIANTS,
+  SHADCN_HERO_VARIANTS,
+  SHADCN_NAVBAR_VARIANTS,
+  SHADCN_OFFER_MODAL_VARIANTS,
+  SHADCN_ORDER_SUMMARY_VARIANTS,
+  SHADCN_PRODUCT_CARD_VARIANTS,
+  SHADCN_PRODUCT_DETAIL_VARIANTS,
+  SHADCN_PRODUCT_LIST_VARIANTS,
+  SHADCN_QUICK_VIEW_VARIANTS,
+  SHADCN_REVIEWS_VARIANTS,
+  SHADCN_TRUST_STRIP_VARIANTS,
   TEXT_EFFECTS,
 } from './types';
+import {
+  STOREFRONT_CART_VARIANTS,
+  STOREFRONT_FOOTER_VARIANTS,
+  STOREFRONT_NAVBAR_VARIANTS,
+  STOREFRONT_SIDEBAR_VARIANTS,
+} from '@/lib/storefrontChrome';
 
 /**
  * Zod is the single source of truth for what a block's props can look like.
@@ -420,12 +438,71 @@ const mawidProps = z
   })
   .strict();
 
+const taqimControlledBundle = z
+  .object({
+    titleEn: z.string().trim().max(160).optional(),
+    titleAr: z.string().trim().max(160).optional(),
+    badge: z
+      .object({
+        labelEn: z.string().trim().max(60).optional(),
+        labelAr: z.string().trim().max(60).optional(),
+        tone: z.enum(['maroon', 'gold', 'black', 'green', 'red']).optional(),
+        position: z.enum(['top-left', 'top-right', 'floating', 'inline']).optional(),
+      })
+      .strict()
+      .optional(),
+    items: z
+      .array(
+        z
+          .object({
+            productId: z.string().trim().min(1).max(120),
+            required: z.boolean().optional(),
+            defaultOptionValue: z.string().trim().max(80).nullable().optional(),
+            buyerCanChooseOption: z.boolean().optional(),
+            badgeEn: z.string().trim().max(60).optional(),
+            badgeAr: z.string().trim().max(60).optional(),
+          })
+          .strict(),
+      )
+      .max(12)
+      .optional(),
+    pricing: z
+      .object({
+        mode: z
+          .enum([
+            'auto_total',
+            'percent_discount',
+            'fixed_discount',
+            'fixed_bundle_price',
+            'display_only',
+          ])
+          .optional(),
+        percentOff: z.number().min(0).max(100).nullable().optional(),
+        fixedDiscountQar: z.number().min(0).max(10_000_000).nullable().optional(),
+        fixedBundlePriceQar: z.number().min(0).max(10_000_000).nullable().optional(),
+        showSavings: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    cta: z
+      .object({
+        mode: z.enum(['add_all', 'add_selected']).optional(),
+        labelEn: z.string().trim().max(80).optional(),
+        labelAr: z.string().trim().max(80).optional(),
+        showPerProductButtons: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
 const taqimProps = z
   .object({
     bundleId: z.string().trim().max(64).optional(),
     anchorProductId: z.string().trim().max(120).optional(),
     variant: z.enum(['stack', 'cards', 'carousel']).optional(),
     heading: z.string().trim().max(160).optional(),
+    bundle: taqimControlledBundle.optional(),
   })
   .strict();
 
@@ -446,6 +523,18 @@ const auroraRibbonProps = z
     subtitle: z.string().trim().max(400).optional(),
     heightPx: z.number().int().min(120).max(320).optional(),
     brightness: z.number().min(0.3).max(1.4).optional(),
+  })
+  .strict();
+
+const curvedLoopProps = z
+  .object({
+    marqueeText: z.string().trim().min(1).max(260).default('Add Text Here'),
+    speed: z.number().min(0.2).max(8).optional(),
+    curveAmount: z.number().int().min(120).max(720).optional(),
+    direction: z.enum(['left', 'right']).optional(),
+    interactive: z.boolean().optional(),
+    size: z.enum(['compact', 'standard', 'hero']).optional(),
+    tone: z.enum(['ink', 'accent', 'gold', 'muted']).optional(),
   })
   .strict();
 
@@ -594,6 +683,160 @@ const ecommerceCategory = z
   })
   .strict();
 
+const commerceProductSource = z
+  .object({
+    source: z.enum(['all', 'manual', 'category', 'tag', 'latest']).default('all'),
+    productIds: z.array(z.string().trim().max(120)).max(96).optional(),
+    category: z.string().trim().max(120).nullable().optional(),
+    tag: z.string().trim().max(120).nullable().optional(),
+    limit: z.number().int().min(1).max(48).optional(),
+    sort: z.enum(['manual', 'newest', 'price_low', 'price_high', 'title_az']).optional(),
+    hideUnavailable: z.boolean().optional(),
+  })
+  .strict();
+
+const commerceFilterOption = z
+  .object({
+    id: z.string().trim().min(1).max(64),
+    labelEn: z.string().trim().max(80).optional(),
+    labelAr: z.string().trim().max(80).optional(),
+    value: z.string().trim().max(120).optional(),
+    productIds: z.array(z.string().trim().max(120)).max(96).optional(),
+    category: z.string().trim().max(120).nullable().optional(),
+    tag: z.string().trim().max(120).nullable().optional(),
+  })
+  .strict();
+
+const commerceFilterGroup = z
+  .object({
+    id: z.string().trim().min(1).max(64),
+    labelEn: z.string().trim().max(80).optional(),
+    labelAr: z.string().trim().max(80).optional(),
+    source: z.enum(['category', 'brand', 'tag', 'price', 'availability', 'manual']),
+    autoGenerate: z.boolean().optional(),
+    options: z.array(commerceFilterOption).max(24).optional(),
+  })
+  .strict();
+
+const commerceCardConfig = z
+  .object({
+    showCategory: z.boolean().optional(),
+    showBrand: z.boolean().optional(),
+    showDescription: z.boolean().optional(),
+    showWishlist: z.boolean().optional(),
+    showOptions: z.boolean().optional(),
+    showSalePrice: z.boolean().optional(),
+    ctaMode: z.enum(['direct_add', 'quick_view', 'product_page']).optional(),
+    ctaStyle: z.enum(['solid', 'outline', 'ghost']).optional(),
+  })
+  .strict();
+
+const filterableShopConfig = z
+  .object({
+    productSource: commerceProductSource.optional(),
+    filters: z
+      .object({
+        enabled: z.boolean().optional(),
+        layout: z.enum(['sidebar', 'topbar']).optional(),
+        groups: z.array(commerceFilterGroup).max(12).optional(),
+        autoGenerate: z.boolean().optional(),
+        hideEmptyOptions: z.boolean().optional(),
+        showSidebar: z.boolean().optional(),
+        showMobileDrawer: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    card: commerceCardConfig.optional(),
+  })
+  .strict();
+
+const commerceTab = z
+  .object({
+    id: z.string().trim().min(1).max(64),
+    labelEn: z.string().trim().max(80).optional(),
+    labelAr: z.string().trim().max(80).optional(),
+    value: z.string().trim().max(120).optional(),
+    productSource: commerceProductSource.optional(),
+  })
+  .strict();
+
+const tabbedProductsConfig = z
+  .object({
+    tabs: z.array(commerceTab).max(12).optional(),
+    allTab: z
+      .object({
+        enabled: z.boolean().optional(),
+        mode: z.enum(['combined_tabs', 'all_products', 'manual']).optional(),
+        productIds: z.array(z.string().trim().max(120)).max(96).optional(),
+      })
+      .strict()
+      .optional(),
+    emptyTabBehavior: z.enum(['hide', 'empty_state', 'fallback_all']).optional(),
+    card: commerceCardConfig.optional(),
+  })
+  .strict();
+
+const visualCategoryTile = z
+  .object({
+    id: z.string().trim().min(1).max(64),
+    labelEn: z.string().trim().max(100).optional(),
+    labelAr: z.string().trim().max(100).optional(),
+    eyebrowEn: z.string().trim().max(120).optional(),
+    eyebrowAr: z.string().trim().max(120).optional(),
+    imageUrl: z.string().trim().max(2048).optional(),
+    badge: z
+      .object({
+        labelEn: z.string().trim().max(60).optional(),
+        labelAr: z.string().trim().max(60).optional(),
+        tone: z.enum(['maroon', 'gold', 'black', 'green', 'red']).optional(),
+        position: z.enum(['top-left', 'top-right', 'floating', 'inline']).optional(),
+      })
+      .strict()
+      .optional(),
+    destination: z
+      .object({
+        type: z.enum(['category', 'tag', 'manual_products', 'page', 'external']).optional(),
+        category: z.string().trim().max(120).nullable().optional(),
+        tag: z.string().trim().max(120).nullable().optional(),
+        productIds: z.array(z.string().trim().max(120)).max(96).optional(),
+        pageSlug: z.string().trim().max(160).nullable().optional(),
+        url: z.string().trim().max(2048).nullable().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+const visualCategoryTilesConfig = z
+  .object({
+    tabs: z
+      .array(
+        z
+          .object({
+            id: z.string().trim().min(1).max(64),
+            labelEn: z.string().trim().max(80).optional(),
+            labelAr: z.string().trim().max(80).optional(),
+            tileIds: z.array(z.string().trim().max(64)).max(48).optional(),
+          })
+          .strict(),
+      )
+      .max(12)
+      .optional(),
+    tiles: z.array(visualCategoryTile).max(32).optional(),
+    behavior: z
+      .object({
+        showTabs: z.boolean().optional(),
+        clickAction: z
+          .enum(['navigate', 'filter_products', 'scroll_to_products', 'open_collection_drawer'])
+          .optional(),
+        overlayStyle: z.enum(['dark_gradient', 'light_overlay', 'minimal', 'framed']).optional(),
+        allTab: z.enum(['show_all', 'combined_tabs', 'hidden']).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
 const ecommerceBlockProps = z
   .object({
     eyebrow: z.string().trim().max(80).optional(),
@@ -604,6 +847,108 @@ const ecommerceBlockProps = z
     products: z.array(ecommerceProduct).max(12).optional(),
     categories: z.array(ecommerceCategory).max(12).optional(),
     tabs: z.array(z.string().trim().max(40)).max(8).optional(),
+    productSource: commerceProductSource.optional(),
+    filterable: filterableShopConfig.optional(),
+    tabbed: tabbedProductsConfig.optional(),
+    tilesConfig: visualCategoryTilesConfig.optional(),
+  })
+  .strict();
+
+const shadcnCommerceBaseProps = ecommerceBlockProps.extend({
+  kicker: z.string().trim().max(120).optional(),
+  note: z.string().trim().max(320).optional(),
+  density: z.enum(['compact', 'balanced', 'editorial']).optional(),
+  tone: z.enum(['sand', 'maroon', 'charcoal', 'gold']).optional(),
+});
+
+const shadcnNavbarProps = shadcnCommerceBaseProps
+  .extend({
+    variant: z.enum(SHADCN_NAVBAR_VARIANTS),
+    sticky: z.boolean().optional(),
+    announcement: z.string().trim().max(120).optional(),
+    ctaLabel: z.string().trim().max(48).optional(),
+    ctaHref: z.string().trim().max(240).optional(),
+    showSearch: z.boolean().optional(),
+    showPolicyLinks: z.boolean().optional(),
+    cartLabel: z.string().trim().max(40).optional(),
+  })
+  .strict();
+const shadcnHeroProps = shadcnCommerceBaseProps
+  .extend({ variant: z.enum(SHADCN_HERO_VARIANTS) })
+  .strict();
+const shadcnTrustStripProps = shadcnCommerceBaseProps
+  .extend({
+    variant: z.enum(SHADCN_TRUST_STRIP_VARIANTS),
+    metrics: z
+      .array(
+        z
+          .object({
+            labelEn: z.string().trim().max(80).optional(),
+            labelAr: z.string().trim().max(80).optional(),
+            value: z.string().trim().max(60).optional(),
+            icon: z.string().trim().max(40).optional(),
+          })
+          .strict(),
+      )
+      .max(6)
+      .optional(),
+  })
+  .strict();
+const shadcnCategoriesProps = shadcnCommerceBaseProps
+  .extend({ variant: z.enum(SHADCN_CATEGORY_VARIANTS) })
+  .strict();
+const shadcnProductCardProps = shadcnCommerceBaseProps
+  .extend({ variant: z.enum(SHADCN_PRODUCT_CARD_VARIANTS) })
+  .strict();
+const shadcnProductListProps = shadcnCommerceBaseProps
+  .extend({ variant: z.enum(SHADCN_PRODUCT_LIST_VARIANTS) })
+  .strict();
+const shadcnProductDetailProps = shadcnCommerceBaseProps
+  .extend({
+    variant: z.enum(SHADCN_PRODUCT_DETAIL_VARIANTS),
+    productId: z.string().trim().max(120).optional(),
+  })
+  .strict();
+const shadcnQuickViewProps = shadcnCommerceBaseProps
+  .extend({
+    variant: z.enum(SHADCN_QUICK_VIEW_VARIANTS),
+    productId: z.string().trim().max(120).optional(),
+  })
+  .strict();
+const shadcnReviewsProps = shadcnCommerceBaseProps
+  .extend({
+    variant: z.enum(SHADCN_REVIEWS_VARIANTS),
+    reviews: z
+      .array(
+        z
+          .object({
+            nameEn: z.string().trim().max(80).optional(),
+            nameAr: z.string().trim().max(80).optional(),
+            quoteEn: z.string().trim().max(260).optional(),
+            quoteAr: z.string().trim().max(260).optional(),
+            rating: z.number().min(1).max(5).optional(),
+            productId: z.string().trim().max(120).optional(),
+          })
+          .strict(),
+      )
+      .max(9)
+      .optional(),
+  })
+  .strict();
+const shadcnOrderSummaryProps = shadcnCommerceBaseProps
+  .extend({ variant: z.enum(SHADCN_ORDER_SUMMARY_VARIANTS) })
+  .strict();
+const shadcnOfferModalProps = shadcnCommerceBaseProps
+  .extend({
+    variant: z.enum(SHADCN_OFFER_MODAL_VARIANTS),
+    discountLabel: z.string().trim().max(80).optional(),
+    delayMs: z.number().int().min(0).max(60000).optional(),
+  })
+  .strict();
+const shadcnFooterProps = shadcnCommerceBaseProps
+  .extend({
+    variant: z.enum(SHADCN_FOOTER_VARIANTS),
+    showNewsletter: z.boolean().optional(),
   })
   .strict();
 
@@ -638,6 +983,7 @@ export const blockPropsByType = {
   taqim: taqimProps,
   depthShowcase: depthShowcaseProps,
   auroraRibbon: auroraRibbonProps,
+  curvedLoop: curvedLoopProps,
   showcase1: showcase1Props,
   showcase2: showcase2Props,
   showcase3: showcase3Props,
@@ -650,6 +996,18 @@ export const blockPropsByType = {
   ecommerce5: ecommerceBlockProps,
   ecommerce6: ecommerceBlockProps,
   ecommerce7: ecommerceBlockProps,
+  shadcnNavbar: shadcnNavbarProps,
+  shadcnHero: shadcnHeroProps,
+  shadcnTrustStrip: shadcnTrustStripProps,
+  shadcnCategories: shadcnCategoriesProps,
+  shadcnProductCard: shadcnProductCardProps,
+  shadcnProductList: shadcnProductListProps,
+  shadcnProductDetail: shadcnProductDetailProps,
+  shadcnQuickView: shadcnQuickViewProps,
+  shadcnReviews: shadcnReviewsProps,
+  shadcnOrderSummary: shadcnOrderSummaryProps,
+  shadcnOfferModal: shadcnOfferModalProps,
+  shadcnFooter: shadcnFooterProps,
 } as const;
 
 const baseBlock = {
@@ -704,6 +1062,11 @@ export const blockSchema = z.discriminatedUnion('type', [
     type: z.literal('auroraRibbon'),
     props: auroraRibbonProps,
   }),
+  z.object({
+    ...baseBlock,
+    type: z.literal('curvedLoop'),
+    props: curvedLoopProps,
+  }),
   z.object({ ...baseBlock, type: z.literal('showcase1'), props: showcase1Props }),
   z.object({ ...baseBlock, type: z.literal('showcase2'), props: showcase2Props }),
   z.object({ ...baseBlock, type: z.literal('showcase3'), props: showcase3Props }),
@@ -716,6 +1079,18 @@ export const blockSchema = z.discriminatedUnion('type', [
   z.object({ ...baseBlock, type: z.literal('ecommerce5'), props: ecommerceBlockProps }),
   z.object({ ...baseBlock, type: z.literal('ecommerce6'), props: ecommerceBlockProps }),
   z.object({ ...baseBlock, type: z.literal('ecommerce7'), props: ecommerceBlockProps }),
+  z.object({ ...baseBlock, type: z.literal('shadcnNavbar'), props: shadcnNavbarProps }),
+  z.object({ ...baseBlock, type: z.literal('shadcnHero'), props: shadcnHeroProps }),
+  z.object({ ...baseBlock, type: z.literal('shadcnTrustStrip'), props: shadcnTrustStripProps }),
+  z.object({ ...baseBlock, type: z.literal('shadcnCategories'), props: shadcnCategoriesProps }),
+  z.object({ ...baseBlock, type: z.literal('shadcnProductCard'), props: shadcnProductCardProps }),
+  z.object({ ...baseBlock, type: z.literal('shadcnProductList'), props: shadcnProductListProps }),
+  z.object({ ...baseBlock, type: z.literal('shadcnProductDetail'), props: shadcnProductDetailProps }),
+  z.object({ ...baseBlock, type: z.literal('shadcnQuickView'), props: shadcnQuickViewProps }),
+  z.object({ ...baseBlock, type: z.literal('shadcnReviews'), props: shadcnReviewsProps }),
+  z.object({ ...baseBlock, type: z.literal('shadcnOrderSummary'), props: shadcnOrderSummaryProps }),
+  z.object({ ...baseBlock, type: z.literal('shadcnOfferModal'), props: shadcnOfferModalProps }),
+  z.object({ ...baseBlock, type: z.literal('shadcnFooter'), props: shadcnFooterProps }),
 ]);
 
 export const blocksSchema = z.array(blockSchema).max(200);
@@ -735,6 +1110,28 @@ export const themeOverridesSchema = z
     sectionSpacing: z.enum(['tight', 'comfortable', 'spacious']).optional(),
     policyDisplayMode: z.enum(['full', 'columns']).optional(),
     themeBehaviour: z.enum(['auto', 'light', 'dark']).optional(),
+    commerceChrome: z
+      .object({
+        navbar: z.enum(STOREFRONT_NAVBAR_VARIANTS).optional(),
+        footer: z.enum(STOREFRONT_FOOTER_VARIANTS).optional(),
+        sidebar: z.enum(STOREFRONT_SIDEBAR_VARIANTS).optional(),
+        cart: z.enum(STOREFRONT_CART_VARIANTS).optional(),
+        navAnnouncement: z.string().trim().max(120).optional(),
+        navCtaLabel: z.string().trim().max(48).optional(),
+        navCtaHref: z.string().trim().max(240).optional(),
+        showSearch: z.boolean().optional(),
+        showPolicyLinks: z.boolean().optional(),
+        footerHeadline: z.string().trim().max(100).optional(),
+        footerText: z.string().trim().max(260).optional(),
+        footerShowNewsletter: z.boolean().optional(),
+        sidebarLabel: z.string().trim().max(80).optional(),
+        cartLabel: z.string().trim().max(40).optional(),
+        cartCheckoutLabel: z.string().trim().max(60).optional(),
+        cartEmptyTitle: z.string().trim().max(80).optional(),
+        cartEmptyText: z.string().trim().max(180).optional(),
+      })
+      .strict()
+      .optional(),
     seo: z
       .object({
         title: z.string().trim().max(140).optional(),

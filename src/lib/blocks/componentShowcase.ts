@@ -189,6 +189,7 @@ function componentStyle(type: BlockType): Block['style'] {
   if (type === 'gallery') return { paddingY: 'md', galleryEffect: 'hover-preview' };
   if (type === 'inquireCta') return { paddingY: 'md', variant: 'pro-neon' };
   if (type === 'auroraRibbon') return { paddingY: 'sm' };
+  if (type.startsWith('shadcn')) return { paddingY: type === 'shadcnNavbar' ? 'none' : 'md' };
   if (type === 'spacer') return { paddingY: 'none' };
   if (type === 'divider') return { paddingY: 'sm' };
   return { paddingY: 'md' };
@@ -204,7 +205,7 @@ function componentProps(type: BlockType): Record<string, unknown> {
         layout: 'centered',
         showLogo: true,
         showGlyph: true,
-        cta: { label: 'See the offer', href: '#' },
+        cta: { label: 'See the offer', href: '/products' },
       };
     case 'banner':
       return {
@@ -391,7 +392,7 @@ function componentProps(type: BlockType): Record<string, unknown> {
         intensity: 'medium',
         aspect: '16/9',
         width: 'wide',
-        cta: { label: 'View story', href: '#' },
+        cta: { label: 'View story', href: '/products' },
       };
     case 'spotlightCard':
       return {
@@ -405,7 +406,7 @@ function componentProps(type: BlockType): Record<string, unknown> {
         tiltDirection: 'right',
         intensity: 'medium',
         width: 'wide',
-        cta: { label: 'Read more', href: '#' },
+        cta: { label: 'Read more', href: '/products' },
       };
     case 'mawid':
       return {
@@ -437,6 +438,16 @@ function componentProps(type: BlockType): Record<string, unknown> {
         heightPx: 220,
         brightness: 0.9,
       };
+    case 'curvedLoop':
+      return {
+        marqueeText: 'Add Text Here',
+        speed: 1.55,
+        curveAmount: 360,
+        direction: 'left',
+        interactive: true,
+        size: 'standard',
+        tone: 'accent',
+      };
     case 'showcase1':
       return createShowcase1Props();
     case 'showcase2':
@@ -455,6 +466,19 @@ function componentProps(type: BlockType): Record<string, unknown> {
     case 'ecommerce6':
     case 'ecommerce7':
       return createEcommerceProps(type);
+    case 'shadcnNavbar':
+    case 'shadcnHero':
+    case 'shadcnTrustStrip':
+    case 'shadcnCategories':
+    case 'shadcnProductCard':
+    case 'shadcnProductList':
+    case 'shadcnProductDetail':
+    case 'shadcnQuickView':
+    case 'shadcnReviews':
+    case 'shadcnOrderSummary':
+    case 'shadcnOfferModal':
+    case 'shadcnFooter':
+      return createShadcnShowcaseProps(type);
     default: {
       const _exhaustive: never = type;
       return _exhaustive;
@@ -474,7 +498,7 @@ function createShowcase1Props(): Showcase1Props {
         subtitle: 'A short visual story for new arrivals.',
         kicker: 'Products',
         imageUrl: DETAIL_IMAGE,
-        href: '#',
+        href: '/products',
       },
       {
         id: 'gift',
@@ -482,7 +506,7 @@ function createShowcase1Props(): Showcase1Props {
         subtitle: 'Group hero picks into one buying moment.',
         kicker: 'Gifting',
         imageUrl: ALT_IMAGE,
-        href: '#',
+        href: '/products',
       },
       {
         id: 'studio',
@@ -490,7 +514,7 @@ function createShowcase1Props(): Showcase1Props {
         subtitle: 'Show process and founder context.',
         kicker: 'Editorial',
         imageUrl: WORK_IMAGE,
-        href: '#',
+        href: '/products',
       },
     ],
   };
@@ -500,7 +524,7 @@ function createShowcase2Props(): Showcase2Props {
   return {
     eyebrow: 'Featured Work',
     title: 'A draggable rail for visual browsing.',
-    cta: { label: 'View projects', href: '#' },
+    cta: { label: 'View projects', href: '/products' },
     items: [
       { id: 'one', imageUrl: DETAIL_IMAGE, alt: 'Product visual', height: 'md' },
       { id: 'two', imageUrl: ALT_IMAGE, alt: 'Campaign visual', height: 'lg' },
@@ -534,7 +558,7 @@ function createShowcase4Props(): Showcase4Props {
         year: '2026',
         tags: ['Identity'],
         imageUrl: WORK_IMAGE,
-        href: '#',
+        href: '/products',
       },
       {
         id: 'coffee',
@@ -543,7 +567,7 @@ function createShowcase4Props(): Showcase4Props {
         year: '2026',
         tags: ['Campaign'],
         imageUrl: COFFEE_IMAGE,
-        href: '#',
+        href: '/products',
       },
       {
         id: 'market',
@@ -552,7 +576,7 @@ function createShowcase4Props(): Showcase4Props {
         year: '2026',
         tags: ['Events'],
         imageUrl: MARKET_IMAGE,
-        href: '#',
+        href: '/products',
       },
     ],
   };
@@ -577,12 +601,12 @@ function createEcommerceProps(type: BlockType): EcommerceBlockProps {
     eyebrow: 'Commerce / التجارة',
     title: ecommerceTitle(type),
     subtitle: 'A self-contained ecommerce section with bilingual-ready product structure.',
-    cta: { label: 'Shop the edit', href: '#' },
+    cta: { label: 'Shop the edit', href: '/products' },
     products,
     categories: [
-      { id: 'travel', label: 'Travel', tag: 'Essentials', imageUrl: DETAIL_IMAGE, href: '#' },
-      { id: 'home', label: 'Home', tag: 'Objects', imageUrl: CERAMIC_IMAGE, href: '#' },
-      { id: 'gifts', label: 'Gifts', tag: 'Curated', imageUrl: CATEGORY_IMAGE, href: '#' },
+      { id: 'travel', label: 'Travel', tag: 'Essentials', imageUrl: DETAIL_IMAGE, href: '/products' },
+      { id: 'home', label: 'Home', tag: 'Objects', imageUrl: CERAMIC_IMAGE, href: '/products' },
+      { id: 'gifts', label: 'Gifts', tag: 'Curated', imageUrl: CATEGORY_IMAGE, href: '/products' },
     ],
     tabs: ['All', 'Travel', 'Home', 'Gifts'],
   };
@@ -609,6 +633,91 @@ function ecommerceTitle(type: BlockType): string {
   }
 }
 
+function createShadcnShowcaseProps(type: BlockType): Record<string, unknown> {
+  const base = createEcommerceProps('ecommerce5');
+  const variantByType: Partial<Record<BlockType, string>> = {
+    shadcnNavbar: 'ecommerce-navbar2',
+    shadcnHero: 'ecommerce-hero6',
+    shadcnTrustStrip: 'trust-strip3',
+    shadcnCategories: 'product-categories4',
+    shadcnProductCard: 'product-card24',
+    shadcnProductList: 'product-list6',
+    shadcnProductDetail: 'product-detail9',
+    shadcnQuickView: 'product-quick-view8',
+    shadcnReviews: 'reviews23',
+    shadcnOrderSummary: 'order-summary2',
+    shadcnOfferModal: 'offer-modal5',
+    shadcnFooter: 'ecommerce-footer18',
+  };
+  const titleByType: Partial<Record<BlockType, string>> = {
+    shadcnNavbar: 'Premium route-aware navbar',
+    shadcnHero: 'Premium ecommerce hero',
+    shadcnTrustStrip: 'Trust proof strip',
+    shadcnCategories: 'Premium product categories',
+    shadcnProductCard: 'Premium product cards',
+    shadcnProductList: 'Premium product list',
+    shadcnProductDetail: 'Premium product detail',
+    shadcnQuickView: 'Product quick view',
+    shadcnReviews: 'Premium review cards',
+    shadcnOrderSummary: 'Checkout summary preview',
+    shadcnOfferModal: 'Controlled offer module',
+    shadcnFooter: 'Premium commerce footer',
+  };
+  const props: Record<string, unknown> = {
+    ...base,
+    variant: variantByType[type],
+    kicker: 'Souqna Pro+',
+    title: titleByType[type],
+    subtitle:
+      'Paid commerce components optimized for Souqna routing, bilingual text, live products, cart actions, and mobile layouts.',
+    density: 'balanced',
+    tone: type === 'shadcnHero' ? 'charcoal' : 'sand',
+  };
+  if (type === 'shadcnNavbar') {
+    props.sticky = false;
+    props.announcement = 'Secure checkout and local delivery';
+    props.ctaLabel = 'Shop products';
+    props.ctaHref = '/products';
+    props.showSearch = true;
+    props.showPolicyLinks = true;
+    props.cartLabel = 'Cart';
+  }
+  if (type === 'shadcnFooter') props.showNewsletter = true;
+  if (type === 'shadcnTrustStrip') {
+    props.metrics = [
+      { value: '974', labelEn: 'Qatar ready', labelAr: 'جاهز لقطر', icon: 'shield' },
+      { value: 'COD', labelEn: 'Cash and card', labelAr: 'نقدي وبطاقة', icon: 'card' },
+      { value: 'Fast', labelEn: 'Delivery notes', labelAr: 'ملاحظات التوصيل', icon: 'truck' },
+    ];
+  }
+  if (type === 'shadcnProductDetail' || type === 'shadcnQuickView') {
+    props.productId = base.products?.[0]?.id;
+  }
+  if (type === 'shadcnReviews') {
+    props.reviews = [
+      {
+        nameEn: 'Aisha',
+        nameAr: 'عائشة',
+        quoteEn: 'The product page felt clear, fast, and premium.',
+        quoteAr: 'صفحة المنتج كانت واضحة وسريعة ومميزة.',
+        rating: 5,
+      },
+      {
+        nameEn: 'Noora',
+        nameAr: 'نورة',
+        quoteEn: 'The checkout flow made the store feel trustworthy.',
+        quoteAr: 'خطوات الدفع جعلت المتجر يبدو موثوقاً.',
+        rating: 5,
+      },
+    ];
+  }
+  if (type === 'shadcnOfferModal') {
+    props.discountLabel = 'Launch edit';
+    props.delayMs = 1000;
+  }
+  return props;
+}
+
 function defaultEcommerceProducts(): EcommerceProduct[] {
   return [
     {
@@ -633,7 +742,7 @@ function defaultEcommerceProducts(): EcommerceProduct[] {
         { label: 'M', available: true },
         { label: 'L', available: true },
       ],
-      href: '#',
+      href: '/products',
       available: true,
       status: 'active',
     },
@@ -654,7 +763,7 @@ function defaultEcommerceProducts(): EcommerceProduct[] {
         { name: 'Cream', value: '#eadcc4' },
       ],
       sizes: [{ label: 'Pair', available: true }],
-      href: '#',
+      href: '/products',
       available: true,
       status: 'active',
     },
@@ -671,7 +780,7 @@ function defaultEcommerceProducts(): EcommerceProduct[] {
       description: 'A small bundle for pop-ups, thank-you gifts, and seasonal shelves.',
       details: ['Curated set', 'Custom notes available', 'Limited quantity'],
       sizes: [{ label: 'One size', available: true }],
-      href: '#',
+      href: '/products',
       available: true,
       status: 'active',
     },

@@ -36,6 +36,7 @@ import {
   UPGRADE_GROWTH_TOOLS_COPY,
   planUnlocksPremiumBlocks,
   planUnlocksSeoSettings,
+  planAtLeast,
 } from '@/lib/billing';
 import { logEvent } from '@/lib/events';
 import { recordPulseActivity } from '@/lib/pulseActivity';
@@ -51,6 +52,7 @@ import {
   type StorefrontPage,
 } from '@/lib/storefrontPages';
 import type { Block, ThemeOverrides } from '@/lib/blocks/types';
+import { optionMinPlan } from '@/lib/storefrontChrome';
 
 const SlugSchema = z.string().trim().min(3).max(40);
 const PageIdSchema = z.string().uuid();
@@ -530,6 +532,18 @@ export async function saveThemeOverrides(
   const plan = await getPlan(owner.userId);
   if ((theme as ThemeOverrides).seo && !planUnlocksSeoSettings(plan)) {
     return { status: 'error', message: `${UPGRADE_GROWTH_TOOLS_COPY}.` };
+  }
+  const chrome = (theme as ThemeOverrides).commerceChrome;
+  if (chrome) {
+    const lockedChoice = [chrome.navbar, chrome.footer, chrome.sidebar, chrome.cart].find(
+      (choice) => choice && !planAtLeast(plan, optionMinPlan(choice)),
+    );
+    if (lockedChoice) {
+      return {
+        status: 'error',
+        message: `${UPGRADE_GROWTH_TOOLS_COPY}. This storefront chrome option requires ${PLAN_LIMITS[optionMinPlan(lockedChoice)].label}.`,
+      };
+    }
   }
 
   try {

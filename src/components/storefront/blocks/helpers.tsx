@@ -1,5 +1,9 @@
 import type { Product } from '@/lib/products';
 
+export function productPathSegment(product: Pick<Product, 'id' | 'handle'>): string {
+  return encodeURIComponent(product.handle || product.id);
+}
+
 export function formatPrice(price: number | null, isRtl: boolean): string {
   if (price === null) return isRtl ? 'عند الطلب' : 'on request';
   const formatted = new Intl.NumberFormat(isRtl ? 'ar-QA' : 'en-QA', {

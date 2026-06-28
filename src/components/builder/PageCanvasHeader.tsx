@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { setStorefrontPageSeo } from '@/app/actions/pages';
 import type { StorefrontPage } from '@/lib/storefrontPages';
 import { MediaUploader } from './MediaUploader';
+import { useBuilderCopy } from './BuilderCopyContext';
 
 type Props = {
   slug: string;
@@ -37,6 +38,41 @@ export function PageCanvasHeader({
   onSetHome,
   giphyStorefrontSlug,
 }: Props) {
+  const { locale } = useBuilderCopy();
+  const text =
+    locale === 'ar'
+      ? {
+          region: (title: string) => `تحرير صفحة ${title}`,
+          page: 'صفحة',
+          seoSettings: 'SEO والإعدادات',
+          saving: 'جارٍ الحفظ…',
+          saved: 'تم الحفظ',
+          addAnotherFirst: 'أضف صفحة أخرى أولًا.',
+          promoteHome: 'اجعل هذه الصفحة رئيسية المتجر.',
+          setAsHome: 'جعلها رئيسية',
+          seoTitle: 'عنوان SEO',
+          seoTitleHint: 'الافتراضي هو عنوان الصفحة.',
+          description: 'الوصف',
+          descriptionHint: 'جملة أو جملتان لمقتطفات البحث.',
+          openGraph: 'صورة المشاركة',
+          openGraphHint: 'تستخدم عند مشاركة هذه الصفحة.',
+        }
+      : {
+          region: (title: string) => `Page edit affordances for ${title}`,
+          page: 'Page',
+          seoSettings: 'SEO & settings',
+          saving: 'Saving…',
+          saved: 'Saved',
+          addAnotherFirst: 'Add another page first.',
+          promoteHome: 'Promote this page to the storefront home.',
+          setAsHome: 'Set as home',
+          seoTitle: 'SEO title',
+          seoTitleHint: 'Defaults to the page title.',
+          description: 'Description',
+          descriptionHint: 'One or two sentences for search snippets.',
+          openGraph: 'Open Graph image',
+          openGraphHint: 'Used when this page is shared on social.',
+        };
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -96,7 +132,7 @@ export function PageCanvasHeader({
   return (
     <div
       role="region"
-      aria-label={`Page edit affordances for ${page.title}`}
+      aria-label={text.region(page.title)}
       style={{
         marginInline: 'clamp(12px, 2vw, 24px)',
         marginTop: 12,
@@ -167,7 +203,7 @@ export function PageCanvasHeader({
               color: 'var(--bld-text-muted)',
             }}
           >
-            Page · /{page.slug}
+            {text.page} · /{page.slug}
           </span>
           <span
             style={{
@@ -180,25 +216,21 @@ export function PageCanvasHeader({
               textOverflow: 'ellipsis',
             }}
           >
-            SEO &amp; settings
+            {text.seoSettings}
           </span>
           {busy ? (
-            <SaveLabel>Saving…</SaveLabel>
+            <SaveLabel>{text.saving}</SaveLabel>
           ) : error ? (
             <SaveLabel danger>{error}</SaveLabel>
           ) : savedAt ? (
-            <SaveLabel>Saved</SaveLabel>
+            <SaveLabel>{text.saved}</SaveLabel>
           ) : null}
         </button>
         <button
           type="button"
           onClick={onSetHome}
           disabled={onlyPage}
-          title={
-            onlyPage
-              ? 'Add another page first.'
-              : 'Promote this page to the storefront home.'
-          }
+          title={onlyPage ? text.addAnotherFirst : text.promoteHome}
           style={{
             padding: '6px 10px',
             border: '1px solid var(--bld-accent-line)',
@@ -213,7 +245,7 @@ export function PageCanvasHeader({
             opacity: onlyPage ? 0.45 : 1,
           }}
         >
-          Set as home
+          {text.setAsHome}
         </button>
       </div>
       {open ? (
@@ -226,7 +258,7 @@ export function PageCanvasHeader({
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           }}
         >
-          <Field label="SEO title" hint="Defaults to the page title.">
+          <Field label={text.seoTitle} hint={text.seoTitleHint}>
             <input
               type="text"
               value={title}
@@ -237,8 +269,8 @@ export function PageCanvasHeader({
             />
           </Field>
           <Field
-            label="Description"
-            hint="One or two sentences for search snippets."
+            label={text.description}
+            hint={text.descriptionHint}
           >
             <textarea
               value={description}
@@ -249,8 +281,8 @@ export function PageCanvasHeader({
             />
           </Field>
           <Field
-            label="Open Graph image"
-            hint="Used when this page is shared on social."
+            label={text.openGraph}
+            hint={text.openGraphHint}
           >
             <MediaUploader
               value={image}

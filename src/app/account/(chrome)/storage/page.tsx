@@ -3,10 +3,11 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getStorefrontsForUser } from '@/lib/brief';
 import {
-  STOREFRONT_STORAGE_LIMIT_BYTES,
   getStorefrontStorageUsedBytes,
   listFilesForStorefront,
+  storageLimitBytesForPlan,
 } from '@/lib/files';
+import { getPlan } from '@/lib/billing';
 import {
   EmptyState,
   PageHeader,
@@ -58,7 +59,7 @@ export default async function StoragePage({
   const slug =
     requested && known.includes(requested) ? requested : storefronts[0]!.slug;
   const store = storefronts.find((s) => s.slug === slug);
-  const [files, usedBytes] = await Promise.all([
+  const [files, usedBytes, plan] = await Promise.all([
     listFilesForStorefront(slug, { limit: 1000 }).catch((err) => {
       console.error('[storage] list failed', err);
       return [] as Awaited<ReturnType<typeof listFilesForStorefront>>;
@@ -67,7 +68,9 @@ export default async function StoragePage({
       console.error('[storage] usage failed', err);
       return 0;
     }),
+    getPlan(userId),
   ]);
+  const storageLimitBytes = storageLimitBytesForPlan(plan);
 
   return (
     <>
@@ -85,7 +88,7 @@ export default async function StoragePage({
         <FilesLibrary
           storefrontSlug={slug}
           initialUsedBytes={usedBytes}
-          storageLimitBytes={STOREFRONT_STORAGE_LIMIT_BYTES}
+          storageLimitBytes={storageLimitBytes}
           initialFiles={files.map((file) => ({
             url: file.url,
             pathname: file.pathname,

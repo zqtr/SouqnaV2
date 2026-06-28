@@ -1,3 +1,4 @@
+﻿/* eslint-disable @next/next/no-img-element */
 import { auth } from '@clerk/nextjs/server';
 import { notFound, redirect } from 'next/navigation';
 import { getStorefrontsForUser } from '@/lib/brief';
@@ -14,7 +15,7 @@ const apiKeyHelp: Record<string, { placeholder: string; helpUrl?: string }> = {
     helpUrl: 'https://developers.giphy.com/dashboard/',
   },
   notion: {
-    placeholder: 'secret_… (your Notion integration token)',
+    placeholder: 'secret_... (your Notion integration token)',
     helpUrl: 'https://www.notion.so/profile/integrations',
   },
   'google-sheets': {
@@ -73,10 +74,10 @@ export default async function AppDetailPage({
   return (
     <>
       <PageHeader
-        eyebrow={`Apps · ${desc.category}`}
+        eyebrow={`Apps - ${desc.category}`}
         title={desc.name}
         subtitle={desc.tagline}
-        secondaryActions={[{ label: '← Marketplace', href: `/account/apps?store=${slug}` }]}
+        secondaryActions={[{ label: '<- Marketplace', href: `/account/apps?store=${slug}` }]}
       />
 
       <div
@@ -121,7 +122,7 @@ export default async function AppDetailPage({
                     color: 'var(--ink-muted)',
                   }}
                 >
-                  {desc.vendor} · {desc.category}
+                  {desc.vendor} - {desc.category}
                 </p>
               </div>
             </header>
@@ -207,7 +208,7 @@ export default async function AppDetailPage({
           color: 'var(--ink-muted)',
         }}
       >
-        Installed only for this storefront. Uninstall anytime — your settings stay until you do.
+        Installed only for this storefront. Uninstall anytime â€” your settings stay until you do.
       </p>
 
       <style>{`

@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+/* eslint-disable @next/next/no-img-element */
 
 import { motion } from "motion/react";
 import { Globe, TrendingUp, BarChart3, Zap } from "lucide-react";

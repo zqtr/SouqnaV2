@@ -157,6 +157,7 @@ function Sidebar({
   collapsible = "offcanvas",
   className,
   children,
+  dir,
   ...props
 }: React.ComponentProps<"div"> & {
   side?: "left" | "right"
@@ -169,6 +170,7 @@ function Sidebar({
     return (
       <div
         data-slot="sidebar"
+        dir={dir}
         className={cn(
           "flex h-full w-(--sidebar-width) flex-col bg-sidebar text-sidebar-foreground",
           className
@@ -184,6 +186,7 @@ function Sidebar({
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent
+          dir={dir}
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
@@ -213,6 +216,7 @@ function Sidebar({
       data-variant={variant}
       data-side={side}
       data-slot="sidebar"
+      dir={dir}
     >
       {/* This is what handles the sidebar gap on desktop */}
       <div
@@ -228,6 +232,7 @@ function Sidebar({
       />
       <div
         data-slot="sidebar-container"
+        data-side={side}
         className={cn(
           "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
           side === "left"
@@ -273,7 +278,7 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <PanelLeftIcon />
+      <PanelLeftIcon className="rtl:rotate-180" />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )

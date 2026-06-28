@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { THEME_COOKIE, THEME_COOKIE_MAX_AGE, isTheme } from '@/lib/theme';
 
 function safeRedirectPath(value: string | null) {

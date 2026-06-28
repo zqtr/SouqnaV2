@@ -47,11 +47,15 @@ export function MediaUploader({
     chooseFromStorage?: string;
     storageHint?: string;
   };
+  const openStorageLabel = value
+    ? mediaCopy.replaceFromStorage ?? fallback.change
+    : mediaCopy.chooseFromStorage ?? fallback.choose;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <button
         type="button"
+        aria-label={openStorageLabel}
         onClick={() => setPickerOpen(true)}
         style={{
           position: 'relative',
@@ -72,6 +76,7 @@ export function MediaUploader({
       >
         {value ? (
           <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={value}
               alt=""
@@ -119,6 +124,7 @@ export function MediaUploader({
             href={value}
             target="_blank"
             rel="noreferrer"
+            aria-label={value}
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 10,
@@ -134,6 +140,7 @@ export function MediaUploader({
           </a>
           <button
             type="button"
+            aria-label={copy.media.remove}
             onClick={() => onChange('')}
             style={{
               background: 'transparent',
@@ -155,6 +162,7 @@ export function MediaUploader({
       {giphyStorefrontSlug ? (
         <button
           type="button"
+          aria-label={copy.media.pickGif}
           onClick={() => setGiphyOpen(true)}
           style={{
             alignSelf: 'flex-start',

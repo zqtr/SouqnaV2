@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Storefront, TemplateId } from '@/lib/brief';
 import type { Block } from './types';
 import { getTemplateIndustrySeed } from './templateIndustrySeed';
+import { COMPONENT_SHOWCASE_DROP_ID } from './componentShowcase';
 
 // Stable hotlinked Unsplash CDN URLs. Verified live (2026-04) — see the
 // per-template `*_HERO`, `*_BANNER`, `*_ANIM` constants below for the
@@ -10,8 +11,7 @@ import { getTemplateIndustrySeed } from './templateIndustrySeed';
 const unsplash = (id: string, w = 1600, q = 80) =>
   `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&q=${q}`;
 
-const picsum = (seed: string, w = 1200, h = 800) =>
-  `https://picsum.photos/seed/${seed}/${w}/${h}`;
+const picsum = (seed: string, w = 1200, h = 800) => `https://picsum.photos/seed/${seed}/${w}/${h}`;
 
 // ── Per-template themed image bank. Heroes / banners / animatedImages
 // use Unsplash so the photo carries the template's identity. Galleries
@@ -85,7 +85,8 @@ const ORYX_ANIM = unsplash('1518684079-3c830dcef090');
  */
 export function bootBlocksFromStorefront(s: Storefront): Block[] {
   const template: TemplateId = s.templateId ?? 'atrium';
-  switch (template) {
+  const blocks = (() => {
+    switch (template) {
     case 'souqline':
       return seedSouqline(s);
     case 'kiosk':
@@ -109,7 +110,303 @@ export function bootBlocksFromStorefront(s: Storefront): Block[] {
     case 'atrium':
     default:
       return seedAtrium(s);
-  }
+    }
+  })();
+  return withPremiumProductSuite(template, s, blocks);
+}
+
+const PREMIUM_PRODUCT_SUITE_TEMPLATES = new Set<TemplateId>([
+  'kiosk',
+  'bazaar',
+  'harvest',
+  'vitrine',
+  'launchpad',
+  'frame',
+]);
+
+const MAX_PRODUCT_SUITE_TEMPLATES = new Set<TemplateId>(['vitrine', 'launchpad', 'frame']);
+
+function withPremiumProductSuite(template: TemplateId, s: Storefront, blocks: Block[]): Block[] {
+  if (!PREMIUM_PRODUCT_SUITE_TEMPLATES.has(template)) return blocks;
+  if (blocks.some((block) => block.type.startsWith('shadcn'))) return blocks;
+
+  const suite = premiumSuiteConfig(template);
+  const source = {
+    source: 'latest' as const,
+    productIds: [],
+    category: null,
+    tag: null,
+    limit: 8,
+    sort: 'newest' as const,
+    hideUnavailable: true,
+  };
+  const hero: Block = {
+    id: randomUUID(),
+    type: 'shadcnHero',
+    props: {
+      variant: suite.hero,
+      kicker: template === 'vitrine' ? 'Max+ Product Suite' : 'Pro+ Product Suite',
+      title: `${s.businessName} product suite`,
+      subtitle:
+        'A premium storefront spine for browsing, trust, product discovery, reviews, and checkout confidence.',
+      productSource: source,
+      cta: { label: 'Shop products', href: '/products' },
+      density: 'editorial',
+      tone: template === 'launchpad' || template === 'frame' ? 'charcoal' : 'sand',
+    },
+    style: { paddingY: 'lg' },
+  };
+  const trust: Block = {
+    id: randomUUID(),
+    type: 'shadcnTrustStrip',
+    props: {
+      variant: suite.trust,
+      title: 'Built for confident checkout',
+      subtitle: 'Delivery, payment, support, and store trust points stay visible before the sale.',
+      metrics: [
+        { value: '974', labelEn: 'Qatar-ready contact', labelAr: 'تواصل جاهز لقطر', icon: 'shield' },
+        { value: 'COD', labelEn: 'Cash and card ready', labelAr: 'نقدي وبطاقة', icon: 'card' },
+        { value: 'Fast', labelEn: 'Delivery notes', labelAr: 'ملاحظات التوصيل', icon: 'truck' },
+      ],
+      density: 'compact',
+      tone: 'gold',
+    },
+    style: { paddingY: 'sm' },
+  };
+  const offer: Block = {
+    id: randomUUID(),
+    type: 'shadcnOfferModal',
+    props: {
+      variant: suite.offer,
+      kicker: 'Premium offer',
+      title: template === 'bazaar' ? 'Drop-ready offer rail' : 'A premium buying moment',
+      subtitle:
+        'Use this section for a featured bundle, launch discount, or seasonal CTA with live product cards.',
+      discountLabel: template === 'launchpad' ? 'Launch offer' : 'Featured offer',
+      cta: { label: 'Shop the offer', href: '/products' },
+      productSource: { ...source, limit: 2 },
+      density: 'balanced',
+      tone: template === 'launchpad' || template === 'frame' ? 'charcoal' : 'gold',
+    },
+    style: { paddingY: 'md' },
+  };
+  const categoryBlock: Block = {
+    id: randomUUID(),
+    type: 'shadcnCategories',
+    props: {
+      variant: suite.categories,
+      kicker: 'Browse',
+      title: 'Shop by collection',
+      subtitle: 'Generated from live product categories when your catalogue is connected.',
+      productSource: source,
+      cta: { label: 'Browse all products', href: '/products' },
+      density: 'balanced',
+      tone: 'sand',
+    },
+    style: { paddingY: 'md' },
+  };
+  const productBlock: Block = {
+    id: randomUUID(),
+    type: 'shadcnProductCard',
+    props: {
+      variant: suite.card,
+      kicker: 'Featured products',
+      title: 'Products ready to buy',
+      subtitle: 'Uses live product data, detail routes, prices, availability, and add-to-cart.',
+      productSource: source,
+      cta: { label: 'View all products', href: '/products' },
+      density: 'balanced',
+      tone: 'sand',
+    },
+    style: { paddingY: 'md' },
+  };
+  const productListBlock: Block = {
+    id: randomUUID(),
+    type: 'shadcnProductList',
+    props: {
+      variant: suite.list,
+      kicker: 'Catalogue flow',
+      title: 'Browse the live catalogue',
+      subtitle: 'Rows and shelves resolve from real products, categories, prices, and availability.',
+      productSource: { ...source, limit: 10 },
+      cta: { label: 'Open full catalogue', href: '/products' },
+      density: template === 'bazaar' ? 'compact' : 'balanced',
+      tone: template === 'launchpad' || template === 'frame' ? 'charcoal' : 'sand',
+    },
+    style: { paddingY: 'md' },
+  };
+  const reviews: Block = {
+    id: randomUUID(),
+    type: 'shadcnReviews',
+    props: {
+      variant: suite.reviews,
+      kicker: 'Customer proof',
+      title: 'A store that feels ready before checkout',
+      subtitle: 'Editable bilingual social proof for Pro+ and Max+ templates.',
+      reviews: [
+        {
+          nameEn: 'Aisha',
+          nameAr: 'عائشة',
+          quoteEn: 'The store felt polished and easy to buy from.',
+          quoteAr: 'المتجر كان مرتباً وسهل الشراء منه.',
+          rating: 5,
+        },
+        {
+          nameEn: 'Noora',
+          nameAr: 'نورة',
+          quoteEn: 'Products, delivery notes, and checkout were clear.',
+          quoteAr: 'المنتجات وملاحظات التوصيل والدفع كانت واضحة.',
+          rating: 5,
+        },
+      ],
+      density: 'balanced',
+      tone: 'sand',
+    },
+    style: { paddingY: 'md' },
+  };
+  const footer: Block = {
+    id: randomUUID(),
+    type: 'shadcnFooter',
+    props: {
+      variant: suite.footer,
+      kicker: 'Souqna',
+      title: s.businessName,
+      subtitle: 'Keep product discovery, policies, and WhatsApp support close to checkout.',
+      density: 'balanced',
+      tone: 'charcoal',
+    },
+    style: { paddingY: 'lg' },
+  };
+
+  const maxBlocks: Block[] = MAX_PRODUCT_SUITE_TEMPLATES.has(template)
+    ? [
+        {
+          id: randomUUID(),
+          type: 'shadcnProductDetail',
+          props: {
+            variant: suite.detail,
+            kicker: 'Signature product',
+            title: 'A deeper buying surface',
+            subtitle: 'Max+ templates include product-detail and quick-view sections for richer PDP-like storytelling.',
+            productSource: { ...source, limit: 1 },
+            density: 'editorial',
+            tone: 'sand',
+          },
+          style: { paddingY: 'md' },
+        },
+        {
+          id: randomUUID(),
+          type: 'shadcnOrderSummary',
+          props: {
+            variant: 'order-summary2',
+            kicker: 'Checkout confidence',
+            title: 'Payment and delivery clarity',
+            subtitle: 'A checkout-inspired section that makes totals, shipping, and trust cues feel deliberate.',
+            note: 'Use this as a page section or adapt the same style inside checkout settings.',
+            cta: { label: 'Continue checkout', href: '/checkout' },
+            productSource: { ...source, limit: 3 },
+            density: 'balanced',
+            tone: 'gold',
+          },
+          style: { paddingY: 'md' },
+        },
+        {
+          id: randomUUID(),
+          type: 'shadcnQuickView',
+          props: {
+            variant: suite.quickView,
+            kicker: 'Quick decision',
+            title: 'A faster product decision',
+            subtitle:
+              'A compact Max+ buying surface with media, price, product route, and Add to Cart bound to Souqna products.',
+            productSource: { ...source, limit: 1 },
+            density: 'balanced',
+            tone: template === 'frame' ? 'charcoal' : 'sand',
+          },
+          style: { paddingY: 'md' },
+        },
+      ]
+    : [];
+
+  return [hero, trust, offer, ...blocks, categoryBlock, productBlock, productListBlock, ...maxBlocks, reviews, footer];
+}
+
+function premiumSuiteConfig(template: TemplateId) {
+  const configs = {
+    kiosk: {
+      hero: 'ecommerce-hero3',
+      trust: 'trust-strip1',
+      categories: 'product-categories5',
+      card: 'product-card10',
+      list: 'product-list2',
+      reviews: 'reviews2',
+      footer: 'ecommerce-footer2',
+      detail: 'product-detail3',
+      offer: 'offer-modal1',
+      quickView: 'product-quick-view7',
+    },
+    bazaar: {
+      hero: 'ecommerce-hero1',
+      trust: 'trust-strip3',
+      categories: 'product-categories4',
+      card: 'product-card24',
+      list: 'product-list6',
+      reviews: 'reviews9',
+      footer: 'ecommerce-footer18',
+      detail: 'product-detail4',
+      offer: 'offer-modal5',
+      quickView: 'product-quick-view8',
+    },
+    harvest: {
+      hero: 'ecommerce-hero3',
+      trust: 'trust-strip1',
+      categories: 'product-categories2',
+      card: 'product-card10',
+      list: 'product-list3',
+      reviews: 'reviews2',
+      footer: 'ecommerce-footer1',
+      detail: 'product-detail2',
+      offer: 'offer-modal1',
+      quickView: 'product-quick-view7',
+    },
+    vitrine: {
+      hero: 'ecommerce-hero3',
+      trust: 'trust-strip3',
+      categories: 'product-categories5',
+      card: 'product-card24',
+      list: 'product-list7',
+      reviews: 'reviews23',
+      footer: 'ecommerce-footer18',
+      detail: 'product-detail9',
+      offer: 'offer-modal5',
+      quickView: 'product-quick-view8',
+    },
+    launchpad: {
+      hero: 'ecommerce-hero6',
+      trust: 'trust-strip3',
+      categories: 'product-categories4',
+      card: 'product-card24',
+      list: 'product-list5',
+      reviews: 'reviews9',
+      footer: 'ecommerce-footer18',
+      detail: 'product-detail6',
+      offer: 'offer-modal5',
+      quickView: 'product-quick-view8',
+    },
+    frame: {
+      hero: 'ecommerce-hero6',
+      trust: 'trust-strip1',
+      categories: 'product-categories5',
+      card: 'product-card24',
+      list: 'product-list4',
+      reviews: 'reviews23',
+      footer: 'ecommerce-footer18',
+      detail: 'product-detail4',
+      offer: 'offer-modal1',
+      quickView: 'product-quick-view7',
+    },
+  } as const;
+  return configs[template as keyof typeof configs] ?? configs.kiosk;
 }
 
 // Stable Picsum seeds make the gallery feel populated out of the box
@@ -148,7 +445,7 @@ function seedAtrium(s: Storefront): Block[] {
         showFounder: true,
         cta: {
           label: seed.ctaLabel,
-          href: '#',
+          href: '/products',
           scrollTo: inquireId,
         },
       },
@@ -266,8 +563,7 @@ function seedSouqline(s: Storefront): Block[] {
       props: {
         eyebrow: 'scan lanes · مسارات التصفح',
         heading: 'Fast categories, zero dead ends.',
-        body:
-          `${seed.primaryCategory} / ${seed.secondaryCategory} / ${seed.tertiaryCategory}. The storefront opens like a compact buying dashboard, then lets the buyer slow down where it matters.`,
+        body: `${seed.primaryCategory} / ${seed.secondaryCategory} / ${seed.tertiaryCategory}. The storefront opens like a compact buying dashboard, then lets the buyer slow down where it matters.`,
         align: 'start',
         emphasis: 'plain',
       },
@@ -379,7 +675,7 @@ function seedKiosk(s: Storefront): Block[] {
         showFounder: false,
         cta: {
           label: seed.ctaLabel,
-          href: '#',
+          href: '/products',
           scrollTo: inquireId,
         },
       },
@@ -598,8 +894,8 @@ function seedStudio(s: Storefront): Block[] {
 }
 
 // ============================================================================
-// Bazaar — lookbook + drops. Gallery hero, `drop` block (dropId blank
-// until the founder creates one in the Drop Manager app), productGrid
+// Bazaar — lookbook + drops. Gallery hero, schema-valid `drop` preview
+// until the founder connects a real Drop Manager id, productGrid
 // by categorySlug for "featured collections", banner, productList,
 // contact card.
 // ============================================================================
@@ -660,7 +956,7 @@ function seedBazaar(s: Storefront): Block[] {
         showFounder: false,
         cta: {
           label: seed.ctaLabel,
-          href: '#',
+          href: '/products',
           scrollTo: dropAnchor,
         },
       },
@@ -670,7 +966,7 @@ function seedBazaar(s: Storefront): Block[] {
       id: dropAnchor,
       type: 'drop',
       props: {
-        dropId: '',
+        dropId: COMPONENT_SHOWCASE_DROP_ID,
         heading: 'Next signal drop',
         subheading: seed.manifesto,
       },
@@ -748,7 +1044,7 @@ function seedVitrine(s: Storefront): Block[] {
         scrim: 'soft',
         cta: {
           label: seed.ctaLabel,
-          href: '#',
+          href: '/products',
           scrollTo: inquireId,
         },
       },
@@ -767,6 +1063,20 @@ function seedVitrine(s: Storefront): Block[] {
         showFounder: false,
       },
       style: { paddingY: 'md' },
+    },
+    {
+      id: randomUUID(),
+      type: 'curvedLoop',
+      props: {
+        marqueeText: 'Add Text Here',
+        speed: 1.45,
+        curveAmount: 380,
+        direction: 'left',
+        interactive: true,
+        size: 'standard',
+        tone: 'accent',
+      },
+      style: { paddingY: 'sm', colorScheme: 'inherit' },
     },
     {
       id: randomUUID(),
@@ -876,7 +1186,7 @@ function seedMonoline(s: Storefront): Block[] {
         showFounder: false,
         cta: {
           label: seed.ctaLabel,
-          href: '#',
+          href: '/products',
           scrollTo: inquireId,
         },
       },
@@ -991,7 +1301,7 @@ function seedHarvest(s: Storefront): Block[] {
         showFounder: true,
         cta: {
           label: seed.ctaLabel,
-          href: '#',
+          href: '/products',
           scrollTo: inquireId,
         },
       },

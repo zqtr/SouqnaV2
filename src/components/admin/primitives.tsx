@@ -221,17 +221,20 @@ export function Surface({
   children,
   padding = 20,
   style,
+  className,
 }: {
   children: React.ReactNode;
   padding?: number;
   style?: React.CSSProperties;
+  className?: string;
 }) {
   return (
     <Card
-      className="gap-0 py-0 shadow-none"
+      className={`gap-0 py-0 shadow-sm transition-shadow duration-200 ${className ?? ''}`}
       style={{
         background: 'var(--surface-elevated, var(--surface-bg))',
         borderColor: 'var(--surface-rule)',
+        boxShadow: 'var(--shadow-card)',
         padding,
         ...style,
       }}

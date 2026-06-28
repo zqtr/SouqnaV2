@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import Link from 'next/link';
 import { Plus, ArrowUpRight, FileUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -75,6 +76,12 @@ export function ProductsTab({
         locale={dashboardLocale}
       />
 
+      <CatalogueInsights
+        products={scoped}
+        visibleProducts={visible}
+        locale={dashboardLocale}
+      />
+
       {categories.length > 0 ? (
         <CategoryStrip
           categories={categories}
@@ -108,6 +115,98 @@ export function ProductsTab({
 // ---------------------------------------------------------------------------
 // Per-storefront management view (active filter selected)
 // ---------------------------------------------------------------------------
+
+function CatalogueInsights({
+  products,
+  visibleProducts,
+  locale,
+}: {
+  products: ProductWithStorefront[];
+  visibleProducts: ProductWithStorefront[];
+  locale?: string;
+}) {
+  const t = (text: string) => adminPhrase(locale, text);
+  const numberLocale = locale === 'ar' ? 'ar-QA' : 'en-US';
+  const active = products.filter((product) => product.status === 'active').length;
+  const drafts = products.filter((product) => product.status === 'draft').length;
+  const soldOut = products.filter((product) => product.status === 'sold_out').length;
+  const missingPrice = products.filter((product) =>
+    product.pricingMode === 'monthly_payment'
+      ? product.monthlyPriceQar === null
+      : product.priceQar === null,
+  ).length;
+  const missingImage = products.filter((product) => !product.imageUrl).length;
+  const categoryCount = collectCategories(products).length;
+  const readyCount = products.filter((product) => {
+    const hasPrice =
+      product.pricingMode === 'monthly_payment'
+        ? product.monthlyPriceQar !== null
+        : product.priceQar !== null;
+    return product.status === 'active' && hasPrice && Boolean(product.imageUrl);
+  }).length;
+  const readyPercent = products.length ? Math.round((readyCount / products.length) * 100) : 0;
+
+  return (
+    <section className="grid gap-3 md:grid-cols-4">
+      <Card className="gap-1.5 px-4 py-3">
+        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+          {t('Catalogue readiness')}
+        </p>
+        <p className="text-2xl font-semibold tabular-nums">
+          {readyPercent.toLocaleString(numberLocale)}%
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {visibleProducts.length.toLocaleString(numberLocale)} {t('showing now')}
+        </p>
+      </Card>
+      <InsightCard
+        label={t('Live products')}
+        value={active.toLocaleString(numberLocale)}
+        sub={`${drafts.toLocaleString(numberLocale)} ${t('drafts')} · ${soldOut.toLocaleString(numberLocale)} ${t('sold out')}`}
+      />
+      <InsightCard
+        label={t('Catalogue gaps')}
+        value={(missingPrice + missingImage).toLocaleString(numberLocale)}
+        sub={`${missingPrice.toLocaleString(numberLocale)} ${t('missing price')} · ${missingImage.toLocaleString(numberLocale)} ${t('missing image')}`}
+        warning={missingPrice + missingImage > 0}
+      />
+      <InsightCard
+        label={t('Categories')}
+        value={categoryCount.toLocaleString(numberLocale)}
+        sub={t('used by All Products filters and premium category blocks')}
+      />
+    </section>
+  );
+}
+
+function InsightCard({
+  label,
+  value,
+  sub,
+  warning,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  warning?: boolean;
+}) {
+  return (
+    <Card className="gap-1.5 px-4 py-3">
+      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className={cn(
+          'text-2xl font-semibold tabular-nums',
+          warning ? 'text-amber-600 dark:text-amber-500' : '',
+        )}
+      >
+        {value}
+      </p>
+      <p className="text-xs text-muted-foreground">{sub}</p>
+    </Card>
+  );
+}
 
 function PerStorefrontManage({
   storefront,
@@ -264,7 +363,11 @@ function ProductCard({ product: p, locale }: { product: ProductWithStorefront; l
             <ProductStatusBadge status={p.status} locale={locale} />
           </div>
           <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground">
-            {p.priceQar !== null ? (
+            {p.pricingMode === 'monthly_payment' && p.monthlyPriceQar !== null ? (
+              <span className="font-mono tabular-nums text-foreground">
+                QAR {p.monthlyPriceQar.toLocaleString('en-US')} / {t('month')}
+              </span>
+            ) : p.priceQar !== null ? (
               <span className="font-mono tabular-nums text-foreground">
                 QAR {p.priceQar.toLocaleString('en-US')}
               </span>
@@ -288,6 +391,24 @@ function ProductCard({ product: p, locale }: { product: ProductWithStorefront; l
                 >
                   {t('Source')}
                 </a>
+              </>
+            ) : null}
+            {p.isCustomizable ||
+            p.sizeOptions.length > 0 ||
+            p.allowCustomSize ||
+            p.requiresHeightInput ||
+            p.variantOptions.length > 0 ? (
+              <>
+                <Sep />
+                <span>{t('Custom options')}</span>
+              </>
+            ) : null}
+            {p.stock > 0 ? (
+              <>
+                <Sep />
+                <span>
+                  {p.stock.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')} {t('in stock')}
+                </span>
               </>
             ) : null}
           </div>

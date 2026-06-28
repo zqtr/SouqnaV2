@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import { TemplatePreview } from '@/components/templates/previews';
 import { Surface } from '@/components/admin/primitives';
 import type { TemplateId } from '@/lib/brief';

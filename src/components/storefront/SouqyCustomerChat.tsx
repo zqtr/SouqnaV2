@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useMemo, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 type ChatMessage = {
   role: 'user' | 'assistant';

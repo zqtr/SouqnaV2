@@ -69,7 +69,7 @@ type RouteIntent =
   | { kind: 'invalid' };
 
 const LEGAL_KEYS = new Set<string>(POLICY_KEYS as readonly string[]);
-const RESERVED_OWN_ROUTES = new Set(['checkout', 'cart']);
+const RESERVED_OWN_ROUTES = new Set(['checkout', 'cart', 'products']);
 
 function deriveIntent(segments: readonly string[]): RouteIntent {
   if (segments.length === 0) return { kind: 'home' };

@@ -2,32 +2,19 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { db, hasDb } from '@/lib/db';
 import {
   getSkipCashPayment,
+  normalizeSkipCashRecurringSubscriptionId,
   normalizeSkipCashStatusId,
   normalizeWebhookPayload,
   verifySkipCashWebhookSignature,
+  type SkipCashWebhookPayload,
 } from '@/lib/skipcash';
-import { getPlanMeta, recordPlanHistory, setPlan, type Plan } from '@/lib/billing';
+import { getPlanMeta, patchPlanMeta, recordPlanHistory, setPlan, type Plan } from '@/lib/billing';
 import { type BillingCycle } from '@/lib/plans';
 import { logEvent } from '@/lib/events';
 import { pushNotification } from '@/lib/notifications';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-type SkipCashWebhookPayload = {
-  paymentId?: string;
-  PaymentId?: string;
-  amount?: string;
-  Amount?: string;
-  statusId?: number | string;
-  StatusId?: number | string;
-  transactionId?: string | null;
-  TransactionId?: string | null;
-  custom1?: string | null;
-  Custom1?: string | null;
-  visaId?: string | null;
-  VisaId?: string | null;
-};
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   let payload: SkipCashWebhookPayload;
@@ -49,7 +36,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Missing payment data' }, { status: 400 });
   }
 
-  const eventId = `skipcash:${paymentId}:${statusId}:${normalized.VisaId || 'none'}`;
+  const recurringSubscriptionId = normalizeSkipCashRecurringSubscriptionId(
+    normalized.RecurringSubscriptionId,
+  );
+  const eventId = `skipcash:${paymentId}:${statusId}:${
+    normalized.VisaId || recurringSubscriptionId || 'none'
+  }`;
   if (await alreadyProcessed(eventId)) {
     return NextResponse.json({ ok: true, deduped: true });
   }
@@ -74,19 +66,39 @@ async function handlePaid(
 ): Promise<void> {
   const payment = await getSkipCashPayment(paymentId);
   if (normalizeSkipCashStatusId(payment.statusId) !== 2) return;
+  const recurringSubscriptionId =
+    normalizeSkipCashRecurringSubscriptionId(payload.RecurringSubscriptionId) ??
+    normalizeSkipCashRecurringSubscriptionId(payment.recurringSubscriptionId);
 
-  const ctx = await resolvePaymentContext(paymentId, payload.TransactionId, payload.Custom1);
+  const ctx = await resolvePaymentContext(
+    paymentId,
+    payload.TransactionId,
+    payload.Custom1,
+    recurringSubscriptionId,
+  );
   if (!ctx) return;
 
   const before = await currentPlanFor(ctx.clerkUserId);
+  const currentPeriodEnd = periodEndFromCycle(ctx.cycle);
   await setPlan(ctx.clerkUserId, ctx.plan, {
     provider: 'skipcash',
+    subscriptionProvider: 'skipcash',
+    subscriptionStatus: 'active',
+    subscriptionId: recurringSubscriptionId ?? paymentId,
     paymentId,
+    skipcashPaymentId: paymentId,
+    ...(recurringSubscriptionId
+      ? { skipcashRecurringSubscriptionId: recurringSubscriptionId }
+      : {}),
     transactionId: payload.TransactionId || payment.transactionId || null,
+    skipcashTransactionId: payload.TransactionId || payment.transactionId || null,
     visaId: payload.VisaId || payment.visaId || null,
     status: payment.status ?? 'paid',
+    skipcashStatus: payment.status ?? 'paid',
     cycle: ctx.cycle,
-    currentPeriodEnd: periodEndFromCycle(ctx.cycle),
+    currentPeriodEnd,
+    nextBillingTime: currentPeriodEnd,
+    skipcashLastPaymentAt: new Date().toISOString(),
   });
 
   await recordPlanHistory({
@@ -100,6 +112,7 @@ async function handlePaid(
       paymentId,
       transactionId: payload.TransactionId || payment.transactionId || null,
       visaId: payload.VisaId || payment.visaId || null,
+      recurringSubscriptionId,
     },
   });
 
@@ -110,6 +123,7 @@ async function handlePaid(
     props: {
       provider: 'skipcash',
       paymentId,
+      recurringSubscriptionId,
       plan: ctx.plan,
       cycle: ctx.cycle,
       statusId: payment.statusId,
@@ -122,7 +136,7 @@ async function handlePaid(
     title: 'SkipCash payment received',
     titleAr: 'تم استلام دفعة SkipCash',
     href: '/account/settings/plan',
-    meta: { paymentId, plan: ctx.plan, cycle: ctx.cycle },
+    meta: { paymentId, recurringSubscriptionId, plan: ctx.plan, cycle: ctx.cycle },
   });
 }
 
@@ -131,7 +145,15 @@ async function handleFailed(
   statusId: number,
   payload: ReturnType<typeof normalizeWebhookPayload>,
 ): Promise<void> {
-  const ctx = await resolvePaymentContext(paymentId, payload.TransactionId, payload.Custom1);
+  const recurringSubscriptionId = normalizeSkipCashRecurringSubscriptionId(
+    payload.RecurringSubscriptionId,
+  );
+  const ctx = await resolvePaymentContext(
+    paymentId,
+    payload.TransactionId,
+    payload.Custom1,
+    recurringSubscriptionId,
+  );
   await logEvent({
     kind: 'billing.payment.failed',
     funnel: 'storefront',
@@ -139,19 +161,25 @@ async function handleFailed(
     props: {
       provider: 'skipcash',
       paymentId,
+      recurringSubscriptionId,
       statusId,
       transactionId: payload.TransactionId || null,
     },
   });
 
   if (ctx) {
+    await markFailedMeta(ctx.clerkUserId, {
+      paymentId,
+      statusId,
+      recurringSubscriptionId,
+    });
     await pushNotification({
       userId: ctx.clerkUserId,
       kind: 'billing.payment.failed',
       title: 'SkipCash payment was not completed',
       titleAr: 'لم تكتمل دفعة SkipCash',
       href: '/account/settings/plan',
-      meta: { paymentId, statusId },
+      meta: { paymentId, statusId, recurringSubscriptionId },
     });
   }
 }
@@ -160,18 +188,22 @@ async function resolvePaymentContext(
   paymentId: string,
   transactionId: string | null,
   custom1: string | null,
+  recurringSubscriptionId: string | null = null,
 ): Promise<{ clerkUserId: string; plan: Exclude<Plan, 'free'>; cycle: BillingCycle } | null> {
   const parsed = parseCustom1(custom1);
   if (parsed) return parsed;
   if (!hasDb()) return null;
   try {
     const rows = (await db()`
-      select clerk_user_id, meta
+      select clerk_user_id, plan, meta
       from user_plans
       where meta->>'skipcashPaymentId' = ${paymentId}
+         or meta->>'skipcashCheckoutPaymentId' = ${paymentId}
+         or (${recurringSubscriptionId}::text is not null
+             and meta->>'skipcashRecurringSubscriptionId' = ${recurringSubscriptionId})
          or (${transactionId}::text is not null and meta->>'skipcashTransactionId' = ${transactionId})
       limit 1
-    `) as unknown as Array<{ clerk_user_id: string; meta: Record<string, unknown> }>;
+    `) as unknown as Array<{ clerk_user_id: string; plan: string; meta: Record<string, unknown> }>;
     const row = rows[0];
     if (!row) return null;
     const meta = row.meta ?? (await getPlanMeta(row.clerk_user_id));
@@ -180,17 +212,61 @@ async function resolvePaymentContext(
       meta.skipcashPendingPlan === 'pro' ||
       meta.skipcashPendingPlan === 'atelier'
         ? meta.skipcashPendingPlan
-        : null;
+        : row.plan === 'starter' || row.plan === 'pro' || row.plan === 'atelier'
+          ? row.plan
+          : null;
     const cycle =
       meta.skipcashPendingCycle === 'monthly' || meta.skipcashPendingCycle === 'annual'
         ? meta.skipcashPendingCycle
-        : null;
+        : meta.cycle === 'monthly' || meta.cycle === 'annual'
+          ? meta.cycle
+          : null;
     if (!plan || !cycle) return null;
     return { clerkUserId: row.clerk_user_id, plan, cycle };
   } catch (err) {
     console.error('[skipcash.webhook] context lookup failed', err);
     return null;
   }
+}
+
+async function markFailedMeta(
+  clerkUserId: string,
+  input: {
+    paymentId: string;
+    statusId: number;
+    recurringSubscriptionId: string | null;
+  },
+): Promise<void> {
+  if (!hasDb()) return;
+  const meta = await getPlanMeta(clerkUserId);
+  const currentRecurringSubscriptionId = normalizeSkipCashRecurringSubscriptionId(
+    meta.skipcashRecurringSubscriptionId ?? meta.subscriptionId,
+  );
+  const status = failureStatus(input.statusId);
+  const isRecurringFailure =
+    input.recurringSubscriptionId &&
+    currentRecurringSubscriptionId === input.recurringSubscriptionId &&
+    input.statusId !== 3;
+  const isCurrentCheckoutFailure =
+    !currentRecurringSubscriptionId &&
+    (meta.skipcashPaymentId === input.paymentId ||
+      meta.skipcashCheckoutPaymentId === input.paymentId);
+
+  await patchPlanMeta(clerkUserId, {
+    skipcashLastFailedPaymentId: input.paymentId,
+    skipcashLastFailedStatusId: input.statusId,
+    skipcashLastFailureAt: new Date().toISOString(),
+    ...(isRecurringFailure || isCurrentCheckoutFailure
+      ? {
+          skipcashStatus: status,
+          subscriptionStatus: status,
+        }
+      : {}),
+  });
+}
+
+function failureStatus(statusId: number): 'cancelled' | 'failed' {
+  return statusId === 3 ? 'cancelled' : 'failed';
 }
 
 function parseCustom1(

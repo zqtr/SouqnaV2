@@ -4,6 +4,7 @@ import { COMPONENT_SHOWCASE_DROP_ID } from '@/lib/blocks/componentShowcase';
 import { getAppState, getInstalledApp } from '@/lib/apps/installed';
 import { resolveDrop, dropPhase } from '@/lib/apps/drop-manager';
 import type { Product } from '@/lib/products';
+import { ProductMedia } from '../ProductMedia';
 import { DropCountdown } from './DropCountdown';
 import { DropWaitlistButton } from './DropWaitlistButton';
 
@@ -26,21 +27,28 @@ export async function DropBlock({ block, ctx }: BlockRenderProps<DropProps>) {
   const slug = ctx.storefront.slug;
   const dropId = block.props.dropId;
 
-  if (dropId === COMPONENT_SHOWCASE_DROP_ID) {
+  if (dropId === COMPONENT_SHOWCASE_DROP_ID && (ctx.isPreview || slug === 'components')) {
     return <DropShowcaseCard block={block} ctx={ctx} />;
   }
+  if (dropId === COMPONENT_SHOWCASE_DROP_ID) return null;
 
   // Cheap guard: block renders nothing if the founder uninstalled or
   // disabled the Drop Manager plugin without removing the block from
   // their published page.
   const installed = await getInstalledApp(slug, 'drop-manager').catch(() => null);
-  if (!installed || !installed.enabled) return null;
+  if (!installed || !installed.enabled) {
+    return ctx.isPreview ? <DropShowcaseCard block={block} ctx={ctx} /> : null;
+  }
 
   const stateRow = await getAppState(slug, 'drop-manager', `drop:${dropId}`).catch(() => null);
-  if (!stateRow) return null;
+  if (!stateRow) {
+    return ctx.isPreview ? <DropShowcaseCard block={block} ctx={ctx} /> : null;
+  }
 
   const drop = resolveDrop(stateRow.value);
-  if (!drop) return null;
+  if (!drop) {
+    return ctx.isPreview ? <DropShowcaseCard block={block} ctx={ctx} /> : null;
+  }
   const phase = dropPhase(drop, new Date());
   if (phase === 'archived') return null;
 
@@ -124,7 +132,7 @@ export async function DropBlock({ block, ctx }: BlockRenderProps<DropProps>) {
               alignSelf: 'flex-start',
             }}
           >
-            Sold out · thank you
+            {ctx.isRtl ? 'نفدت الكمية · شكراً لكم' : 'Sold out · thank you'}
           </p>
         )
       ) : null}
@@ -222,10 +230,9 @@ function DropProductGrid({ products }: { products: Product[] }) {
           }}
         >
           {p.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={p.imageUrl}
-              alt={p.title}
+            <ProductMedia
+              url={p.imageUrl}
+              title={p.title}
               style={{
                 width: '100%',
                 aspectRatio: '4 / 5',

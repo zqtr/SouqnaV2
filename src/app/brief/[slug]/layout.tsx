@@ -7,6 +7,7 @@ import {
   getServerTheme,
   ThemeInitScript,
 } from '@/components/theme/ServerThemeScript';
+import type { Theme } from '@/lib/theme';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { NavigationLoader } from '@/components/system/NavigationLoader';
 
@@ -24,14 +25,19 @@ type Props = {
 export default async function BriefLayout({ children, params }: Props) {
   const { slug } = await params;
   let lang: 'en' | 'ar' = 'en';
+  let forcedTheme: Theme | null = null;
   try {
     const data = await getStorefront(slug);
-    if (data) lang = data.locale;
+    if (data) {
+      lang = data.locale;
+      const behaviour = data.themeOverrides.themeBehaviour;
+      forcedTheme = behaviour === 'light' || behaviour === 'dark' ? behaviour : null;
+    }
   } catch {
     // Fall back to en if DB is unreachable; the page itself will show 404 / error.
   }
 
-  const theme = await getServerTheme();
+  const theme = forcedTheme ?? (await getServerTheme());
 
   return (
     <html
@@ -43,7 +49,7 @@ export default async function BriefLayout({ children, params }: Props) {
       suppressHydrationWarning
     >
       <head>
-        <ThemeInitScript />
+        <ThemeInitScript forcedTheme={forcedTheme} />
       </head>
       <body
         className="min-h-dvh antialiased"

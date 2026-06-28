@@ -22,7 +22,7 @@ import HalftoneWave from '@/components/halftone-wave';
 import { Navigation2 } from '@/components/navigation-2';
 import { MetalFrame } from '@/components/primitives/MetalFrame';
 import { Pricing5 } from '@/components/pricing-5';
-import RotatingText from '@/components/react-bits/RotatingText';
+import RotatingText from '@/components/souqna-motion/RotatingText';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import type { Locale } from '@/i18n/locales';
 import { LocaleToggle } from './LocaleToggle';

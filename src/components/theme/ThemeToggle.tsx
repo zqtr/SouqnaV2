@@ -1,6 +1,8 @@
 'use client';
 
 import { useTheme } from './ThemeProvider';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 type Props = {
   /** When true, render a tiny icon-only button. Default: icon + label. */
@@ -25,52 +27,22 @@ export function ThemeToggle({ compact = false, label, className }: Props) {
   const targetLabel = label ?? (targetIsDark ? 'Dark mode' : 'Light mode');
 
   return (
-    <button
+    <Button
       type="button"
       onClick={toggle}
       aria-label={`Switch to ${targetIsDark ? 'dark' : 'light'} mode`}
       title={targetLabel}
-      className={className}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: compact ? 0 : 8,
-        padding: compact ? 6 : '6px 12px',
-        height: compact ? 36 : 34,
-        minWidth: compact ? 36 : undefined,
-        background: 'color-mix(in srgb, var(--surface-overlay) 82%, transparent)',
-        color: 'var(--ink-strong)',
-        border: '1px solid var(--surface-rule-strong)',
-        borderRadius: compact ? 999 : 8,
-        fontFamily: 'var(--font-mono)',
-        fontSize: 11,
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
-        cursor: 'pointer',
-        boxShadow: '0 14px 32px rgba(0,0,0,0.12)',
-        backdropFilter: 'blur(18px)',
-        WebkitBackdropFilter: 'blur(18px)',
-        transition:
-          'color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.color = 'var(--ink-strong)';
-        e.currentTarget.style.borderColor = 'var(--surface-rule-strong)';
-        e.currentTarget.style.background = 'var(--surface-bg)';
-        e.currentTarget.style.transform = 'translateY(-1px)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.color = 'var(--ink-strong)';
-        e.currentTarget.style.borderColor = 'var(--surface-rule-strong)';
-        e.currentTarget.style.background =
-          'color-mix(in srgb, var(--surface-overlay) 82%, transparent)';
-        e.currentTarget.style.transform = 'translateY(0)';
-      }}
+      variant="outline"
+      size={compact ? 'icon-sm' : 'sm'}
+      className={cn(
+        'border-border bg-background/80 text-foreground shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:bg-accent hover:text-accent-foreground',
+        compact ? 'rounded-full' : 'rounded-md font-mono text-[11px] uppercase tracking-[0.1em]',
+        className,
+      )}
     >
       <ThemeGlyph theme={targetIsDark ? 'dark' : 'light'} />
       {compact ? null : <span>{targetLabel}</span>}
-    </button>
+    </Button>
   );
 }
 

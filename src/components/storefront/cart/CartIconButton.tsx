@@ -1,6 +1,7 @@
 'use client';
 
 import { useCart } from './CartContext';
+import type { StorefrontCartVariant } from '@/lib/storefrontChrome';
 
 /**
  * Header cart trigger. Hidden entirely when checkout isn't enabled —
@@ -13,46 +14,69 @@ import { useCart } from './CartContext';
 export function CartIconButton({
   label = 'Cart',
   ariaLabel,
+  placement = 'inline',
+  variant = 'cart-inline-bag',
 }: {
   label?: string;
   ariaLabel?: string;
+  placement?: 'inline' | 'floating';
+  variant?: StorefrontCartVariant;
 } = {}) {
   const cart = useCart();
   if (!cart.enabled) return null;
 
   const count = cart.count;
+  const bottomBar = variant === 'cart-bottom-bar';
+  const floating = placement === 'floating' || variant === 'cart-floating-bag' || bottomBar;
 
   return (
     <button
       type="button"
       onClick={cart.open}
       aria-label={
-        ariaLabel ??
-        (count > 0 ? `${label} — ${count} item${count === 1 ? '' : 's'}` : label)
+        ariaLabel ?? (count > 0 ? `${label} — ${count} item${count === 1 ? '' : 's'}` : label)
       }
       style={{
-        position: 'fixed',
-        top: 'max(20px, env(safe-area-inset-top))',
-        insetInlineEnd: 20,
-        zIndex: 60,
-        width: 44,
-        height: 44,
+        ...(floating
+          ? {
+              position: 'fixed',
+              top: bottomBar ? undefined : 'max(20px, env(safe-area-inset-top))',
+              bottom: bottomBar ? 'max(16px, env(safe-area-inset-bottom))' : undefined,
+              insetInlineEnd: 20,
+              zIndex: 60,
+              width: bottomBar ? 'min(240px, calc(100vw - 32px))' : 44,
+              height: 44,
+              boxShadow: '0 6px 20px -10px rgba(0,0,0,0.25)',
+            }
+          : {
+              position: 'relative',
+              width: 34,
+              height: 34,
+            }),
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'var(--sf-ground, var(--surface-bg))',
-        color: 'var(--sf-ink, var(--ink-strong))',
-        border:
-          '1px solid color-mix(in srgb, var(--sf-ink, var(--ink-strong)) 14%, transparent)',
-        borderRadius: 999,
-        boxShadow: '0 6px 20px -10px rgba(0,0,0,0.25)',
+        gap: bottomBar ? 8 : undefined,
+        background:
+          variant === 'cart-luxury-sheet' || variant === 'cart-max-summary'
+            ? 'var(--sf-ink, var(--ink-strong))'
+            : 'var(--sf-ground, var(--surface-bg))',
+        color:
+          variant === 'cart-luxury-sheet' || variant === 'cart-max-summary'
+            ? 'var(--sf-ground, var(--surface-bg))'
+            : 'var(--sf-ink, var(--ink-strong))',
+        border: '1px solid color-mix(in srgb, var(--sf-ink, var(--ink-strong)) 14%, transparent)',
+        borderRadius: bottomBar ? 14 : 999,
         cursor: 'pointer',
-        padding: 0,
+        padding: bottomBar ? '0 14px' : 0,
       }}
     >
       <span aria-hidden style={{ display: 'inline-flex' }}>
         <ShoppingBagSvg />
       </span>
+      {bottomBar ? (
+        <span style={{ fontSize: 13, fontWeight: 700 }}>{label}</span>
+      ) : null}
       {count > 0 ? (
         <span
           aria-hidden

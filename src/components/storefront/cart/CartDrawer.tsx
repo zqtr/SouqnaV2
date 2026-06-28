@@ -10,6 +10,39 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import { useCart } from './CartContext';
+import type { StorefrontCartVariant } from '@/lib/storefrontChrome';
+
+export type CartDrawerLabels = {
+  title: string;
+  close: string;
+  size: string;
+  variant: string;
+  height: string;
+  remove: string;
+  subtotal: string;
+  checkout: string;
+  emptyTitle: string;
+  emptyText: string;
+  continueBrowsing: string;
+  decreaseQuantity: string;
+  increaseQuantity: string;
+};
+
+const DEFAULT_CART_DRAWER_LABELS: CartDrawerLabels = {
+  title: 'Your cart',
+  close: 'Close cart',
+  size: 'Size',
+  variant: 'Variant',
+  height: 'Height',
+  remove: 'Remove',
+  subtotal: 'Subtotal',
+  checkout: 'Checkout',
+  emptyTitle: 'Your cart is empty',
+  emptyText: "Browse the storefront and add anything you'd like. It'll show up here.",
+  continueBrowsing: 'Continue browsing',
+  decreaseQuantity: 'Decrease quantity',
+  increaseQuantity: 'Increase quantity',
+};
 
 /**
  * Slide-in cart drawer. Mounts once per page; renders nothing until
@@ -20,8 +53,17 @@ import { useCart } from './CartContext';
  * locked while open, focus moves to the close button on mount and is
  * restored to the previously focused element on close.
  */
-export function CartDrawer({ currency = 'QAR' }: { currency?: string } = {}) {
+export function CartDrawer({
+  currency = 'QAR',
+  variant = 'cart-floating-bag',
+  labels,
+}: {
+  currency?: string;
+  variant?: StorefrontCartVariant;
+  labels?: Partial<CartDrawerLabels>;
+} = {}) {
   const cart = useCart();
+  const text = { ...DEFAULT_CART_DRAWER_LABELS, ...labels };
   const pathname = usePathname();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -110,15 +152,39 @@ export function CartDrawer({ currency = 'QAR' }: { currency?: string } = {}) {
         onKeyDown={onTrapKey}
         style={{
           position: 'absolute',
-          top: 0,
-          bottom: 0,
-          insetInlineEnd: 0,
-          width: 'min(420px, 100%)',
-          background: 'var(--sf-ground, var(--surface-bg))',
+          top:
+            variant === 'cart-command-cart' || variant === 'cart-luxury-sheet'
+              ? 16
+              : 0,
+          bottom:
+            variant === 'cart-command-cart' || variant === 'cart-luxury-sheet'
+              ? 16
+              : 0,
+          insetInlineEnd:
+            variant === 'cart-command-cart' || variant === 'cart-luxury-sheet'
+              ? 16
+              : 0,
+          width:
+            variant === 'cart-max-summary'
+              ? 'min(520px, calc(100% - 24px))'
+              : variant === 'cart-mini-drawer'
+                ? 'min(360px, calc(100% - 24px))'
+                : 'min(420px, 100%)',
+          background:
+            variant === 'cart-luxury-sheet' || variant === 'cart-max-summary'
+              ? 'linear-gradient(180deg, color-mix(in srgb, var(--sf-ground, var(--surface-bg)) 94%, white), var(--sf-ground, var(--surface-bg)))'
+              : 'var(--sf-ground, var(--surface-bg))',
           color: 'var(--sf-ink, var(--ink-strong))',
           borderInlineStart:
             '1px solid color-mix(in srgb, var(--sf-ink, var(--ink-strong)) 10%, transparent)',
-          boxShadow: '-12px 0 40px -12px rgba(0,0,0,0.25)',
+          borderRadius:
+            variant === 'cart-command-cart' || variant === 'cart-luxury-sheet'
+              ? 22
+              : 0,
+          boxShadow:
+            variant === 'cart-command-cart' || variant === 'cart-luxury-sheet'
+              ? '0 22px 60px -34px rgba(0,0,0,0.48)'
+              : '-12px 0 40px -12px rgba(0,0,0,0.25)',
           transform: isOpen ? 'translateX(0)' : 'translateX(var(--sf-drawer-hidden-x, 100%))',
           transition: 'transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1)',
           display: 'flex',
@@ -147,7 +213,7 @@ export function CartDrawer({ currency = 'QAR' }: { currency?: string } = {}) {
               letterSpacing: '-0.01em',
             }}
           >
-            Your cart
+            {text.title}
             <span
               aria-hidden
               style={{
@@ -165,7 +231,7 @@ export function CartDrawer({ currency = 'QAR' }: { currency?: string } = {}) {
             ref={closeBtnRef}
             type="button"
             onClick={cart.close}
-            aria-label="Close cart"
+            aria-label={text.close}
             style={iconButtonStyle()}
           >
             <CloseSvg />
@@ -180,7 +246,7 @@ export function CartDrawer({ currency = 'QAR' }: { currency?: string } = {}) {
           }}
         >
           {cart.items.length === 0 ? (
-            <EmptyCart onClose={cart.close} />
+            <EmptyCart onClose={cart.close} labels={text} />
           ) : (
             <ul
               style={{
@@ -226,7 +292,19 @@ export function CartDrawer({ currency = 'QAR' }: { currency?: string } = {}) {
                           color: 'color-mix(in srgb, currentColor 58%, transparent)',
                         }}
                       >
-                        Size: {item.variantLabel}
+                        {text.size}: {item.variantLabel}
+                      </div>
+                    ) : null}
+                    {item.customInputs?.variant ? (
+                      <div
+                        style={{
+                          marginTop: 3,
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 11,
+                          color: 'color-mix(in srgb, currentColor 58%, transparent)',
+                        }}
+                      >
+                        {item.customInputs.variantLabel || text.variant}: {item.customInputs.variant}
                       </div>
                     ) : null}
                     {item.customInputs?.height ? (
@@ -238,7 +316,7 @@ export function CartDrawer({ currency = 'QAR' }: { currency?: string } = {}) {
                           color: 'color-mix(in srgb, currentColor 58%, transparent)',
                         }}
                       >
-                        {item.customInputs.heightLabel || 'Height'}: {item.customInputs.height}
+                        {item.customInputs.heightLabel || text.height}: {item.customInputs.height}
                       </div>
                     ) : null}
                     <div
@@ -262,6 +340,7 @@ export function CartDrawer({ currency = 'QAR' }: { currency?: string } = {}) {
                       <QtyStepper
                         value={item.quantity}
                         onChange={(q) => cart.setQuantity(item.lineId, q)}
+                        labels={text}
                       />
                       <button
                         type="button"
@@ -277,7 +356,7 @@ export function CartDrawer({ currency = 'QAR' }: { currency?: string } = {}) {
                           textDecoration: 'underline',
                         }}
                       >
-                        Remove
+                        {text.remove}
                       </button>
                     </div>
                   </div>
@@ -325,7 +404,7 @@ export function CartDrawer({ currency = 'QAR' }: { currency?: string } = {}) {
                   color: 'color-mix(in srgb, currentColor 60%, transparent)',
                 }}
               >
-                Subtotal
+                {text.subtotal}
               </span>
               <span
                 style={{
@@ -353,7 +432,7 @@ export function CartDrawer({ currency = 'QAR' }: { currency?: string } = {}) {
                 textDecoration: 'none',
               }}
             >
-              Checkout
+              {text.checkout}
             </Link>
           </footer>
         ) : null}
@@ -381,7 +460,7 @@ function DrawerInlineDirectionStyle() {
   );
 }
 
-function EmptyCart({ onClose }: { onClose: () => void }) {
+function EmptyCart({ onClose, labels }: { onClose: () => void; labels: CartDrawerLabels }) {
   return (
     <div
       style={{
@@ -430,7 +509,7 @@ function EmptyCart({ onClose }: { onClose: () => void }) {
           fontWeight: 500,
         }}
       >
-        Your cart is empty
+        {labels.emptyTitle}
       </h3>
       <p
         style={{
@@ -441,7 +520,7 @@ function EmptyCart({ onClose }: { onClose: () => void }) {
           maxWidth: 240,
         }}
       >
-        Browse the storefront and add anything you'd like — it'll show up here.
+        {labels.emptyText}
       </p>
       <button
         type="button"
@@ -458,7 +537,7 @@ function EmptyCart({ onClose }: { onClose: () => void }) {
           cursor: 'pointer',
         }}
       >
-        Continue browsing
+        {labels.continueBrowsing}
       </button>
     </div>
   );
@@ -498,7 +577,15 @@ function Thumb({ url, title }: { url: string | null; title: string }) {
   );
 }
 
-function QtyStepper({ value, onChange }: { value: number; onChange: (q: number) => void }) {
+function QtyStepper({
+  value,
+  onChange,
+  labels,
+}: {
+  value: number;
+  onChange: (q: number) => void;
+  labels: CartDrawerLabels;
+}) {
   return (
     <div
       style={{
@@ -512,7 +599,7 @@ function QtyStepper({ value, onChange }: { value: number; onChange: (q: number) 
       <button
         type="button"
         onClick={() => onChange(value - 1)}
-        aria-label="Decrease quantity"
+        aria-label={labels.decreaseQuantity}
         style={stepperBtnStyle()}
       >
         −
@@ -532,7 +619,7 @@ function QtyStepper({ value, onChange }: { value: number; onChange: (q: number) 
       <button
         type="button"
         onClick={() => onChange(value + 1)}
-        aria-label="Increase quantity"
+        aria-label={labels.increaseQuantity}
         disabled={value >= 99}
         style={{
           ...stepperBtnStyle(),

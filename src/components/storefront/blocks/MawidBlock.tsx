@@ -10,6 +10,7 @@ import {
   type MawidEvent,
   type MawidVariant,
 } from '@/lib/apps/mawid';
+import { isVideoMediaUrl } from '@/lib/media';
 import { MawidCountdown } from './MawidCountdown';
 
 /**
@@ -109,7 +110,7 @@ export async function MawidBlock({ block, ctx }: BlockRenderProps<MawidBlockProp
         ...variantShell(variant, accent),
       }}
     >
-      {product?.imageUrl && variant !== 'inline' ? (
+      {product?.imageUrl && variant !== 'inline' && !isVideoMediaUrl(product.imageUrl) ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={product.imageUrl}

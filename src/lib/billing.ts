@@ -92,6 +92,14 @@ export {
   storefrontCapForPlan,
 };
 export type { BillingCycle, Plan };
+export {
+  analyticsHistoryDaysForPlan,
+  canAccessAdvancedAnalytics,
+  canAccessBasicAnalytics,
+  canExportAnalytics,
+  getAnalyticsAccessLevel,
+  hasEnterpriseAnalyticsDepth,
+} from './analytics/access';
 
 function isPlan(v: unknown): v is Plan {
   if (typeof v !== 'string') return false;

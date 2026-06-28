@@ -11,6 +11,8 @@ apps/*/.env.example
 .cursor/
 .codex/
 .codex-screenshots/
+codex-screenshots/
+uploads/
 .vercel/
 .claude/
 *.tmp

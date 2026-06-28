@@ -2,8 +2,8 @@ import type { AppDescriptor } from './types';
 
 /**
  * Single source of truth for every plugin Souqna lists in Souqna
- * Marketplace. Marketplace entries are limited to integrations that
- * support account-based OAuth connection flows.
+ * Marketplace. Entries can be external integrations or Souqna-owned
+ * plugins that add new builder/runtime surfaces.
  */
 export const APP_REGISTRY: AppDescriptor[] = [
   {
@@ -70,6 +70,26 @@ export const APP_REGISTRY: AppDescriptor[] = [
       headline: 'Connect your WhatsApp Business',
       body: 'One-tap sign-in with Meta. Souqna routes inquiries to the number you choose.',
       ctaLabel: 'Connect WhatsApp',
+    },
+  },
+  {
+    id: 'reviews',
+    name: 'Souqna Reviews',
+    vendor: 'by Souqna',
+    tagline: 'Collect bilingual customer proof on your storefront',
+    description:
+      'Let visitors submit Arabic or English reviews from storefront review sections. Merchants can publish, hide, feature, delete, and control what appears publicly.',
+    category: 'sales',
+    authKind: 'none',
+    available: true,
+    customizable: true,
+    surfacesInBuilder: true,
+    glyph: 'R',
+    accentVar: '--color-gold-deep',
+    connectCopy: {
+      headline: 'Enable Souqna Reviews',
+      body: 'Add live review components in Builder, collect visitor feedback in Arabic or English, and approve what appears on the public storefront.',
+      ctaLabel: 'Enable Souqna Reviews',
     },
   },
   {

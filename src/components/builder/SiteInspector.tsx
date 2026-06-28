@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { palettes, type PaletteId } from '@/lib/palettes';
 import { TEMPLATE_IDS, type TemplateId } from '@/lib/brief';
 import { sortedTemplateIdsForPicker, templatePresets } from '@/lib/templates';
+import { templateDescription, templateNameParts } from '@/lib/templateDisplay';
 import { PLAN_LIMITS, planAtLeast, type Plan } from '@/lib/plans';
 import type { Block, CursorEffect, ThemeOverrides } from '@/lib/blocks/types';
 import { CURSOR_EFFECTS } from '@/lib/blocks/types';
@@ -17,10 +18,16 @@ import { BackgroundPatternPicker } from './BackgroundPatternPicker';
 import { useBuilderCopy } from './BuilderCopyContext';
 import type { Locale } from '@/i18n/locales';
 import type { StorefrontPolicies } from '@/lib/storefrontSettings';
+import { defaultInlinePolicyText, normalizePolicyDisplayMode } from '@/lib/storefrontPolicies';
 import {
-  defaultInlinePolicyText,
-  normalizePolicyDisplayMode,
-} from '@/lib/storefrontPolicies';
+  CART_OPTIONS,
+  FOOTER_OPTIONS,
+  NAVBAR_OPTIONS,
+  SIDEBAR_OPTIONS,
+  normalizeStorefrontChromeConfig,
+  type StorefrontChromeConfig,
+  type StorefrontChromeOption,
+} from '@/lib/storefrontChrome';
 
 type Props = {
   slug: string;
@@ -103,20 +110,21 @@ export function SiteInspector({
   const siteText = useSiteInspectorText();
   const [theme, setTheme] = useState<ThemeOverrides>(initialTheme);
   const initialPolicyDraft = useMemo(() => {
-    const withDefault = (
-      key: 'terms' | 'privacy' | 'refund',
-      value: string | null,
-    ) =>
-      value?.trim()
-        ? value
-        : defaultInlinePolicyText({ key, locale, businessName });
+    const withDefault = (key: 'terms' | 'privacy' | 'refund', value: string | null) =>
+      value?.trim() ? value : defaultInlinePolicyText({ key, locale, businessName });
 
     return {
       terms: withDefault('terms', initialPolicies.terms),
       privacy: withDefault('privacy', initialPolicies.privacy),
       refund: withDefault('refund', initialPolicies.refund),
     };
-  }, [businessName, initialPolicies.privacy, initialPolicies.refund, initialPolicies.terms, locale]);
+  }, [
+    businessName,
+    initialPolicies.privacy,
+    initialPolicies.refund,
+    initialPolicies.terms,
+    locale,
+  ]);
   const [policies, setPolicies] = useState(initialPolicyDraft);
   const [activeTemplate, setActiveTemplate] = useState<TemplateId>(initialTemplate);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -260,6 +268,15 @@ export function SiteInspector({
   );
 
   const activePalette = theme.palette ?? initialPalette;
+  const commerceChrome = normalizeStorefrontChromeConfig(theme.commerceChrome);
+  const updateChrome = (patch: Partial<StorefrontChromeConfig>) => {
+    update({
+      commerceChrome: {
+        ...commerceChrome,
+        ...patch,
+      },
+    });
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -341,6 +358,123 @@ export function SiteInspector({
           onClose={() => setLockedTemplate(null)}
         />
       ) : null}
+
+      <Group label="Storefront chrome">
+        <ChromePickerGroup
+          title="Navbar"
+          value={commerceChrome.navbar}
+          options={NAVBAR_OPTIONS}
+          currentPlan={currentPlan}
+          locale={locale}
+          onChange={(navbar) => updateChrome({ navbar })}
+        />
+        <ChromePickerGroup
+          title="Footer"
+          value={commerceChrome.footer}
+          options={FOOTER_OPTIONS}
+          currentPlan={currentPlan}
+          locale={locale}
+          onChange={(footer) => updateChrome({ footer })}
+        />
+        <ChromePickerGroup
+          title="Sidebar"
+          value={commerceChrome.sidebar}
+          options={SIDEBAR_OPTIONS}
+          currentPlan={currentPlan}
+          locale={locale}
+          onChange={(sidebar) => updateChrome({ sidebar })}
+        />
+        <ChromePickerGroup
+          title="Cart"
+          value={commerceChrome.cart}
+          options={CART_OPTIONS}
+          currentPlan={currentPlan}
+          locale={locale}
+          onChange={(cart) => updateChrome({ cart })}
+        />
+        <FieldLabel>Navbar announcement</FieldLabel>
+        <TextInput
+          value={commerceChrome.navAnnouncement}
+          onChange={(navAnnouncement) => updateChrome({ navAnnouncement })}
+          placeholder="Free delivery today"
+        />
+        <FieldLabel>Navbar CTA</FieldLabel>
+        <TextInput
+          value={commerceChrome.navCtaLabel}
+          onChange={(navCtaLabel) => updateChrome({ navCtaLabel })}
+          placeholder="Shop now"
+        />
+        <TextInput
+          value={commerceChrome.navCtaHref}
+          onChange={(navCtaHref) => updateChrome({ navCtaHref })}
+          placeholder="/products"
+        />
+        <FieldLabel>Navbar options</FieldLabel>
+        <Segmented
+          value={commerceChrome.showSearch ? 'on' : 'off'}
+          onChange={(value) => updateChrome({ showSearch: value === 'on' })}
+          options={[
+            { value: 'on', label: 'Search on' },
+            { value: 'off', label: 'Search off' },
+          ]}
+        />
+        <Segmented
+          value={commerceChrome.showPolicyLinks ? 'on' : 'off'}
+          onChange={(value) => updateChrome({ showPolicyLinks: value === 'on' })}
+          options={[
+            { value: 'on', label: 'Policies on' },
+            { value: 'off', label: 'Policies off' },
+          ]}
+        />
+        <FieldLabel>Footer copy</FieldLabel>
+        <TextInput
+          value={commerceChrome.footerHeadline}
+          onChange={(footerHeadline) => updateChrome({ footerHeadline })}
+          placeholder="Store promise"
+        />
+        <TextArea
+          value={commerceChrome.footerText}
+          onChange={(footerText) => updateChrome({ footerText })}
+          rows={3}
+          placeholder="Short footer message"
+        />
+        <Segmented
+          value={commerceChrome.footerShowNewsletter ? 'on' : 'off'}
+          onChange={(value) => updateChrome({ footerShowNewsletter: value === 'on' })}
+          options={[
+            { value: 'on', label: 'Updates CTA' },
+            { value: 'off', label: 'No updates' },
+          ]}
+        />
+        <FieldLabel>Sidebar label</FieldLabel>
+        <TextInput
+          value={commerceChrome.sidebarLabel}
+          onChange={(sidebarLabel) => updateChrome({ sidebarLabel })}
+          placeholder="Browse store"
+        />
+        <FieldLabel>Cart copy</FieldLabel>
+        <TextInput
+          value={commerceChrome.cartLabel}
+          onChange={(cartLabel) => updateChrome({ cartLabel })}
+          placeholder="Cart"
+        />
+        <TextInput
+          value={commerceChrome.cartCheckoutLabel}
+          onChange={(cartCheckoutLabel) => updateChrome({ cartCheckoutLabel })}
+          placeholder="Checkout"
+        />
+        <TextInput
+          value={commerceChrome.cartEmptyTitle}
+          onChange={(cartEmptyTitle) => updateChrome({ cartEmptyTitle })}
+          placeholder="Your cart is empty"
+        />
+        <TextArea
+          value={commerceChrome.cartEmptyText}
+          onChange={(cartEmptyText) => updateChrome({ cartEmptyText })}
+          rows={3}
+          placeholder="Empty cart message"
+        />
+      </Group>
 
       <Group label="Store policies">
         <FieldLabel>Policy layout</FieldLabel>
@@ -435,9 +569,7 @@ export function SiteInspector({
                 style={{
                   minHeight: 42,
                   borderRadius: 6,
-                  border: active
-                    ? '1px solid var(--bld-accent)'
-                    : '1px solid var(--bld-divider)',
+                  border: active ? '1px solid var(--bld-accent)' : '1px solid var(--bld-divider)',
                   background: opt.preview,
                   color: opt.dark ? '#f8f1df' : 'var(--bld-input-text)',
                   fontFamily: 'var(--font-mono)',
@@ -478,9 +610,7 @@ export function SiteInspector({
                 style={{
                   minHeight: 36,
                   borderRadius: 6,
-                  border: active
-                    ? '1px solid var(--bld-accent)'
-                    : '1px solid var(--bld-divider)',
+                  border: active ? '1px solid var(--bld-accent)' : '1px solid var(--bld-divider)',
                   background: active ? 'var(--bld-accent-soft)' : 'var(--bld-tile-bg)',
                   color: 'var(--bld-input-text)',
                   fontFamily: 'var(--font-mono)',
@@ -619,7 +749,10 @@ function TemplateShowcase({
   const preset = templatePresets[activeTemplate];
   const themeKey: 'light' | 'dark' = preset.theme.themeBehaviour === 'dark' ? 'dark' : 'light';
   const p = palettes[preset.palette][themeKey];
-  const [latin, arabic] = preset.label.split('·').map((s) => s.trim());
+  const isAr = text.locale === 'ar';
+  const { primary: primaryName, secondary } = templateNameParts(preset.label, isAr);
+  const secondaryName = !isAr ? secondary : undefined;
+  const tierLabel = isAr ? PLAN_LIMITS[preset.tier].labelAr : PLAN_LIMITS[preset.tier].label;
 
   return (
     <section
@@ -648,29 +781,28 @@ function TemplateShowcase({
           }}
         >
           <TemplateGradient preset={preset} />
-          <span
-            aria-label={`${PLAN_LIMITS[preset.tier].label} template`}
-            style={{
-              position: 'absolute',
-              zIndex: 2,
-              top: 6,
-              insetInlineEnd: 6,
-              padding: '2px 6px',
-              borderRadius: 999,
-              background:
-                preset.tier === 'free'
-                  ? 'rgba(0,0,0,0.42)'
-                  : 'var(--bld-accent)',
-              color: preset.tier === 'free' ? '#fff' : 'var(--bld-accent-ink)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 8,
-              letterSpacing: '0.10em',
-              textTransform: 'uppercase',
-              boxShadow: '0 6px 18px rgba(0,0,0,0.20)',
-            }}
-          >
-            {PLAN_LIMITS[preset.tier].label}
-          </span>
+          {preset.tier !== 'free' ? (
+            <span
+              aria-label={`${tierLabel} ${text.label('Template')}`}
+              style={{
+                position: 'absolute',
+                zIndex: 2,
+                top: 6,
+                insetInlineEnd: 6,
+                padding: '2px 6px',
+                borderRadius: 999,
+                background: 'var(--bld-accent)',
+                color: 'var(--bld-accent-ink)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 8,
+                letterSpacing: '0.10em',
+                textTransform: 'uppercase',
+                boxShadow: '0 6px 18px rgba(0,0,0,0.20)',
+              }}
+            >
+              {tierLabel}
+            </span>
+          ) : null}
         </div>
         <div
           style={{
@@ -689,7 +821,7 @@ function TemplateShowcase({
               textTransform: 'uppercase',
             }}
           >
-            Template · current
+            {text.label('Current template')}
           </span>
           <span
             style={{
@@ -701,8 +833,8 @@ function TemplateShowcase({
               textOverflow: 'ellipsis',
             }}
           >
-            {latin ?? activeTemplate}
-            {arabic ? (
+            {primaryName}
+            {secondaryName ? (
               <span
                 style={{
                   marginInlineStart: 6,
@@ -710,7 +842,7 @@ function TemplateShowcase({
                   color: 'var(--bld-text-muted)',
                 }}
               >
-                · {arabic}
+                · {secondaryName}
               </span>
             ) : null}
           </span>
@@ -744,7 +876,7 @@ function TemplateShowcase({
           fontStyle: 'italic',
         }}
       >
-        Showing real previews with your products.
+        {text.label('Showing real previews with your products.')}
       </span>
     </section>
   );
@@ -840,13 +972,36 @@ function TemplateUpsell({
   currentPlan: Plan;
   onClose: () => void;
 }) {
+  const text = useSiteInspectorText();
+  const isAr = text.locale === 'ar';
   const preset = templatePresets[templateId];
   const minPlan = preset.tier;
-  const minLabel = PLAN_LIMITS[minPlan].label;
-  const currentLabel = PLAN_LIMITS[currentPlan].label;
-  const subject = encodeURIComponent(`Souqna · upgrade to ${minLabel} (template: ${preset.label})`);
+  const minLabel = isAr ? PLAN_LIMITS[minPlan].labelAr : PLAN_LIMITS[minPlan].label;
+  const currentLabel = isAr ? PLAN_LIMITS[currentPlan].labelAr : PLAN_LIMITS[currentPlan].label;
+  const { primary: presetName } = templateNameParts(preset.label, isAr);
+  const presetDescription = templateDescription(preset, isAr);
+  const storefronts = PLAN_LIMITS[minPlan].storefronts;
+  const storefrontCopy = Number.isFinite(storefronts)
+    ? isAr
+      ? `${storefronts} متاجر`
+      : `${storefronts} storefronts`
+    : isAr
+      ? 'متاجر غير محدودة'
+      : 'unlimited storefronts';
+  const advancedCopy = planAtLeast(minPlan, 'pro')
+    ? isAr
+      ? '، وكتل تجارة مدفوعة وحركات نصوص وصور.'
+      : ', premium commerce blocks and animated text/image blocks.'
+    : '.';
+  const subject = encodeURIComponent(
+    isAr
+      ? `سوقنا · ترقية إلى ${minLabel} (القالب: ${presetName})`
+      : `Souqna · upgrade to ${minLabel} (template: ${presetName})`,
+  );
   const body = encodeURIComponent(
-    `Hi Souqna team,\n\nI'd like to upgrade my plan from ${currentLabel} to ${minLabel} so I can use the ${preset.label} template.\n\nThanks.`,
+    isAr
+      ? `مرحبا فريق سوقنا،\n\nأرغب في ترقية خطتي من ${currentLabel} إلى ${minLabel} حتى أستخدم قالب ${presetName}.\n\nشكرا.`
+      : `Hi Souqna team,\n\nI'd like to upgrade my plan from ${currentLabel} to ${minLabel} so I can use the ${presetName} template.\n\nThanks.`,
   );
   // Same overlay treatment as `TemplateConfirm` — the upsell needs to
   // sit above the full-screen `TemplateBrowserModal` so the founder
@@ -872,7 +1027,7 @@ function TemplateUpsell({
     >
       <motion.div
         role="alertdialog"
-        aria-label={`Upgrade to ${minLabel}`}
+        aria-label={isAr ? `الترقية إلى ${minLabel}` : `Upgrade to ${minLabel}`}
         aria-modal="true"
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
@@ -898,7 +1053,7 @@ function TemplateUpsell({
             color: 'var(--bld-accent)',
           }}
         >
-          Pro template · upgrade required
+          {text.label('Paid template · upgrade required')}
         </div>
         <div
           style={{
@@ -908,15 +1063,21 @@ function TemplateUpsell({
             color: 'var(--bld-input-text)',
           }}
         >
-          <strong>{preset.label}</strong> is part of the {minLabel} tier. You're on{' '}
-          <strong>{currentLabel}</strong> right now — upgrading unlocks{' '}
-          {PLAN_LIMITS[minPlan].templateCount} templates,{' '}
-          {Number.isFinite(PLAN_LIMITS[minPlan].storefronts)
-            ? `${PLAN_LIMITS[minPlan].storefronts} storefronts`
-            : 'unlimited storefronts'}
-          {planAtLeast(minPlan, 'pro')
-            ? ', premium block variants and animated text/image blocks.'
-            : '.'}
+          {isAr ? (
+            <>
+              قالب <strong>{presetName}</strong> ضمن خطة <strong>{minLabel}</strong>. خطتك
+              الحالية <strong>{currentLabel}</strong>، والترقية تفتح{' '}
+              {PLAN_LIMITS[minPlan].templateCount} قوالب، {storefrontCopy}
+              {advancedCopy}
+            </>
+          ) : (
+            <>
+              <strong>{presetName}</strong> is part of the {minLabel} tier. You're on{' '}
+              <strong>{currentLabel}</strong> right now — upgrading unlocks{' '}
+              {PLAN_LIMITS[minPlan].templateCount} templates, {storefrontCopy}
+              {advancedCopy}
+            </>
+          )}
         </div>
         <div
           style={{
@@ -926,7 +1087,7 @@ function TemplateUpsell({
             fontStyle: 'italic',
           }}
         >
-          {preset.description}
+          {presetDescription}
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button
@@ -945,7 +1106,7 @@ function TemplateUpsell({
               cursor: 'pointer',
             }}
           >
-            Close
+            {text.label('Close')}
           </button>
           <a
             href="/account/settings/plan"
@@ -963,7 +1124,7 @@ function TemplateUpsell({
               textDecoration: 'none',
             }}
           >
-            See plans
+            {text.label('See plans')}
           </a>
           <a
             href={`mailto:support@souqna.qa?subject=${subject}&body=${body}`}
@@ -982,7 +1143,7 @@ function TemplateUpsell({
               fontWeight: 600,
             }}
           >
-            Upgrade · talk to us
+            {text.label('Upgrade · talk to us')}
           </a>
         </div>
       </motion.div>
@@ -1006,8 +1167,12 @@ function TemplateConfirm({
   onCancel: () => void;
 }) {
   const text = useSiteInspectorText();
+  const isAr = text.locale === 'ar';
   const nextPreset = templatePresets[next];
   const currentPreset = templatePresets[current];
+  const { primary: currentName } = templateNameParts(currentPreset.label, isAr);
+  const { primary: nextName } = templateNameParts(nextPreset.label, isAr);
+  const nextDescription = templateDescription(nextPreset, isAr);
   // Render as a centered overlay with a z-index above the
   // `TemplateBrowserModal` (130) so the destructive-edit warning sits
   // on top whether the founder picked from the rail-side card or the
@@ -1053,7 +1218,7 @@ function TemplateConfirm({
             color: 'var(--bld-accent)',
           }}
         >
-          Replace template
+          {text.label('Replace template')}
         </div>
         <div
           style={{
@@ -1063,10 +1228,20 @@ function TemplateConfirm({
             color: 'var(--bld-input-text)',
           }}
         >
-          Switching from <strong>{currentPreset.label}</strong> to{' '}
-          <strong>{nextPreset.label}</strong> will replace your current page — every block on the
-          canvas is discarded and a fresh starter set is seeded in its place. Your products, theme
-          palette and storefront settings stay put.
+          {isAr ? (
+            <>
+              التبديل من <strong>{currentName}</strong> إلى <strong>{nextName}</strong> سيستبدل
+              الصفحة الحالية. سيتم حذف كل الكتل في اللوحة وإضافة مجموعة بداية جديدة مكانها.
+              منتجاتك، لوحة الألوان، وإعدادات المتجر تبقى كما هي.
+            </>
+          ) : (
+            <>
+              Switching from <strong>{currentName}</strong> to <strong>{nextName}</strong> will
+              replace your current page — every block on the canvas is discarded and a fresh
+              starter set is seeded in its place. Your products, theme palette and storefront
+              settings stay put.
+            </>
+          )}
         </div>
         <div
           style={{
@@ -1076,7 +1251,7 @@ function TemplateConfirm({
             fontStyle: 'italic',
           }}
         >
-          {nextPreset.description}
+          {nextDescription}
         </div>
         {error ? (
           <div
@@ -1108,7 +1283,7 @@ function TemplateConfirm({
               opacity: busy ? 0.6 : 1,
             }}
           >
-            Cancel
+            {text.label('Cancel')}
           </button>
           <button
             type="button"
@@ -1128,7 +1303,7 @@ function TemplateConfirm({
               opacity: busy ? 0.7 : 1,
             }}
           >
-            {busy ? 'Switching…' : 'Replace template'}
+            {busy ? text.label('Switching…') : text.label('Replace template')}
           </button>
         </div>
       </div>
@@ -1137,13 +1312,203 @@ function TemplateConfirm({
 }
 
 function useSiteInspectorText() {
-  const { builder } = useBuilderCopy();
+  const { builder, locale } = useBuilderCopy();
   const labels = builder.inspector.labels as Record<string, string>;
   const options = builder.inspector.options as Record<string, string>;
   return {
-    label: (value: string | undefined) => (value ? labels[value] ?? value : value),
+    locale,
+    label: (value: string | undefined) => (value ? (labels[value] ?? value) : value),
     option: (value: string) => options[value] ?? labels[value] ?? value,
   };
+}
+
+const CHROME_OPTION_EN_COPY: Record<string, { label?: string; description?: string }> = {
+  'navbar-ecommerce-2': {
+    label: 'Product bar',
+    description: 'Clear product routes, cart access, and store pages.',
+  },
+  'navbar-ecommerce-4': {
+    label: 'Catalogue links',
+    description: 'Catalogue links with stronger product focus.',
+  },
+  'navbar-ecommerce-6': {
+    label: 'Balanced commerce',
+    description: 'Balanced desktop and mobile commerce chrome.',
+  },
+};
+
+const CHROME_OPTION_AR_COPY: Record<string, { label?: string; description?: string }> = {
+  'navbar-ecommerce-2': {
+    label: '\u0634\u0631\u064a\u0637 \u0645\u0646\u062a\u062c\u0627\u062a',
+    description:
+      '\u0631\u0648\u0627\u0628\u0637 \u0645\u0646\u062a\u062c\u0627\u062a \u0648\u0633\u0644\u0629 \u0648\u0635\u0641\u062d\u0627\u062a \u0645\u062a\u062c\u0631 \u0628\u0634\u0643\u0644 \u0648\u0627\u0636\u062d.',
+  },
+  'navbar-ecommerce-4': {
+    label: '\u0631\u0648\u0627\u0628\u0637 \u0643\u062a\u0627\u0644\u0648\u062c',
+    description:
+      '\u0631\u0648\u0627\u0628\u0637 \u0643\u062a\u0627\u0644\u0648\u062c \u0628\u062a\u0631\u0643\u064a\u0632 \u0623\u0642\u0648\u0649 \u0639\u0644\u0649 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a.',
+  },
+  'navbar-ecommerce-6': {
+    label: '\u062a\u0646\u0642\u0644 \u0645\u062a\u0648\u0627\u0632\u0646',
+    description:
+      '\u0634\u0631\u064a\u0637 \u062a\u062c\u0627\u0631\u064a \u0645\u062a\u0648\u0627\u0632\u0646 \u0644\u0644\u0643\u0645\u0628\u064a\u0648\u062a\u0631 \u0648\u0627\u0644\u062c\u0648\u0627\u0644.',
+  },
+};
+
+function chromeOptionLabel(option: StorefrontChromeOption<string>, isAr: boolean) {
+  if (isAr) return CHROME_OPTION_AR_COPY[option.id]?.label ?? option.labelAr;
+  return CHROME_OPTION_EN_COPY[option.id]?.label ?? option.label;
+}
+
+function chromeOptionDescription(option: StorefrontChromeOption<string>, isAr: boolean) {
+  if (isAr) {
+    return (
+      CHROME_OPTION_AR_COPY[option.id]?.description ??
+      cleanChromeOptionDescription(option.descriptionAr)
+    );
+  }
+  return (
+    CHROME_OPTION_EN_COPY[option.id]?.description ??
+    cleanChromeOptionDescription(option.description)
+  );
+}
+
+function cleanChromeOptionDescription(value: string) {
+  return value
+    .replace(/\bshadcnblocks?\b/gi, '')
+    .replace(/\becommerce-navbar2 adaptation\b/gi, 'product navigation')
+    .replace(/^(Free|Pro\+?|Max\+)\s+/i, '')
+    .replace(/\s+\bfrom\s*\.\s*$/i, '.')
+    .replace(/\s+\u0645\u0646\s*\.\s*$/g, '.')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function ChromePickerGroup<T extends string>({
+  title,
+  value,
+  options,
+  currentPlan,
+  locale,
+  onChange,
+}: {
+  title: string;
+  value: T;
+  options: StorefrontChromeOption<T>[];
+  currentPlan: Plan;
+  locale: Locale;
+  onChange: (value: T) => void;
+}) {
+  const isAr = locale === 'ar';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <FieldLabel>{title}</FieldLabel>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr',
+          gap: 6,
+          maxHeight: options.length > 8 ? 238 : undefined,
+          overflowY: options.length > 8 ? 'auto' : undefined,
+          paddingInlineEnd: options.length > 8 ? 2 : undefined,
+        }}
+      >
+        {options.map((option) => {
+          const active = option.id === value;
+          const locked = !planAtLeast(currentPlan, option.tier);
+          const label = chromeOptionLabel(option, isAr);
+          const description = chromeOptionDescription(option, isAr);
+          const tierLabel =
+            isAr ? PLAN_LIMITS[option.tier].labelAr : PLAN_LIMITS[option.tier].label;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              disabled={locked}
+              onClick={() => onChange(option.id)}
+              style={{
+                display: 'grid',
+                gap: 4,
+                width: '100%',
+                textAlign: 'start',
+                padding: '9px 10px',
+                borderRadius: 7,
+                border: active
+                  ? '1px solid var(--bld-accent)'
+                  : '1px solid var(--bld-divider)',
+                background: active
+                  ? 'var(--bld-accent-soft)'
+                  : locked
+                    ? 'color-mix(in srgb, var(--bld-tile-bg) 74%, transparent)'
+                    : 'var(--bld-tile-bg)',
+                color: locked ? 'var(--bld-text-faint)' : 'var(--bld-input-text)',
+                cursor: locked ? 'not-allowed' : 'pointer',
+                opacity: locked ? 0.68 : 1,
+                boxShadow: active ? '0 0 0 2px var(--bld-accent-soft)' : undefined,
+              }}
+              title={
+                locked
+                  ? isAr
+                    ? `${tierLabel} \u0645\u0637\u0644\u0648\u0628`
+                    : `${tierLabel} required`
+                  : label
+              }
+            >
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  minWidth: 0,
+                }}
+              >
+                <span
+                  style={{
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontSize: 12,
+                    fontWeight: 650,
+                  }}
+                >
+                  {label}
+                </span>
+                {option.tier !== 'free' ? (
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      borderRadius: 999,
+                      padding: '2px 6px',
+                      border: '1px solid var(--bld-accent-line)',
+                      background: active ? 'var(--bld-accent)' : 'var(--bld-chip-bg)',
+                      color: active ? 'var(--bld-accent-ink)' : 'var(--bld-text-muted)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 8,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {tierLabel}
+                  </span>
+                ) : null}
+              </span>
+              <span
+                style={{
+                  fontSize: 10.5,
+                  lineHeight: 1.45,
+                  color: locked ? 'var(--bld-text-faint)' : 'var(--bld-text-muted)',
+                }}
+              >
+                {description}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function Group({ label, children }: { label: string; children: React.ReactNode }) {

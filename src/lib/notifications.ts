@@ -295,11 +295,11 @@ export async function pushOrderCreatedNotification(input: {
   await pushNotification({
     userId: input.userId,
     kind: 'order.created',
-    title: `New order for ${input.businessName}`,
-    titleAr: `طلب جديد من ${input.businessName}`,
-    body: `${input.order.currency} ${input.order.totalQar} received. Open Orders to review and fulfil it.`,
-    bodyAr: `تم استلام طلب بقيمة ${input.order.totalQar} ${input.order.currency}. افتح الطلبات لمراجعته وتجهيزه.`,
-    href: `/account/orders?store=${encodeURIComponent(input.slug)}`,
+    title: `Created Order ${input.order.id}`,
+    body: `${input.businessName} received ${input.order.currency} ${input.order.totalQar}. Open the order to review and fulfil it.`,
+    titleAr: `\u062a\u0645 \u0625\u0646\u0634\u0627\u0621 \u0627\u0644\u0637\u0644\u0628 ${input.order.id}`,
+    bodyAr: `\u0627\u0633\u062a\u0642\u0628\u0644 ${input.businessName} \u0637\u0644\u0628\u0627\u064b \u0628\u0642\u064a\u0645\u0629 ${input.order.totalQar} ${input.order.currency}. \u0627\u0641\u062a\u062d \u0627\u0644\u0637\u0644\u0628 \u0644\u0645\u0631\u0627\u062c\u0639\u062a\u0647 \u0648\u062a\u062c\u0647\u064a\u0632\u0647.`,
+    href: `/account/orders/${encodeURIComponent(input.order.id)}?store=${encodeURIComponent(input.slug)}`,
     meta: {
       dedupeKey: `order-${input.order.id}`,
       slug: input.slug,

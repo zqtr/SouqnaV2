@@ -5,12 +5,13 @@ import { auth } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
 import { assertStorefrontOwner } from '@/lib/products';
 import {
-  STOREFRONT_STORAGE_LIMIT_BYTES,
   deleteFileByUrl,
   getStorefrontStorageUsedBytes,
   listFilesForStorefront,
+  storageLimitBytesForPlan,
   urlBelongsToStorefront,
 } from '@/lib/files';
+import { getPlan } from '@/lib/billing';
 import { recordAudit } from '@/lib/audit';
 
 /**
@@ -65,12 +66,16 @@ export async function getStorefrontStorageLibrary(
   if (!owner) return { status: 'error', message: 'Forbidden' };
 
   try {
-    const files = await listFilesForStorefront(parsed.data.storefrontSlug, { limit: 1000 });
+    const [files, usedBytes, plan] = await Promise.all([
+      listFilesForStorefront(parsed.data.storefrontSlug, { limit: 1000 }),
+      getStorefrontStorageUsedBytes(parsed.data.storefrontSlug),
+      getPlan(userId),
+    ]);
     return {
       status: 'success',
       files: files.map(serializeFile),
-      usedBytes: await getStorefrontStorageUsedBytes(parsed.data.storefrontSlug),
-      limitBytes: STOREFRONT_STORAGE_LIMIT_BYTES,
+      usedBytes,
+      limitBytes: storageLimitBytesForPlan(plan),
     };
   } catch (err) {
     console.error('[files/list] blob list failed', err);

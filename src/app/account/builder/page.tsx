@@ -5,6 +5,7 @@ import { env } from '@/lib/env';
 import { defaultLocale, isLocale } from '@/i18n/locales';
 import { getCopy } from '@/content/copy';
 import { getStorefront, getStorefrontsForUser } from '@/lib/brief';
+import { getCategories, getStorefrontCategoryProductMap } from '@/lib/categories';
 import { getAllProducts } from '@/lib/products';
 import { getServerTheme } from '@/components/theme/ServerThemeScript';
 import { BuilderShell } from '@/components/builder/BuilderShell';
@@ -12,12 +13,17 @@ import { seedBuilderIfEmpty } from '@/app/actions/builder';
 import { EmptyState, PageHeader } from '@/components/admin/primitives';
 import { listInstalledApps } from '@/lib/apps/installed';
 import { getPlan } from '@/lib/billing';
+import { getStorefrontCheckoutSettings } from '@/lib/storefrontSettings';
 import {
   getHomePage,
   getPageBySlug,
   listPages,
   normalizePageSlug,
 } from '@/lib/storefrontPages';
+import {
+  buildProductIndexCategories,
+  buildProductIndexProducts,
+} from '@/lib/productIndexCatalog';
 
 /**
  * Builder route — full-bleed, lives outside the (chrome) group so the
@@ -96,18 +102,39 @@ export default async function BuilderPage({
   const wantedSlug = requestedPageSlug
     ? normalizePageSlug(requestedPageSlug)
     : null;
+  const activeSystemPage =
+    wantedSlug === 'checkout'
+      ? ('checkout' as const)
+      : wantedSlug === 'products'
+        ? ('products' as const)
+        : null;
   let activePage =
-    (wantedSlug ? await getPageBySlug(slug, wantedSlug) : null) ??
+    (wantedSlug && !activeSystemPage ? await getPageBySlug(slug, wantedSlug) : null) ??
     (await getHomePage(slug));
   if (!activePage) activePage = allPages[0] ?? null;
   if (!activePage) redirect('/account');
 
   const initialBlocks = activePage.draftBlocks;
 
-  const products = await getAllProducts(slug);
-  const installed = await listInstalledApps(slug).catch(() => []);
+  const [products, categories, categoriesBySlug, installed, callerPlan, checkout] = await Promise.all([
+    getAllProducts(slug),
+    getCategories(slug).catch(() => []),
+    getStorefrontCategoryProductMap(slug).catch(() => new Map<string, Set<string>>()),
+    listInstalledApps(slug).catch(() => []),
+    getPlan(userId).catch(() => 'free' as const),
+    getStorefrontCheckoutSettings(slug),
+  ]);
   const installedAppIds = installed.filter((a) => a.enabled).map((a) => a.appId);
-  const callerPlan = await getPlan(userId).catch(() => 'free' as const);
+  const productIndexProducts = buildProductIndexProducts({
+    products: products.filter((product) => product.status !== 'draft'),
+    categories,
+    categoriesBySlug,
+  });
+  const productIndexCategories = buildProductIndexCategories({
+    products,
+    categories,
+    categoriesBySlug,
+  });
 
   await currentUser();
 
@@ -126,11 +153,13 @@ export default async function BuilderPage({
           // The shell snapshots `initialBlocks` into local state on
           // mount, so without a fresh key the canvas would still show
           // the previous page's tree even after the URL changed.
-          key={`${slug}:${activePage.id}`}
+          key={`${slug}:${activeSystemPage ?? activePage.id}`}
           slug={slug}
           liveUrl={`https://${slug}.${env.BRIEF_ROOT_DOMAIN}`}
           businessName={storefront.businessName}
+          logoUrl={storefront.logoUrl}
           pages={allPages}
+          activeSystemPage={activeSystemPage}
           activePageId={activePage.id}
           initialBlocks={initialBlocks}
           publishedAt={
@@ -148,6 +177,7 @@ export default async function BuilderPage({
             isCustomizable: p.isCustomizable,
             customizationLabel: p.customizationLabel,
             allowCustomSize: p.allowCustomSize,
+            variantOptions: p.variantOptions,
             requiresHeightInput: p.requiresHeightInput,
             heightInputLabel: p.heightInputLabel,
             heightOptions: p.heightOptions,
@@ -163,6 +193,10 @@ export default async function BuilderPage({
           initialPalette={storefront.palette}
           initialTemplate={storefront.templateId}
           initialPolicies={storefront.policies}
+          initialCheckout={checkout}
+          initialProductIndex={storefront.productIndex}
+          productIndexProducts={productIndexProducts}
+          productIndexCategoryOptions={productIndexCategories}
           currentPlan={callerPlan}
           // The builder chrome follows the founder's account-wide
           // light/dark preference (the same `souqna-theme` cookie that

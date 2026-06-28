@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import type { BlockRenderProps } from './BlockContext';
 import type { HeroProps } from '@/lib/blocks/types';
 import { StorefrontGlyph } from '@/lib/storefront-glyphs';

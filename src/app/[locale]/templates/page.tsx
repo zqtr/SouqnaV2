@@ -87,8 +87,7 @@ export default async function TemplatesPage({ params }: Props) {
         style={{
           maxWidth: 1400,
           margin: '0 auto',
-          padding:
-            'clamp(64px, 9vw, 120px) clamp(20px, 5vw, 64px) clamp(48px, 7vw, 96px)',
+          padding: 'clamp(64px, 9vw, 120px) clamp(20px, 5vw, 64px) clamp(48px, 7vw, 96px)',
         }}
       >
         <Link
@@ -121,8 +120,7 @@ export default async function TemplatesPage({ params }: Props) {
         </p>
         <h1
           style={{
-            fontFamily:
-              dir === 'rtl' ? 'var(--font-arabic-serif)' : 'var(--font-english)',
+            fontFamily: dir === 'rtl' ? 'var(--font-arabic-serif)' : 'var(--font-english)',
             fontWeight: dir === 'rtl' ? 700 : 500,
             fontSize: 'clamp(40px, 5.5vw, 76px)',
             lineHeight: dir === 'rtl' ? 1.08 : 0.96,
@@ -165,8 +163,7 @@ export default async function TemplatesPage({ params }: Props) {
               businessName: id === 'frame' ? 'Oryx' : 'Souqna Studio',
               tagline: null,
             });
-            const tierLabel =
-              c.tierLabel[t.tier as keyof typeof c.tierLabel] ?? t.tier;
+            const tierLabel = c.tierLabel[t.tier as keyof typeof c.tierLabel] ?? t.tier;
             const begin = localized(`/begin?template=${encodeURIComponent(id)}`);
             return (
               <Link
@@ -215,9 +212,7 @@ export default async function TemplatesPage({ params }: Props) {
                       style={{
                         margin: 0,
                         fontFamily:
-                          dir === 'rtl'
-                            ? 'var(--font-arabic-serif)'
-                            : 'var(--font-english)',
+                          dir === 'rtl' ? 'var(--font-arabic-serif)' : 'var(--font-english)',
                         fontWeight: dir === 'rtl' ? 700 : 500,
                         fontSize: 19,
                         letterSpacing: '-0.005em',
@@ -225,26 +220,22 @@ export default async function TemplatesPage({ params }: Props) {
                     >
                       {t.label}
                     </h2>
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 9.5,
-                        letterSpacing: '0.14em',
-                        textTransform: 'uppercase',
-                        padding: '3px 8px',
-                        borderRadius: 999,
-                        background:
-                          t.tier === 'free'
-                            ? 'rgba(31,27,22,0.08)'
-                            : 'var(--sq-gold, #D4AF37)',
-                        color:
-                          t.tier === 'free'
-                            ? 'var(--sq-ink, #1F1B16)'
-                            : 'var(--sq-ink, #1F1B16)',
-                      }}
-                    >
-                      {tierLabel}
-                    </span>
+                    {t.tier !== 'free' ? (
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 9.5,
+                          letterSpacing: '0.14em',
+                          textTransform: 'uppercase',
+                          padding: '3px 8px',
+                          borderRadius: 999,
+                          background: 'var(--sq-gold, #D4AF37)',
+                          color: 'var(--sq-ink, #1F1B16)',
+                        }}
+                      >
+                        {tierLabel}
+                      </span>
+                    ) : null}
                   </div>
                   <p
                     style={{
@@ -263,8 +254,7 @@ export default async function TemplatesPage({ params }: Props) {
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       paddingTop: 14,
-                      borderTop:
-                        '1px dashed var(--sq-rule, rgba(31,27,22,0.18))',
+                      borderTop: '1px dashed var(--sq-rule, rgba(31,27,22,0.18))',
                     }}
                   >
                     <span
@@ -555,16 +545,18 @@ function CommercePreview({
     <div
       aria-hidden
       className={`sq-commerce-preview sq-commerce-preview--${id}`}
-      style={{
-        '--tpl-ink': ink,
-        '--tpl-ground': ground,
-        '--tpl-accent': accent,
-        position: 'relative',
-        aspectRatio: '4 / 3',
-        background: ground,
-        color: ink,
-        overflow: 'hidden',
-      } as CSSProperties}
+      style={
+        {
+          '--tpl-ink': ink,
+          '--tpl-ground': ground,
+          '--tpl-accent': accent,
+          position: 'relative',
+          aspectRatio: '4 / 3',
+          background: ground,
+          color: ink,
+          overflow: 'hidden',
+        } as CSSProperties
+      }
     >
       <div className="sq-commerce-preview__wash" />
       <header className="sq-commerce-preview__top">

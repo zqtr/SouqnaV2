@@ -39,11 +39,14 @@
  */
 
 import { neon } from '@neondatabase/serverless';
+import nextEnv from '@next/env';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const { loadEnvConfig } = nextEnv;
+loadEnvConfig(join(__dirname, '..'));
 const MIGRATIONS_DIR = join(__dirname, '..', 'src', 'db', 'migrations');
 
 function log(msg) {

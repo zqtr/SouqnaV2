@@ -38,10 +38,11 @@ import type {
 } from '@/lib/blocks/types';
 import type { PaletteId } from '@/lib/palettes';
 import type { TemplateId } from '@/lib/brief';
-import type { StorefrontPolicies } from '@/lib/storefrontSettings';
+import type { CheckoutSettings, StorefrontPolicies } from '@/lib/storefrontSettings';
 import {
   isPremiumBlockType,
-  planUnlocksPremiumBlocks,
+  PLAN_LIMITS,
+  planAtLeast,
   planUnlocksSouqy,
   type Plan,
 } from '@/lib/plans';
@@ -62,12 +63,19 @@ import { PageSwitcher } from './PageSwitcher';
 import { AppsPanel } from './AppsPanel';
 import { AppSettingsModal } from './AppSettingsModal';
 import { PageCanvasHeader } from './PageCanvasHeader';
+import { CheckoutBuilderInspector, CheckoutBuilderPreview } from './CheckoutBuilder';
+import { ProductIndexBuilderInspector, ProductIndexBuilderPreview } from './ProductIndexBuilder';
 import { CommandPalette, type Command } from '@/components/dashboard/CommandPalette';
 import type { StorefrontPage } from '@/lib/storefrontPages';
 import { setStorefrontHomePage } from '@/app/actions/pages';
 import type { Locale } from '@/i18n/locales';
 import { direction } from '@/i18n/locales';
 import { BuilderCopyProvider, useBuilderCopy } from './BuilderCopyContext';
+import type { ProductIndexSettings } from '@/lib/productIndexSettings';
+import type {
+  ProductIndexCategoryOption,
+  ProductIndexListProduct,
+} from '@/lib/productIndexCatalog';
 
 type BlockType = (typeof BLOCK_TYPES)[number];
 
@@ -75,11 +83,16 @@ type Props = {
   slug: string;
   liveUrl: string;
   businessName: string;
+  logoUrl: string | null;
   /** Multi-page storefront — list of every page in the storefront's
    *  `storefront_pages` table, ordered home-first. The PageSwitcher
    *  renders this; the BuilderShell uses it to look up the active
    *  page's metadata (slug, isHome, SEO). */
   pages: StorefrontPage[];
+  /** Controlled system page currently being edited. System pages are
+   *  rendered by Souqna checkout/cart code, so Builder exposes safe
+   *  settings rather than arbitrary blocks. */
+  activeSystemPage?: 'checkout' | 'products' | null;
   /** Active page id. The shell threads this id into every page-aware
    *  builder action (`saveDraftBlocks`, `publishStorefront`,
    *  `switchBuilderTemplate`) so writes hit the right page row. */
@@ -99,6 +112,12 @@ type Props = {
   /** Store-level policy copy edited from the Site inspector and rendered
    *  above the storefront footer. */
   initialPolicies: StorefrontPolicies;
+  /** Checkout settings used by the controlled Checkout Builder page. */
+  initialCheckout: CheckoutSettings;
+  /** Controlled All Products system page settings and preview data. */
+  initialProductIndex: ProductIndexSettings;
+  productIndexProducts: ProductIndexListProduct[];
+  productIndexCategoryOptions: ProductIndexCategoryOption[];
   /** The founder's current billing tier. The Site inspector uses this
    *  to render locked tiles for templates above their plan; Souqy and
    *  business features still honor plan gates. */
@@ -127,6 +146,31 @@ type Props = {
 type Device = 'desktop' | 'tablet' | 'mobile';
 type PublishPhase = 'idle' | 'publishing' | 'checking' | 'live' | 'error';
 type LibraryGroupId = 'layout' | 'products' | 'plugins' | 'contact' | 'animation' | 'spacing';
+type LibraryItem = {
+  type: BlockType;
+  label: string;
+  hint: string;
+  tier?: Plan;
+  variant?: string;
+  labelAr?: string;
+  hintAr?: string;
+};
+type LibraryGroup = {
+  id: LibraryGroupId;
+  label: string;
+  items: LibraryItem[];
+};
+type BlockCreateOptions = {
+  variant?: string;
+  tier?: Plan;
+};
+type LibraryDragData = {
+  kind: 'library';
+  type: BlockType;
+  variant?: string;
+  tier?: Plan;
+  label?: string;
+};
 
 const PUBLISH_LIVE_POLL_INTERVAL_MS = 2000;
 const PUBLISH_LIVE_POLL_MAX_ATTEMPTS = 90;
@@ -176,11 +220,350 @@ async function isPublishedStorefrontReachable({
   return canReachStorefrontUrl(localPublishedUrl, 'same-origin');
 }
 
-const LIBRARY_GROUPS: Array<{
-  id: LibraryGroupId;
-  label: string;
-  items: Array<{ type: BlockType; label: string; hint: string; tier?: Plan }>;
-}> = [
+function commerceLibraryItem(
+  type: BlockType,
+  variant: string,
+  label: string,
+  labelAr: string,
+  hint: string,
+  hintAr: string,
+  tier: Plan = 'pro',
+): LibraryItem {
+  return { type, variant, label, labelAr, hint, hintAr, tier };
+}
+
+const PREMIUM_LAYOUT_ITEMS: LibraryItem[] = [
+  commerceLibraryItem(
+    'shadcnNavbar',
+    'ecommerce-navbar2',
+    'Commerce navbar',
+    'شريط تنقل تجاري',
+    'Logo, routes, cart, and system pages',
+    'الشعار والروابط والسلة وصفحات النظام',
+  ),
+  commerceLibraryItem(
+    'shadcnHero',
+    'ecommerce-hero1',
+    'Hero · Product focus',
+    'واجهة · تركيز المنتج',
+    'Large product story with a clear CTA',
+    'قصة منتج كبيرة مع زر واضح',
+  ),
+  commerceLibraryItem(
+    'shadcnHero',
+    'ecommerce-hero3',
+    'Hero · Split launch',
+    'واجهة · إطلاق مقسوم',
+    'Split layout for product launches',
+    'تخطيط مقسوم لإطلاق المنتجات',
+  ),
+  commerceLibraryItem(
+    'shadcnHero',
+    'ecommerce-hero6',
+    'Hero · Editorial drop',
+    'واجهة · عرض تحريري',
+    'Editorial hero for premium drops',
+    'واجهة تحريرية للعروض المميزة',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnTrustStrip',
+    'trust-strip1',
+    'Trust strip · Compact',
+    'شريط ثقة · مختصر',
+    'Delivery, payment, and support proof',
+    'إثبات التوصيل والدفع والدعم',
+  ),
+  commerceLibraryItem(
+    'shadcnTrustStrip',
+    'trust-strip3',
+    'Trust strip · Metrics',
+    'شريط ثقة · أرقام',
+    'Confidence metrics and store promises',
+    'أرقام الثقة ووعود المتجر',
+  ),
+  commerceLibraryItem(
+    'shadcnFooter',
+    'ecommerce-footer1',
+    'Footer · Minimal',
+    'تذييل · بسيط',
+    'Clean links, policies, and contact',
+    'روابط وسياسات وتواصل بشكل بسيط',
+  ),
+  commerceLibraryItem(
+    'shadcnFooter',
+    'ecommerce-footer2',
+    'Footer · Links',
+    'تذييل · روابط',
+    'Structured navigation and policy links',
+    'تنقل منظم وروابط السياسات',
+  ),
+  commerceLibraryItem(
+    'shadcnFooter',
+    'ecommerce-footer18',
+    'Footer · Editorial',
+    'تذييل · تحريري',
+    'Premium footer with brand story',
+    'تذييل فاخر مع قصة العلامة',
+    'atelier',
+  ),
+];
+
+const PREMIUM_PRODUCT_ITEMS: LibraryItem[] = [
+  commerceLibraryItem(
+    'shadcnCategories',
+    'product-categories2',
+    'Categories · Simple',
+    'تصنيفات · بسيطة',
+    'Quick category tiles from store data',
+    'بطاقات تصنيف سريعة من بيانات المتجر',
+  ),
+  commerceLibraryItem(
+    'shadcnCategories',
+    'product-categories4',
+    'Categories · Editorial',
+    'تصنيفات · تحريرية',
+    'Larger category tiles for collections',
+    'بطاقات تصنيف كبيرة للمجموعات',
+  ),
+  commerceLibraryItem(
+    'shadcnCategories',
+    'product-categories5',
+    'Categories · Showcase',
+    'تصنيفات · عرض',
+    'Visual collection grid with stronger hierarchy',
+    'شبكة مجموعات مرئية بتسلسل أوضح',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnProductCard',
+    'product-card10',
+    'Product cards · Clean',
+    'بطاقات منتجات · نظيفة',
+    'Minimal product cards for fast browsing',
+    'بطاقات منتجات بسيطة للتصفح السريع',
+  ),
+  commerceLibraryItem(
+    'shadcnProductCard',
+    'product-card24',
+    'Product cards · Premium',
+    'بطاقات منتجات · فاخرة',
+    'Richer cards for paid templates',
+    'بطاقات أغنى للقوالب المدفوعة',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnProductList',
+    'product-list2',
+    'Product list · Clean rows',
+    'قائمة منتجات · صفوف نظيفة',
+    'Simple product rows with price focus',
+    'صفوف منتجات بسيطة مع تركيز على السعر',
+  ),
+  commerceLibraryItem(
+    'shadcnProductList',
+    'product-list3',
+    'Product list · Compact',
+    'قائمة منتجات · مختصرة',
+    'Dense list for many products',
+    'قائمة كثيفة لعدد كبير من المنتجات',
+  ),
+  commerceLibraryItem(
+    'shadcnProductList',
+    'product-list4',
+    'Product list · Editorial',
+    'قائمة منتجات · تحريرية',
+    'Bigger product rows with story space',
+    'صفوف أكبر مع مساحة لوصف المنتج',
+  ),
+  commerceLibraryItem(
+    'shadcnProductList',
+    'product-list5',
+    'Product list · Filtered',
+    'قائمة منتجات · مفلترة',
+    'List layout for filtered catalogues',
+    'قائمة مناسبة للكتالوجات المفلترة',
+  ),
+  commerceLibraryItem(
+    'shadcnProductList',
+    'product-list6',
+    'Product list · Featured',
+    'قائمة منتجات · مميزة',
+    'Featured rows for best sellers',
+    'صفوف مميزة للأكثر مبيعا',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnProductList',
+    'product-list7',
+    'Product list · Gallery',
+    'قائمة منتجات · معرض',
+    'Product list with stronger visuals',
+    'قائمة منتجات بصور أقوى',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnProductDetail',
+    'product-detail2',
+    'Product detail · Classic',
+    'تفاصيل منتج · كلاسيكية',
+    'Buy surface for one selected product',
+    'واجهة شراء لمنتج محدد',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnProductDetail',
+    'product-detail3',
+    'Product detail · Split',
+    'تفاصيل منتج · مقسومة',
+    'Split detail layout with product media',
+    'تخطيط مقسوم مع صور المنتج',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnProductDetail',
+    'product-detail4',
+    'Product detail · Tabs',
+    'تفاصيل منتج · تبويبات',
+    'Details, notes, and product info tabs',
+    'تبويبات للتفاصيل والملاحظات ومعلومات المنتج',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnProductDetail',
+    'product-detail6',
+    'Product detail · Visual',
+    'تفاصيل منتج · مرئية',
+    'Image-forward detail surface',
+    'واجهة تفاصيل تركز على الصور',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnProductDetail',
+    'product-detail9',
+    'Product detail · Signature',
+    'تفاصيل منتج · مميزة',
+    'Premium detail section for Max+ templates',
+    'قسم تفاصيل فاخر لقوالب ماكس +',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnQuickView',
+    'product-quick-view7',
+    'Quick view · Compact',
+    'عرض سريع · مختصر',
+    'Compact product decision card',
+    'بطاقة قرار سريعة للمنتج',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnQuickView',
+    'product-quick-view8',
+    'Quick view · Rich',
+    'عرض سريع · غني',
+    'Richer quick buy preview',
+    'معاينة شراء أسرع بتفاصيل أغنى',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnReviews',
+    'reviews2',
+    'Souqna Reviews · Simple',
+    'تقييمات · بسيطة',
+    'Customer proof in a clean row',
+    'آراء العملاء في صف نظيف',
+  ),
+  commerceLibraryItem(
+    'shadcnReviews',
+    'reviews9',
+    'Souqna Reviews · Cards',
+    'تقييمات · بطاقات',
+    'Card-based social proof',
+    'إثبات اجتماعي على شكل بطاقات',
+  ),
+  commerceLibraryItem(
+    'shadcnReviews',
+    'reviews23',
+    'Souqna Reviews · Premium',
+    'تقييمات · فاخرة',
+    'Premium review section for paid templates',
+    'قسم تقييمات فاخر للقوالب المدفوعة',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnOrderSummary',
+    'order-summary1',
+    'Order summary · Compact',
+    'ملخص طلب · مختصر',
+    'Checkout-style value summary',
+    'ملخص قيمة بأسلوب الدفع',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnOrderSummary',
+    'order-summary2',
+    'Order summary · Premium',
+    'ملخص طلب · فاخر',
+    'Richer summary with trust cues',
+    'ملخص أغنى مع إشارات ثقة',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnOfferModal',
+    'offer-modal1',
+    'Offer module · Simple',
+    'عرض خاص · بسيط',
+    'Controlled offer block for launches',
+    'بلوك عرض متحكم به للإطلاقات',
+    'atelier',
+  ),
+  commerceLibraryItem(
+    'shadcnOfferModal',
+    'offer-modal5',
+    'Offer module · Premium',
+    'عرض خاص · فاخر',
+    'Premium offer surface for campaigns',
+    'واجهة عرض فاخرة للحملات',
+    'atelier',
+  ),
+];
+
+function libraryItemKey(item: LibraryItem) {
+  return item.variant ? `${item.type}::${item.variant}` : item.type;
+}
+
+function libraryDragId(item: LibraryItem) {
+  return `${LIBRARY_PREFIX}${libraryItemKey(item)}`;
+}
+
+function parseLibraryDragId(id: string): { type: BlockType; variant?: string } | null {
+  if (!id.startsWith(LIBRARY_PREFIX)) return null;
+  const [type, variant] = id.slice(LIBRARY_PREFIX.length).split('::');
+  if (!type) return null;
+  return { type: type as BlockType, variant };
+}
+
+function getLibraryItemText(item: LibraryItem, locale: Locale) {
+  return {
+    label: locale === 'ar' ? (item.labelAr ?? item.label) : item.label,
+    hint: locale === 'ar' ? (item.hintAr ?? item.hint) : item.hint,
+  };
+}
+
+function getVariantLibraryItem(type: BlockType, variant: unknown) {
+  if (typeof variant !== 'string') return null;
+  return [...PREMIUM_LAYOUT_ITEMS, ...PREMIUM_PRODUCT_ITEMS].find(
+    (item) => item.type === type && item.variant === variant,
+  );
+}
+
+function getBlockDisplayLabel(block: Block, fallback: string, locale: Locale) {
+  const item = getVariantLibraryItem(block.type, (block.props as Record<string, unknown>).variant);
+  if (!item) return fallback;
+  return getLibraryItemText(item, locale).label;
+}
+
+const LIBRARY_GROUPS: LibraryGroup[] = [
   {
     id: 'layout',
     label: 'Layout',
@@ -190,6 +573,7 @@ const LIBRARY_GROUPS: Array<{
       { type: 'text', label: 'Text', hint: 'Section copy' },
       { type: 'image', label: 'Image', hint: 'Single picture' },
       { type: 'gallery', label: 'Gallery', hint: 'Image grid' },
+      ...PREMIUM_LAYOUT_ITEMS,
     ],
   },
   {
@@ -199,6 +583,7 @@ const LIBRARY_GROUPS: Array<{
       { type: 'productGrid', label: 'Product grid', hint: 'Cards layout' },
       { type: 'productList', label: 'Product list', hint: 'Linear rows' },
       { type: 'featuredProduct', label: 'Featured', hint: 'Hero product' },
+      ...PREMIUM_PRODUCT_ITEMS,
       {
         type: 'productCardStack',
         label: 'Card stack',
@@ -263,14 +648,21 @@ const LIBRARY_GROUPS: Array<{
     label: 'Souqna plugins',
     items: [
       {
+        type: 'drop',
+        label: 'Drop Manager',
+        labelAr: 'مدير الإطلاقات',
+        hint: 'Timed launch · sell-out · waitlist',
+        hintAr: 'إطلاق مؤقت · نفاد كمية · قائمة انتظار',
+      },
+      {
         type: 'taqim',
         label: 'Bundle (Taqim)',
-        hint: '3 variants · product/bundle picker',
+        hint: '3 layouts · product/bundle picker',
       },
       {
         type: 'mawid',
         label: 'Countdown (Mawid)',
-        hint: '3 variants · product/time picker',
+        hint: '3 layouts · product/time picker',
       },
     ],
   },
@@ -313,13 +705,19 @@ const LIBRARY_GROUPS: Array<{
       {
         type: 'depthShowcase',
         label: 'Depth showcase',
-        hint: 'React Bits parallax card · one per page',
+        hint: 'Parallax depth card · one per page',
         tier: 'pro',
       },
       {
         type: 'auroraRibbon',
         label: 'Aurora ribbon',
         hint: 'Gradient WebGL strip · use sparingly',
+        tier: 'pro',
+      },
+      {
+        type: 'curvedLoop',
+        label: 'Curved loop',
+        hint: 'Curved text loop · draggable',
         tier: 'pro',
       },
       {
@@ -364,6 +762,24 @@ const LIBRARY_GROUPS: Array<{
   },
 ];
 
+function getLibraryItem(type: BlockType, variant?: string) {
+  return LIBRARY_GROUPS.flatMap((group) => group.items).find(
+    (item) => item.type === type && item.variant === variant,
+  );
+}
+
+function libraryGroupsForInstalledApps(installedAppIds: string[]): LibraryGroup[] {
+  if (installedAppIds.includes('reviews')) return LIBRARY_GROUPS;
+  return LIBRARY_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => item.type !== 'shadcnReviews'),
+  }));
+}
+
+function requiredPlanForLibraryItem(item: Pick<LibraryItem, 'type' | 'tier'>): Plan | undefined {
+  return item.tier ?? (isPremiumBlockType(item.type) ? 'pro' : undefined);
+}
+
 /**
  * Miniature HTML/CSS mockups of each block type, drawn at tile size
  * (~52×36) and at drag-overlay size (~140×90). Unlike the previous
@@ -374,7 +790,15 @@ const LIBRARY_GROUPS: Array<{
  * The component is purely visual: no real text content, no data. All
  * dimensions are unitless and scale with the parent's `width`/`height`.
  */
-function BlockMiniPreview({ type, size = 'tile' }: { type: BlockType; size?: 'tile' | 'drag' }) {
+function BlockMiniPreview({
+  type,
+  size = 'tile',
+  variant,
+}: {
+  type: BlockType;
+  size?: 'tile' | 'drag';
+  variant?: string;
+}) {
   const isDrag = size === 'drag';
   const w = isDrag ? 140 : 52;
   const h = isDrag ? 90 : 36;
@@ -397,6 +821,313 @@ function BlockMiniPreview({ type, size = 'tile' }: { type: BlockType; size?: 'ti
   };
 
   switch (type) {
+    case 'shadcnNavbar':
+      return (
+        <div
+          style={{
+            ...baseStyle,
+            display: 'grid',
+            gridTemplateColumns: '28% 1fr 18%',
+            alignItems: 'center',
+            gap: isDrag ? 8 : 3,
+            padding: isDrag ? 12 : 4,
+          }}
+        >
+          <div style={{ height: isDrag ? 12 : 5, borderRadius: 999, background: maroon }} />
+          <div style={{ display: 'flex', justifyContent: 'center', gap: isDrag ? 6 : 2 }}>
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                style={{
+                  width: isDrag ? 18 : 7,
+                  height: isDrag ? 3 : 1,
+                  borderRadius: 999,
+                  background: sandFaint,
+                }}
+              />
+            ))}
+          </div>
+          <div
+            style={{
+              height: isDrag ? 16 : 7,
+              borderRadius: 999,
+              border: `1px solid ${sandFaint}`,
+            }}
+          />
+        </div>
+      );
+    case 'shadcnHero':
+      return (
+        <div
+          style={{
+            ...baseStyle,
+            display: 'grid',
+            gridTemplateColumns: '1fr 44%',
+            gap: isDrag ? 8 : 3,
+            padding: isDrag ? 12 : 4,
+            background: `linear-gradient(135deg, ${sandFaint}, ${maroon}22)`,
+          }}
+        >
+          <div style={{ display: 'grid', alignContent: 'center', gap: isDrag ? 5 : 2 }}>
+            <div style={{ height: isDrag ? 4 : 1.5, width: '48%', background: maroon }} />
+            <div style={{ height: isDrag ? 11 : 4, width: '88%', background: sand }} />
+            <div style={{ height: isDrag ? 3 : 1, width: '70%', background: sandSoft }} />
+          </div>
+          <div style={{ borderRadius: isDrag ? 10 : 4, background: sandFaint }} />
+        </div>
+      );
+    case 'shadcnTrustStrip':
+      return (
+        <div
+          style={{
+            ...baseStyle,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: isDrag ? 6 : 2,
+            padding: isDrag ? 10 : 4,
+          }}
+        >
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              style={{
+                borderRadius: isDrag ? 8 : 3,
+                border: `1px solid ${sandFaint}`,
+                display: 'grid',
+                placeItems: 'center',
+                background: i === 0 ? `${maroon}33` : 'transparent',
+              }}
+            >
+              <span style={{ width: isDrag ? 12 : 5, height: isDrag ? 12 : 5, borderRadius: 999, background: sand }} />
+            </div>
+          ))}
+        </div>
+      );
+    case 'shadcnCategories':
+      return (
+        <div
+          style={{
+            ...baseStyle,
+            display: 'grid',
+            gridTemplateColumns: variant === 'product-categories5' ? '1.2fr 0.8fr' : 'repeat(3, 1fr)',
+            gap: isDrag ? 7 : 3,
+            padding: isDrag ? 10 : 4,
+          }}
+        >
+          {(variant === 'product-categories5' ? [0, 1] : [0, 1, 2]).map((i) => (
+            <div
+              key={i}
+              style={{
+                borderRadius: isDrag ? 12 : 4,
+                background: i === 0 ? `${maroon}44` : sandFaint,
+                border: `1px solid ${sandFaint}`,
+                minHeight: 0,
+              }}
+            />
+          ))}
+        </div>
+      );
+    case 'shadcnProductCard':
+      return (
+        <div
+          style={{
+            ...baseStyle,
+            display: 'grid',
+            gridTemplateColumns: variant === 'product-card24' ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+            gap: isDrag ? 7 : 3,
+            padding: isDrag ? 10 : 4,
+          }}
+        >
+          {(variant === 'product-card24' ? [0, 1] : [0, 1, 2]).map((i) => (
+            <div
+              key={i}
+              style={{
+                display: 'grid',
+                gridTemplateRows: variant === 'product-card24' ? '1fr auto auto' : undefined,
+                gap: isDrag ? 4 : 1.5,
+                borderRadius: isDrag ? 10 : 4,
+                background: variant === 'product-card24' ? paper : i === 1 ? `${maroon}44` : sandFaint,
+                border: `1px solid ${sandFaint}`,
+                padding: variant === 'product-card24' ? (isDrag ? 5 : 2) : undefined,
+              }}
+            >
+              {variant === 'product-card24' ? (
+                <>
+                  <span style={{ borderRadius: isDrag ? 8 : 3, background: i === 0 ? `${maroon}44` : sandFaint }} />
+                  <span style={{ height: isDrag ? 3 : 1, width: '80%', background: sand }} />
+                  <span style={{ height: isDrag ? 3 : 1, width: '48%', background: sandSoft }} />
+                </>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      );
+    case 'shadcnProductList':
+      return (
+        <div
+          style={{
+            ...baseStyle,
+            display: 'grid',
+            gridTemplateColumns: variant === 'product-list7' ? '34% 1fr' : undefined,
+            gap: isDrag ? 6 : 2,
+            padding: isDrag ? 10 : 4,
+          }}
+        >
+          {(variant === 'product-list7' ? [0, 1] : [0, 1, 2]).map((i) => (
+            <div
+              key={i}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: variant === 'product-list7' && i === 0 ? '1fr' : 'auto 1fr auto',
+                gap: isDrag ? 7 : 3,
+                alignItems: 'center',
+                padding: isDrag ? 5 : 2,
+                borderRadius: isDrag ? 8 : 3,
+                border: `1px solid ${sandFaint}`,
+                background: variant === 'product-list6' && i === 0 ? `${maroon}22` : undefined,
+              }}
+            >
+              {variant === 'product-list7' && i === 0 ? (
+                <span style={{ height: '100%', minHeight: isDrag ? 54 : 22, borderRadius: isDrag ? 8 : 3, background: `${maroon}44` }} />
+              ) : (
+                <>
+                  <span style={{ width: isDrag ? 16 : 6, height: isDrag ? 16 : 6, borderRadius: 3, background: sandFaint }} />
+                  <span style={{ height: isDrag ? 4 : 1.5, background: i === 0 ? sand : sandSoft }} />
+                  <span style={{ width: isDrag ? 20 : 8, height: isDrag ? 4 : 1.5, background: maroon }} />
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    case 'shadcnProductDetail':
+      return (
+        <div
+          style={{
+            ...baseStyle,
+            display: 'grid',
+            gridTemplateColumns: variant === 'product-detail9' ? '1.15fr 0.85fr' : '42% 1fr',
+            gap: isDrag ? 8 : 3,
+            padding: isDrag ? 10 : 4,
+            background: variant === 'product-detail9' ? `linear-gradient(135deg, ${sandFaint}, ${maroon}22)` : paper,
+          }}
+        >
+          <div style={{ borderRadius: isDrag ? 12 : 4, background: variant === 'product-detail9' ? `${maroon}44` : sandFaint }} />
+          <div style={{ display: 'grid', alignContent: 'center', gap: isDrag ? 5 : 2 }}>
+            <div style={{ height: isDrag ? 5 : 2, width: '82%', background: sand }} />
+            <div style={{ height: isDrag ? 3 : 1, width: '62%', background: sandSoft }} />
+            <div style={{ height: isDrag ? 12 : 5, width: '48%', borderRadius: 999, background: maroon }} />
+          </div>
+        </div>
+      );
+    case 'shadcnQuickView':
+      return (
+        <div style={{ ...baseStyle, display: 'grid', placeItems: 'center', padding: isDrag ? 10 : 4 }}>
+          <div
+            style={{
+              width: '82%',
+              height: '74%',
+              borderRadius: isDrag ? 14 : 5,
+              border: `1px solid ${sandFaint}`,
+              background: paper,
+              display: 'grid',
+              gridTemplateColumns: '42% 1fr',
+              gap: isDrag ? 7 : 3,
+              padding: isDrag ? 7 : 3,
+            }}
+          >
+            <span style={{ borderRadius: isDrag ? 9 : 3, background: `${maroon}33` }} />
+            <span style={{ display: 'grid', alignContent: 'center', gap: isDrag ? 4 : 1.5 }}>
+              <span style={{ height: isDrag ? 4 : 1.5, width: '82%', background: sand }} />
+              <span style={{ height: isDrag ? 3 : 1, width: '56%', background: sandSoft }} />
+              <span style={{ height: isDrag ? 9 : 4, width: '44%', borderRadius: 999, background: maroon }} />
+            </span>
+          </div>
+        </div>
+      );
+    case 'shadcnOrderSummary':
+      return (
+        <div
+          style={{
+            ...baseStyle,
+            display: 'grid',
+            gridTemplateColumns: variant === 'order-summary2' ? '1fr 34%' : '1fr',
+            gap: isDrag ? 6 : 2,
+            padding: isDrag ? 10 : 4,
+          }}
+        >
+          <div style={{ display: 'grid', gap: isDrag ? 5 : 2 }}>
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                style={{
+                  height: isDrag ? 8 : 3,
+                  width: i === 2 ? '62%' : '100%',
+                  borderRadius: 999,
+                  background: i === 2 ? maroon : sandFaint,
+                }}
+              />
+            ))}
+          </div>
+          {variant === 'order-summary2' ? <div style={{ borderRadius: isDrag ? 10 : 4, background: `${maroon}33` }} /> : null}
+        </div>
+      );
+    case 'shadcnReviews':
+      return (
+        <div style={{ ...baseStyle, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: isDrag ? 7 : 3, padding: isDrag ? 10 : 4 }}>
+          {[0, 1].map((i) => (
+            <div key={i} style={{ borderRadius: isDrag ? 10 : 4, border: `1px solid ${sandFaint}`, padding: isDrag ? 8 : 3 }}>
+              <div style={{ height: isDrag ? 4 : 1.5, width: '52%', background: maroon, marginBottom: isDrag ? 7 : 3 }} />
+              <div style={{ height: isDrag ? 3 : 1, width: '82%', background: i === 0 ? sand : sandSoft }} />
+            </div>
+          ))}
+        </div>
+      );
+    case 'shadcnOfferModal':
+      return (
+        <div
+          style={{
+            ...baseStyle,
+            display: 'grid',
+            placeItems: 'center',
+            padding: isDrag ? 10 : 4,
+            background: `linear-gradient(135deg, ${maroon}33, ${sandFaint})`,
+          }}
+        >
+          <div
+            style={{
+              width: '74%',
+              height: '56%',
+              borderRadius: isDrag ? 12 : 5,
+              border: `1px solid ${sandFaint}`,
+              background: paper,
+            }}
+          />
+        </div>
+      );
+    case 'shadcnFooter':
+      return (
+        <div
+          style={{
+            ...baseStyle,
+            display: 'grid',
+            gridTemplateRows: '1fr auto',
+            gap: isDrag ? 8 : 3,
+            padding: isDrag ? 10 : 4,
+            background: variant === 'ecommerce-footer18' ? `linear-gradient(135deg, ${maroon}33, ${sandFaint})` : paper,
+          }}
+        >
+          <div style={{ display: 'grid', alignContent: 'center', gap: isDrag ? 4 : 1.5 }}>
+            <span style={{ height: isDrag ? 5 : 2, width: '48%', background: sand }} />
+            <span style={{ height: isDrag ? 3 : 1, width: '72%', background: sandSoft }} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: isDrag ? 5 : 2 }}>
+            {[0, 1, 2, 3].map((i) => (
+              <span key={i} style={{ height: isDrag ? 4 : 1.5, borderRadius: 999, background: i === 0 ? maroon : sandFaint }} />
+            ))}
+          </div>
+        </div>
+      );
     case 'hero':
       return (
         <div style={baseStyle}>
@@ -1500,6 +2231,58 @@ function BlockMiniPreview({ type, size = 'tile' }: { type: BlockType; size?: 'ti
           </div>
         </div>
       );
+    case 'curvedLoop':
+      return (
+        <div
+          style={{
+            ...baseStyle,
+            position: 'relative',
+            overflow: 'hidden',
+            display: 'grid',
+            placeItems: 'center',
+            padding: isDrag ? 8 : 3,
+          }}
+        >
+          <div
+            aria-hidden
+            style={{
+              width: '92%',
+              height: isDrag ? 48 : 18,
+              borderTop: `${isDrag ? 3 : 1.4}px solid ${maroon}`,
+              borderRadius: '50% 50% 0 0',
+              transform: 'translateY(20%)',
+              opacity: 0.88,
+            }}
+          />
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              top: isDrag ? 30 : 11,
+              left: '50%',
+              width: isDrag ? 84 : 34,
+              height: isDrag ? 6 : 2,
+              transform: 'translateX(-50%) rotate(-7deg)',
+              background: `repeating-linear-gradient(90deg, ${sand} 0 ${isDrag ? 8 : 3}px, transparent ${isDrag ? 8 : 3}px ${isDrag ? 12 : 5}px)`,
+              borderRadius: 999,
+            }}
+          />
+          <span
+            aria-hidden
+            style={{
+              position: 'absolute',
+              bottom: isDrag ? 14 : 5,
+              fontFamily: 'var(--font-serif)',
+              fontSize: isDrag ? 16 : 7,
+              color: sand,
+              fontWeight: 700,
+              letterSpacing: 0,
+            }}
+          >
+            Aa
+          </span>
+        </div>
+      );
     case 'showcase1':
       return (
         <div
@@ -1733,6 +2516,7 @@ const DEVICE_WIDTHS: Record<Device, string> = {
 };
 
 const LIBRARY_PREFIX = 'lib::';
+const BUILDER_PREVIEW_DROP_ID = 'component-showcase';
 const OUTLINE_DROPZONE_ID = 'outline-dropzone';
 const CANVAS_DROPZONE_ID = 'canvas-dropzone';
 
@@ -2314,7 +3098,9 @@ function BuilderShellInner({
   slug,
   liveUrl,
   businessName,
+  logoUrl,
   pages,
+  activeSystemPage = null,
   activePageId,
   initialBlocks,
   publishedAt,
@@ -2325,6 +3111,10 @@ function BuilderShellInner({
   initialPalette,
   initialTemplate,
   initialPolicies,
+  initialCheckout,
+  initialProductIndex,
+  productIndexProducts,
+  productIndexCategoryOptions,
   currentPlan,
   effectiveTheme,
   installedAppIds = [],
@@ -2334,21 +3124,35 @@ function BuilderShellInner({
   const blockLabels = copy.blockLabels as Record<BlockType, string>;
   const chromeDir = direction[locale];
   const giphyStorefrontSlug = installedAppIds.includes('giphy') ? slug : undefined;
+  const libraryGroups = useMemo(
+    () => libraryGroupsForInstalledApps(installedAppIds),
+    [installedAppIds],
+  );
   const router = useRouter();
   const activePage = useMemo(
     () => pages.find((p) => p.id === activePageId) ?? null,
     [pages, activePageId],
   );
+  const editingCheckout = activeSystemPage === 'checkout';
+  const editingProducts = activeSystemPage === 'products';
+  const editingSystemPage = editingCheckout || editingProducts;
   const isHomePage = activePage ? activePage.isHome : true;
   const [blocks, setBlocks] = useState<Block[]>(initialBlocks);
-  const [selectedId, setSelectedId] = useState<string | null>(initialBlocks[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    editingSystemPage ? null : (initialBlocks[0]?.id ?? null),
+  );
+  const [checkoutDraft, setCheckoutDraft] = useState<CheckoutSettings>(initialCheckout);
+  const [productIndexDraft, setProductIndexDraft] =
+    useState<ProductIndexSettings>(initialProductIndex);
   const [iframeKey, setIframeKey] = useState(0);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [publishPhase, setPublishPhase] = useState<PublishPhase>('idle');
   const [publishedAtState, setPublishedAtState] = useState<string | null>(publishedAt);
   const [isPublishedState, setIsPublishedState] = useState<boolean>(isPublished);
   const [, startTransition] = useTransition();
-  const [tab, setTab] = useState<'pages' | 'library' | 'outline' | 'apps'>('library');
+  const [tab, setTab] = useState<'pages' | 'library' | 'outline' | 'apps'>(
+    editingSystemPage ? 'pages' : 'library',
+  );
   const [showSouqyPublishHint, setShowSouqyPublishHint] = useState(souqyLivePublishHint);
   const [openAppId, setOpenAppId] = useState<string | null>(null);
   // Right rail mode: editing the selected block (default) or the
@@ -2368,7 +3172,9 @@ function BuilderShellInner({
   const [navMenuOpen, setNavMenuOpen] = useState(false);
   const [device, setDevice] = useState<Device>('desktop');
   const [activeDrag, setActiveDrag] = useState<
-    { kind: 'library'; type: BlockType } | { kind: 'block'; id: string; label: string } | null
+    | { kind: 'library'; type: BlockType; variant?: string; label: string }
+    | { kind: 'block'; id: string; label: string }
+    | null
   >(null);
   // Tracks what the dragged library item is currently hovering over so
   // outline rows / canvas / empty dropzone can render an insertion
@@ -2399,8 +3205,8 @@ function BuilderShellInner({
   }, [router, startTransition]);
 
   useEffect(() => {
-    if (selectedId) setInspectorMode('block');
-  }, [selectedId]);
+    if (selectedId && !editingSystemPage) setInspectorMode('block');
+  }, [editingSystemPage, selectedId]);
 
   useEffect(
     () => () => {
@@ -2523,12 +3329,18 @@ function BuilderShellInner({
   // ------- block ops ------------------------------------------------------
 
   const addBlock = useCallback(
-    (type: BlockType, atIndex?: number) => {
-      if (isPremiumBlockType(type) && !planUnlocksPremiumBlocks(currentPlan)) {
+    (type: BlockType, atIndex?: number, options: BlockCreateOptions = {}) => {
+      if (editingSystemPage) return;
+      if (type === 'shadcnReviews' && !installedAppIds.includes('reviews')) {
+        setTab('apps');
+        return;
+      }
+      const requiredPlan = options.tier ?? (isPremiumBlockType(type) ? 'pro' : undefined);
+      if (requiredPlan && !planAtLeast(currentPlan, requiredPlan)) {
         router.push('/account/settings/plan?feature=premium-blocks');
         return;
       }
-      const block = createBlock(type, productOptions);
+      const block = createBlock(type, productOptions, options);
       const next = [...blocks];
       const idx = typeof atIndex === 'number' ? atIndex : next.length;
       next.splice(idx, 0, block);
@@ -2545,7 +3357,7 @@ function BuilderShellInner({
         justAddedTimerRef.current = null;
       }, JUST_ADDED_GLOW_MS);
     },
-    [blocks, currentPlan, productOptions, router, update],
+    [blocks, currentPlan, editingSystemPage, installedAppIds, productOptions, router, update],
   );
 
   const removeBlock = useCallback(
@@ -2608,10 +3420,20 @@ function BuilderShellInner({
 
   const onDragStart = useCallback(
     (e: DragStartEvent) => {
+      if (editingSystemPage) return;
       const id = String(e.active.id);
       setDropTargetId(null);
       if (id.startsWith(LIBRARY_PREFIX)) {
-        setActiveDrag({ kind: 'library', type: id.slice(LIBRARY_PREFIX.length) as BlockType });
+        const data = e.active.data.current as Partial<LibraryDragData> | undefined;
+        const parsed = parseLibraryDragId(id);
+        const type = data?.type ?? parsed?.type;
+        if (!type) return;
+        setActiveDrag({
+          kind: 'library',
+          type,
+          variant: data?.variant ?? parsed?.variant,
+          label: data?.label ?? blockLabels[type],
+        });
         // Surface the outline tab the moment a library drag starts so the
         // insertion indicator between rows is actually visible. dnd-kit
         // keeps the drag active via DragOverlay even though the source
@@ -2622,23 +3444,31 @@ function BuilderShellInner({
       }
       const current = blocksRef.current.find((b) => b.id === id);
       if (current) {
-        setActiveDrag({ kind: 'block', id, label: blockLabels[current.type] });
+        setActiveDrag({
+          kind: 'block',
+          id,
+          label: getBlockDisplayLabel(current, blockLabels[current.type], locale),
+        });
       }
     },
-    [blockLabels],
+    [blockLabels, editingSystemPage, locale],
   );
 
-  const onDragOver = useCallback((e: DragOverEvent) => {
-    const activeId = String(e.active.id);
-    // Only library drags need the highlight — outline reorders use the
-    // sortable transform animation for feedback.
-    if (!activeId.startsWith(LIBRARY_PREFIX)) {
-      if (dropTargetIdRef.current !== null) setDropTargetId(null);
-      return;
-    }
-    const overId = e.over ? String(e.over.id) : null;
-    if (dropTargetIdRef.current !== overId) setDropTargetId(overId);
-  }, []);
+  const onDragOver = useCallback(
+    (e: DragOverEvent) => {
+      if (editingSystemPage) return;
+      const activeId = String(e.active.id);
+      // Only library drags need the highlight — outline reorders use the
+      // sortable transform animation for feedback.
+      if (!activeId.startsWith(LIBRARY_PREFIX)) {
+        if (dropTargetIdRef.current !== null) setDropTargetId(null);
+        return;
+      }
+      const overId = e.over ? String(e.over.id) : null;
+      if (dropTargetIdRef.current !== overId) setDropTargetId(overId);
+    },
+    [editingSystemPage],
+  );
 
   // Mirror dropTargetId in a ref so the onDragOver callback can read
   // the latest value without taking it as a dep (which would re-create
@@ -2650,18 +3480,25 @@ function BuilderShellInner({
     (e: DragEndEvent) => {
       setActiveDrag(null);
       setDropTargetId(null);
+      if (editingSystemPage) return;
       const activeId = String(e.active.id);
       const overId = e.over ? String(e.over.id) : null;
 
       // Library → Outline drop: append (or insert before the over row).
       if (activeId.startsWith(LIBRARY_PREFIX)) {
-        const type = activeId.slice(LIBRARY_PREFIX.length) as BlockType;
+        const data = e.active.data.current as Partial<LibraryDragData> | undefined;
+        const parsed = parseLibraryDragId(activeId);
+        const type = data?.type ?? parsed?.type;
+        if (!type) return;
+        const variant = data?.variant ?? parsed?.variant;
+        const libraryItem = getLibraryItem(type, variant);
+        const options = { variant, tier: data?.tier ?? libraryItem?.tier };
         if (!overId || overId === OUTLINE_DROPZONE_ID || overId === CANVAS_DROPZONE_ID) {
-          addBlock(type);
+          addBlock(type, undefined, options);
           return;
         }
         const idx = blocksRef.current.findIndex((b) => b.id === overId);
-        addBlock(type, idx === -1 ? undefined : idx);
+        addBlock(type, idx === -1 ? undefined : idx, options);
         return;
       }
 
@@ -2673,7 +3510,7 @@ function BuilderShellInner({
       const next = arrayMove(blocksRef.current, from, to);
       update(next);
     },
-    [addBlock, update],
+    [addBlock, editingSystemPage, update],
   );
 
   // ------- iframe selection sync ------------------------------------------
@@ -2976,7 +3813,7 @@ function BuilderShellInner({
       blocks.map((b, i) => ({
         id: `block-${b.id}`,
         group: copy.outline.aria,
-        label: `${blockLabels[b.type]}${
+        label: `${getBlockDisplayLabel(b, blockLabels[b.type], locale)}${
           (b.props as { title?: string; heading?: string; overlayTitle?: string }).title
             ? ` · ${(b.props as { title?: string }).title}`
             : (b.props as { heading?: string }).heading
@@ -2995,11 +3832,12 @@ function BuilderShellInner({
           iframe?.contentWindow?.postMessage({ kind: 'scrollToBlock', id: b.id }, '*');
         },
       })),
-    [blockLabels, blocks, copy.outline.aria],
+    [blockLabels, blocks, copy.outline.aria, locale],
   );
 
   return (
     <DndContext
+      id="souqna-builder-dnd"
       sensors={sensors}
       // closestCenter picks the row whose vertical centre is nearest
       // the cursor, so dragging into the gap between two rows resolves
@@ -3113,7 +3951,7 @@ function BuilderShellInner({
           {leftDrawerOpen || rightDrawerOpen ? (
             <button
               type="button"
-              aria-label="Close panel"
+              aria-label={copy.topbar.closePanels}
               onClick={() => {
                 setLeftDrawerOpen(false);
                 setRightDrawerOpen(false);
@@ -3239,13 +4077,23 @@ function BuilderShellInner({
                   slug={slug}
                   pages={pages}
                   activePageId={activePageId}
+                  activeSystemPage={activeSystemPage}
+                  systemPages={{
+                    productsEnabled: productIndexDraft.enabled,
+                  }}
+                  onSystemPageEnabledChange={(page, enabled) => {
+                    setProductIndexDraft((current) => ({ ...current, enabled }));
+                    setIframeKey((key) => key + 1);
+                  }}
                   onBeforeSwitch={flushPendingSave}
                   giphyStorefrontSlug={giphyStorefrontSlug}
                 />
               ) : tab === 'library' ? (
                 <LibraryPanel
-                  groups={LIBRARY_GROUPS}
-                  onAdd={(t) => addBlock(t)}
+                  groups={libraryGroups}
+                  onAdd={(item) =>
+                    addBlock(item.type, undefined, { variant: item.variant, tier: item.tier })
+                  }
                   currentPlan={currentPlan}
                 />
               ) : tab === 'apps' ? (
@@ -3258,6 +4106,7 @@ function BuilderShellInner({
                 <OutlinePanel
                   blocks={blocks}
                   blockLabels={blockLabels}
+                  locale={locale}
                   selectedId={selectedId}
                   onSelect={setSelectedId}
                   onMove={moveBlock}
@@ -3313,11 +4162,15 @@ function BuilderShellInner({
                     display: 'inline-block',
                   }}
                 />
-                {activePage
-                  ? `${copy.canvas.editing} · ${activePage.title}${
-                      activePage.isHome ? ` (${copy.canvas.home})` : ''
-                    }`
-                  : copy.publish.livePreviewDraft}
+                {editingCheckout
+                  ? `${copy.canvas.editing} · ${locale === 'ar' ? 'الدفع' : 'Checkout'}`
+                  : editingProducts
+                    ? `${copy.canvas.editing} · ${locale === 'ar' ? 'كل المنتجات' : 'All Products'}`
+                    : activePage
+                      ? `${copy.canvas.editing} · ${activePage.title}${
+                          activePage.isHome ? ` (${copy.canvas.home})` : ''
+                        }`
+                      : copy.publish.livePreviewDraft}
               </span>
               <span>
                 {device === 'desktop'
@@ -3325,7 +4178,7 @@ function BuilderShellInner({
                   : `${DEVICE_WIDTHS[device]} ${copy.canvas.frame}`}
               </span>
             </div>
-            {activePage && !isHomePage ? (
+            {activePage && !isHomePage && !editingSystemPage ? (
               <PageCanvasHeader
                 slug={slug}
                 page={activePage}
@@ -3343,7 +4196,7 @@ function BuilderShellInner({
                 giphyStorefrontSlug={giphyStorefrontSlug}
               />
             ) : null}
-            <CanvasDropZone isLibraryDragging={isLibraryDragging}>
+            <CanvasDropZone isLibraryDragging={isLibraryDragging && !editingSystemPage}>
               <div
                 className="souqna-device-stage"
                 style={{
@@ -3367,56 +4220,79 @@ function BuilderShellInner({
                     direction: 'ltr',
                   }}
                 >
-                  {selected ? (
-                    // Outer frame ring (was an inset 1px shadow that
-                    // got clipped by the iframe). Sits *outside* the device
-                    // frame so it reads at any zoom level on phones.
-                    <span
-                      aria-hidden
-                      style={{
-                        position: 'absolute',
-                        inset: -3,
-                        pointerEvents: 'none',
-                        border: '2px solid var(--bld-accent-strong)',
-                        borderRadius: 18,
-                        transition: 'opacity 200ms ease',
-                        zIndex: 1,
-                      }}
+                  {editingCheckout ? (
+                    <CheckoutBuilderPreview
+                      checkout={checkoutDraft}
+                      businessName={businessName}
+                      logoUrl={logoUrl}
+                      locale={locale}
+                      device={device}
                     />
-                  ) : null}
-                  <iframe
-                    ref={iframeRef}
-                    key={iframeKey}
-                    src={
-                      activePage && !activePage.isHome
-                        ? `/account/${slug}/preview?page=${encodeURIComponent(activePage.slug)}`
-                        : `/account/${slug}/preview`
-                    }
-                    title="storefront preview"
-                    data-preview-frame
-                    className="souqna-builder-iframe"
-                    style={{
-                      width: '100%',
-                      maxWidth: '100%',
-                      height: '100%',
-                      minHeight: 'calc(100dvh - 160px)',
-                      border: '1px solid var(--bld-iframe-border)',
-                      borderRadius: 16,
-                      background: '#fff',
-                      boxShadow: '0 22px 70px var(--bld-panel-shadow)',
-                      // Iframes swallow pointer events from the parent
-                      // document, which would defeat the canvas drop
-                      // target. While dragging from the library we let
-                      // the events fall through to the dropzone wrapper
-                      // so dnd-kit's pointer sensor can register the
-                      // hover and we can fire the "drop here" overlay.
-                      pointerEvents: isLibraryDragging ? 'none' : undefined,
-                    }}
-                  />
+                  ) : editingProducts ? (
+                    <ProductIndexBuilderPreview
+                      businessName={businessName}
+                      logoUrl={logoUrl}
+                      locale={locale}
+                      currency={initialCheckout.currency}
+                      settings={productIndexDraft}
+                      products={productIndexProducts}
+                      categories={productIndexCategoryOptions}
+                      device={device}
+                    />
+                  ) : (
+                    <>
+                      {selected ? (
+                        // Outer frame ring (was an inset 1px shadow that
+                        // got clipped by the iframe). Sits *outside* the device
+                        // frame so it reads at any zoom level on phones.
+                        <span
+                          aria-hidden
+                          style={{
+                            position: 'absolute',
+                            inset: -3,
+                            pointerEvents: 'none',
+                            border: '2px solid var(--bld-accent-strong)',
+                            borderRadius: 18,
+                            transition: 'opacity 200ms ease',
+                            zIndex: 1,
+                          }}
+                        />
+                      ) : null}
+                      <iframe
+                        ref={iframeRef}
+                        key={iframeKey}
+                        src={
+                          activePage && !activePage.isHome
+                            ? `/account/${slug}/preview?page=${encodeURIComponent(activePage.slug)}`
+                            : `/account/${slug}/preview`
+                        }
+                        title="storefront preview"
+                        data-preview-frame
+                        className="souqna-builder-iframe"
+                        style={{
+                          width: '100%',
+                          maxWidth: '100%',
+                          height: '100%',
+                          minHeight: 'calc(100dvh - 160px)',
+                          border: '1px solid var(--bld-iframe-border)',
+                          borderRadius: 16,
+                          background: '#fff',
+                          boxShadow: '0 22px 70px var(--bld-panel-shadow)',
+                          // Iframes swallow pointer events from the parent
+                          // document, which would defeat the canvas drop
+                          // target. While dragging from the library we let
+                          // the events fall through to the dropzone wrapper
+                          // so dnd-kit's pointer sensor can register the
+                          // hover and we can fire the "drop here" overlay.
+                          pointerEvents: isLibraryDragging ? 'none' : undefined,
+                        }}
+                      />
+                    </>
+                  )}
                 </div>
               </div>
 
-              {selected ? (
+              {selected && !editingSystemPage ? (
                 <div
                   className="souqna-selection-toolbar-wrap"
                   data-tour="selection-toolbar"
@@ -3430,7 +4306,7 @@ function BuilderShellInner({
                   }}
                 >
                   <SelectionToolbar
-                    blockLabel={blockLabels[selected.type]}
+                    blockLabel={getBlockDisplayLabel(selected, blockLabels[selected.type], locale)}
                     blockIndex={selectedIndex >= 0 ? selectedIndex + 1 : 1}
                     canMoveUp={selectedIndex > 0}
                     canMoveDown={selectedIndex >= 0 && selectedIndex < blocks.length - 1}
@@ -3465,69 +4341,92 @@ function BuilderShellInner({
               direction: chromeDir,
             }}
           >
-            <InspectorModeToggle
-              value={inspectorMode}
-              onChange={(v) => {
-                setInspectorMode(v);
-                if (v === 'site') setSelectedId(null);
-              }}
-            />
-            <BuilderRecommendations
-              blocks={blocks}
-              selected={selected}
-              currentPlan={currentPlan}
-              templateId={initialTemplate}
-              productCount={productOptions.length}
-              onApplyVariant={(variant) => {
-                if (!selected) return;
-                updateBlockStyle(selected.id, { ...(selected.style ?? {}), variant });
-              }}
-              onAddBlock={(type) => addBlock(type)}
-              onOpenSite={() => {
-                setInspectorMode('site');
-                setSelectedId(null);
-              }}
-              onPremiumRefresh={handleResetTemplate}
-            />
-            {inspectorMode === 'block' ? (
-              <BlockInspector
-                block={selected}
-                onChange={(p) => selected && updateBlockProps(selected.id, p)}
-                onChangeStyle={(s) => selected && updateBlockStyle(selected.id, s)}
-                onMoveUp={() => selected && moveBlock(selected.id, -1)}
-                onMoveDown={() => selected && moveBlock(selected.id, 1)}
-                onDuplicate={() => selected && duplicateBlock(selected.id)}
-                onDelete={() => selected && removeBlock(selected.id)}
-                productOptions={productOptions}
-                categoryOptions={categoryOptions}
-                storefrontSlug={slug}
-                blockOutline={blocks.map((b, index) => ({
-                  id: b.id,
-                  index,
-                  label: blockLabels[b.type],
-                }))}
-                giphyStorefrontSlug={giphyStorefrontSlug}
-                currentPlan={currentPlan}
-              />
-            ) : (
-              <SiteInspector
+            {editingCheckout ? (
+              <CheckoutBuilderInspector
                 slug={slug}
-                initialTheme={initialTheme}
-                initialPalette={initialPalette}
-                initialTemplate={initialTemplate}
-                currentPlan={currentPlan}
-                activePageId={activePageId}
+                checkout={checkoutDraft}
+                businessName={businessName}
+                logoUrl={logoUrl}
+                locale={locale}
+                onChange={setCheckoutDraft}
+              />
+            ) : editingProducts ? (
+              <ProductIndexBuilderInspector
+                slug={slug}
+                settings={productIndexDraft}
                 businessName={businessName}
                 locale={locale}
-                initialPolicies={initialPolicies}
-                onSiteSaved={() => {
-                  iframeRef.current?.contentWindow?.postMessage(
-                    { type: 'souqna:reload' },
-                    window.location.origin,
-                  );
-                }}
-                onTemplateConfirmed={handleTemplateConfirmed}
+                products={productIndexProducts}
+                categories={productIndexCategoryOptions}
+                onChange={setProductIndexDraft}
               />
+            ) : (
+              <>
+                <InspectorModeToggle
+                  value={inspectorMode}
+                  onChange={(v) => {
+                    setInspectorMode(v);
+                    if (v === 'site') setSelectedId(null);
+                  }}
+                />
+                <BuilderRecommendations
+                  blocks={blocks}
+                  selected={selected}
+                  currentPlan={currentPlan}
+                  templateId={initialTemplate}
+                  productCount={productOptions.length}
+                  onApplyVariant={(variant) => {
+                    if (!selected) return;
+                    updateBlockStyle(selected.id, { ...(selected.style ?? {}), variant });
+                  }}
+                  onAddBlock={(type) => addBlock(type)}
+                  onOpenSite={() => {
+                    setInspectorMode('site');
+                    setSelectedId(null);
+                  }}
+                  onPremiumRefresh={handleResetTemplate}
+                />
+                {inspectorMode === 'block' ? (
+                  <BlockInspector
+                    block={selected}
+                    onChange={(p) => selected && updateBlockProps(selected.id, p)}
+                    onChangeStyle={(s) => selected && updateBlockStyle(selected.id, s)}
+                    onMoveUp={() => selected && moveBlock(selected.id, -1)}
+                    onMoveDown={() => selected && moveBlock(selected.id, 1)}
+                    onDuplicate={() => selected && duplicateBlock(selected.id)}
+                    onDelete={() => selected && removeBlock(selected.id)}
+                    productOptions={productOptions}
+                    categoryOptions={categoryOptions}
+                    storefrontSlug={slug}
+                    blockOutline={blocks.map((b, index) => ({
+                      id: b.id,
+                      index,
+                      label: getBlockDisplayLabel(b, blockLabels[b.type], locale),
+                    }))}
+                    giphyStorefrontSlug={giphyStorefrontSlug}
+                    currentPlan={currentPlan}
+                  />
+                ) : (
+                  <SiteInspector
+                    slug={slug}
+                    initialTheme={initialTheme}
+                    initialPalette={initialPalette}
+                    initialTemplate={initialTemplate}
+                    currentPlan={currentPlan}
+                    activePageId={activePageId}
+                    businessName={businessName}
+                    locale={locale}
+                    initialPolicies={initialPolicies}
+                    onSiteSaved={() => {
+                      iframeRef.current?.contentWindow?.postMessage(
+                        { type: 'souqna:reload' },
+                        window.location.origin,
+                      );
+                    }}
+                    onTemplateConfirmed={handleTemplateConfirmed}
+                  />
+                )}
+              </>
             )}
           </aside>
         </div>
@@ -3547,7 +4446,7 @@ function BuilderShellInner({
                 paddingTop: 2,
               }}
             >
-              {blockLabels[activeDrag.type]}
+              {activeDrag.label}
             </span>
           </div>
         ) : activeDrag?.kind === 'block' ? (
@@ -4923,11 +5822,11 @@ function LibraryPanel({
   onAdd,
   currentPlan,
 }: {
-  groups: typeof LIBRARY_GROUPS;
-  onAdd: (type: BlockType) => void;
+  groups: LibraryGroup[];
+  onAdd: (item: LibraryItem) => void;
   currentPlan: Plan;
 }) {
-  const { builder: copy } = useBuilderCopy();
+  const { builder: copy, locale } = useBuilderCopy();
   const itemCopy = copy.library.items as Record<BlockType, { label: string; hint: string }>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -4947,17 +5846,26 @@ function LibraryPanel({
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {group.items.map((item) => {
-              const locked =
-                isPremiumBlockType(item.type) && !planUnlocksPremiumBlocks(currentPlan);
+              const requiredPlan = requiredPlanForLibraryItem(item);
+              const locked = requiredPlan ? !planAtLeast(currentPlan, requiredPlan) : false;
+              const presetCopy = item.variant
+                ? getLibraryItemText(item, locale)
+                : (itemCopy[item.type] ?? item);
               return (
                 <LibraryTile
-                  key={item.type}
-                  type={item.type}
-                  label={itemCopy[item.type]?.label ?? item.label}
-                  hint={itemCopy[item.type]?.hint ?? item.hint}
+                  key={libraryItemKey(item)}
+                  item={item}
+                  label={presetCopy.label}
+                  hint={presetCopy.hint}
                   locked={locked}
-                  badge={locked ? 'Max +' : undefined}
-                  onAdd={() => onAdd(item.type)}
+                  badge={
+                    requiredPlan
+                      ? locale === 'ar'
+                        ? PLAN_LIMITS[requiredPlan].labelAr
+                        : PLAN_LIMITS[requiredPlan].label
+                      : undefined
+                  }
+                  onAdd={() => onAdd(item)}
                 />
               );
             })}
@@ -4969,14 +5877,14 @@ function LibraryPanel({
 }
 
 function LibraryTile({
-  type,
+  item,
   label,
   hint,
   locked,
   badge,
   onAdd,
 }: {
-  type: BlockType;
+  item: LibraryItem;
   label: string;
   hint: string;
   locked?: boolean;
@@ -4984,21 +5892,33 @@ function LibraryTile({
   onAdd: () => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `${LIBRARY_PREFIX}${type}`,
-    data: { kind: 'library', type },
+    id: libraryDragId(item),
+    data: { kind: 'library', type: item.type, variant: item.variant, tier: item.tier, label },
     disabled: locked,
   });
   const dragAttributes = locked ? {} : attributes;
   const dragListeners = locked ? {} : listeners;
+  const accessibleLabel = [label, badge, hint].filter(Boolean).join(' · ');
   return (
     <div
       ref={setNodeRef}
       {...dragAttributes}
       {...dragListeners}
-      onDoubleClick={locked ? undefined : onAdd}
+      role="button"
+      tabIndex={locked ? -1 : 0}
+      aria-disabled={locked || undefined}
+      aria-label={accessibleLabel}
+      title={accessibleLabel}
       onClick={(e) => {
         if (locked) return;
         if (e.detail === 1) onAdd();
+      }}
+      onKeyDown={(e) => {
+        if (locked) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onAdd();
+        }
       }}
       className="souqna-library-tile"
       style={{
@@ -5025,7 +5945,7 @@ function LibraryTile({
         willChange: 'transform',
       }}
     >
-      <BlockMiniPreview type={type} />
+      <BlockMiniPreview type={item.type} variant={item.variant} />
       <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
         <span
           style={{
@@ -5076,6 +5996,7 @@ function LibraryTile({
 function OutlinePanel({
   blocks,
   blockLabels,
+  locale,
   selectedId,
   onSelect,
   onMove,
@@ -5087,6 +6008,7 @@ function OutlinePanel({
 }: {
   blocks: Block[];
   blockLabels: Record<BlockType, string>;
+  locale: Locale;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onMove: (id: string, dir: -1 | 1) => void;
@@ -5121,6 +6043,7 @@ function OutlinePanel({
             key={b.id}
             block={b}
             blockLabels={blockLabels}
+            locale={locale}
             index={idx}
             selected={b.id === selectedId}
             isDropTarget={isLibraryDragging && dropTargetId === b.id}
@@ -5182,6 +6105,7 @@ function EmptyOutlineDropzone({
 function OutlineRow({
   block,
   blockLabels,
+  locale,
   index,
   selected,
   isDropTarget,
@@ -5193,6 +6117,7 @@ function OutlineRow({
 }: {
   block: Block;
   blockLabels: Record<BlockType, string>;
+  locale: Locale;
   index: number;
   selected: boolean;
   isDropTarget: boolean;
@@ -5299,7 +6224,7 @@ function OutlineRow({
                 letterSpacing: '-0.005em',
               }}
             >
-              {blockLabels[block.type]}
+              {getBlockDisplayLabel(block, blockLabels[block.type], locale)}
             </span>
           </span>
         </button>
@@ -5538,7 +6463,11 @@ function sanitizeBlocksForSave(blocks: Block[]): Block[] {
   });
 }
 
-function createBlock(type: BlockType, productOptions: ProductOption[] = []): Block {
+function createBlock(
+  type: BlockType,
+  productOptions: ProductOption[] = [],
+  options: BlockCreateOptions = {},
+): Block {
   const id = newId();
   switch (type) {
     case 'hero':
@@ -5576,9 +6505,9 @@ function createBlock(type: BlockType, productOptions: ProductOption[] = []): Blo
         id,
         type,
         props: {
-          dropId: '',
-          showCountdown: true,
-          showWaitlist: true,
+          dropId: BUILDER_PREVIEW_DROP_ID,
+          heading: 'Timed drop / إصدار مؤقت',
+          subheading: 'Connect a real Drop Manager ID when your launch is ready.',
         },
       };
     case 'animatedText':
@@ -5682,6 +6611,21 @@ function createBlock(type: BlockType, productOptions: ProductOption[] = []): Blo
           brightness: 0.85,
         },
       };
+    case 'curvedLoop':
+      return {
+        id,
+        type,
+        props: {
+          marqueeText: 'Add Text Here',
+          speed: 1.6,
+          curveAmount: 360,
+          direction: 'left',
+          interactive: true,
+          size: 'standard',
+          tone: 'accent',
+        },
+        style: { paddingY: 'md' },
+      };
     case 'showcase1':
       return {
         id,
@@ -5695,7 +6639,7 @@ function createBlock(type: BlockType, productOptions: ProductOption[] = []): Blo
         props: {
           eyebrow: 'Featured Work',
           title: 'Crafting digital experiences that inspire and engage.',
-          cta: { label: 'View projects', href: '#' },
+          cta: { label: 'View projects', href: '/products' },
           items: [
             {
               id: newId().slice(0, 8),
@@ -5775,7 +6719,7 @@ function createBlock(type: BlockType, productOptions: ProductOption[] = []): Blo
               year: '2025',
               tags: ['Identity'],
               imageUrl: 'https://images.unsplash.com/photo-1558655146-9f40138edfeb?w=800&q=80',
-              href: '#',
+              href: '/products',
             },
             {
               id: newId().slice(0, 8),
@@ -5784,7 +6728,7 @@ function createBlock(type: BlockType, productOptions: ProductOption[] = []): Blo
               year: '2025',
               tags: ['Campaign'],
               imageUrl: 'https://images.unsplash.com/photo-1605902711622-cfb43c4437b5?w=800&q=80',
-              href: '#',
+              href: '/products',
             },
             {
               id: newId().slice(0, 8),
@@ -5793,7 +6737,7 @@ function createBlock(type: BlockType, productOptions: ProductOption[] = []): Blo
               year: '2024',
               tags: ['Identity', 'Product'],
               imageUrl: 'https://images.unsplash.com/photo-1618004652321-13a63e576b80?w=800&q=80',
-              href: '#',
+              href: '/products',
             },
             {
               id: newId().slice(0, 8),
@@ -5802,7 +6746,7 @@ function createBlock(type: BlockType, productOptions: ProductOption[] = []): Blo
               year: '2024',
               tags: ['Identity', 'Campaign'],
               imageUrl: 'https://images.unsplash.com/photo-1618556450994-a6a128ef0d9d?w=800&q=80',
-              href: '#',
+              href: '/products',
             },
           ],
         },
@@ -5862,6 +6806,26 @@ function createBlock(type: BlockType, productOptions: ProductOption[] = []): Blo
         type,
         props: createEcommerceBlockProps(type, productOptions),
       };
+    case 'shadcnNavbar':
+    case 'shadcnHero':
+    case 'shadcnTrustStrip':
+    case 'shadcnCategories':
+    case 'shadcnProductCard':
+    case 'shadcnProductList':
+    case 'shadcnProductDetail':
+    case 'shadcnQuickView':
+    case 'shadcnReviews':
+    case 'shadcnOrderSummary':
+    case 'shadcnOfferModal':
+    case 'shadcnFooter':
+      return {
+        id,
+        type,
+        props: createShadcnCommerceBlockProps(type, productOptions, options.variant),
+        style: {
+          paddingY: type === 'shadcnNavbar' ? 'none' : type === 'shadcnFooter' ? 'lg' : 'md',
+        },
+      };
     default: {
       const _exhaustive: never = type;
       throw new Error(`Unknown block type: ${String(_exhaustive)}`);
@@ -5881,7 +6845,7 @@ function createShowcase1Props(): Showcase1Props {
         subtitle: 'A short visual story for new arrivals and seasonal drops.',
         kicker: 'Products',
         imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=1000&q=80',
-        href: '#',
+        href: '/products',
       },
       {
         id: newId().slice(0, 8),
@@ -5889,7 +6853,7 @@ function createShowcase1Props(): Showcase1Props {
         subtitle: 'Group a few hero picks into one compact buying moment.',
         kicker: 'Gifting',
         imageUrl: 'https://images.unsplash.com/photo-1512909006721-3d6018887383?w=1000&q=80',
-        href: '#',
+        href: '/products',
       },
       {
         id: newId().slice(0, 8),
@@ -5897,7 +6861,7 @@ function createShowcase1Props(): Showcase1Props {
         subtitle: 'Show process, mood, or founder story without a full landing page.',
         kicker: 'Editorial',
         imageUrl: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1000&q=80',
-        href: '#',
+        href: '/products',
       },
     ],
   };
@@ -5930,7 +6894,7 @@ function createDefaultEcommerceProducts(): EcommerceProduct[] {
         { label: 'L', available: true },
         { label: 'XL', available: false },
       ],
-      href: '#',
+      href: '/products',
       available: true,
     },
     {
@@ -5943,7 +6907,7 @@ function createDefaultEcommerceProducts(): EcommerceProduct[] {
       imageUrl: 'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=900&q=80',
       description: 'Hand-thrown pair with a soft matte glaze and boxed presentation.',
       details: ['Made in small batches', 'Dishwasher safe', 'Two-piece set'],
-      href: '#',
+      href: '/products',
       available: true,
     },
     {
@@ -5956,7 +6920,7 @@ function createDefaultEcommerceProducts(): EcommerceProduct[] {
       imageUrl: 'https://images.unsplash.com/photo-1607083206968-13611e3d76db?w=900&q=80',
       description: 'A premium date assortment with Arabic coffee notes and reusable packaging.',
       details: ['12 pieces', 'Custom note included', 'Same-day Doha delivery'],
-      href: '#',
+      href: '/products',
       available: true,
     },
     {
@@ -5969,7 +6933,7 @@ function createDefaultEcommerceProducts(): EcommerceProduct[] {
       imageUrl: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=900&q=80',
       description: 'A warm amber blend designed for a slow, lasting dry down.',
       details: ['15ml roll-on', 'Alcohol free', 'Limited seasonal blend'],
-      href: '#',
+      href: '/products',
       available: false,
     },
   ];
@@ -5982,28 +6946,28 @@ function createDefaultEcommerceCategories(): EcommerceCategory[] {
       label: 'New arrivals',
       tag: 'Fresh edit',
       imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=900&q=80',
-      href: '#',
+      href: '/products',
     },
     {
       id: newId().slice(0, 8),
       label: 'Gifts',
       tag: 'Ready to wrap',
       imageUrl: 'https://images.unsplash.com/photo-1512909006721-3d6018887383?w=900&q=80',
-      href: '#',
+      href: '/products',
     },
     {
       id: newId().slice(0, 8),
       label: 'Home',
       tag: 'For the table',
       imageUrl: 'https://images.unsplash.com/photo-1513161455079-7dc1de15ef3e?w=900&q=80',
-      href: '#',
+      href: '/products',
     },
     {
       id: newId().slice(0, 8),
       label: 'Beauty',
       tag: 'Daily rituals',
       imageUrl: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=900&q=80',
-      href: '#',
+      href: '/products',
     },
   ];
 }
@@ -6026,16 +6990,264 @@ function createEcommerceBlockProps(
     .filter((product) => product.status === 'active')
     .slice(0, 8)
     .map((product) => product.id);
+  const hasProducts = activeProductIds.length > 0;
+  const categoryTiles = Array.from(
+    new Map(
+      productOptions
+        .filter((product) => product.status === 'active' && product.category)
+        .map((product) => [product.category!, product]),
+    ).entries(),
+  )
+    .slice(0, 6)
+    .map(([category, product]) => ({
+      id: category.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]+/g, '-') || newId().slice(0, 8),
+      label: category,
+      tag: 'Collection',
+      imageUrl: product.imageUrl ?? '',
+      href: '/products',
+    }));
+  const productSource = {
+    source: hasProducts ? ('manual' as const) : ('all' as const),
+    productIds: activeProductIds,
+    category: null,
+    tag: null,
+    limit: 8,
+    sort: 'manual' as const,
+    hideUnavailable: true,
+  };
 
-  return {
+  const props: EcommerceBlockProps = {
     eyebrow: 'Shop',
     title: productTitles[type] ?? 'Curated products',
     subtitle: 'Swap in your own products, images, categories, and links from the inspector.',
-    cta: { label: 'View all', href: '#' },
-    productIds: activeProductIds.length ? activeProductIds : undefined,
-    products: createDefaultEcommerceProducts(),
-    categories: createDefaultEcommerceCategories(),
+    cta: { label: 'View all', href: '/products' },
+    productIds: hasProducts ? activeProductIds : undefined,
+    productSource,
+    products: hasProducts ? undefined : createDefaultEcommerceProducts(),
+    categories:
+      hasProducts && categoryTiles.length ? categoryTiles : createDefaultEcommerceCategories(),
     tabs: ['All', 'Travel', 'Home', 'Gifts', 'Beauty'],
+  };
+
+  if (type === 'ecommerce2') {
+    props.filterable = {
+      productSource,
+      filters: {
+        enabled: true,
+        layout: 'sidebar',
+        groups: [
+          {
+            id: 'category',
+            labelEn: 'Category',
+            labelAr: 'التصنيف',
+            source: 'category',
+            autoGenerate: true,
+            options: [],
+          },
+          {
+            id: 'availability',
+            labelEn: 'Availability',
+            labelAr: 'التوفر',
+            source: 'availability',
+            autoGenerate: true,
+            options: [],
+          },
+        ],
+        hideEmptyOptions: true,
+        showSidebar: true,
+        showMobileDrawer: true,
+      },
+      card: { showCategory: true, showDescription: true, ctaMode: 'direct_add' },
+    };
+  }
+
+  if (type === 'ecommerce6') {
+    const categoryTabs = categoryTiles.slice(0, 4).map((category) => ({
+      id: category.id ?? newId().slice(0, 8),
+      labelEn: category.label,
+      labelAr: category.label,
+      value: category.label,
+      productSource: {
+        source: 'category' as const,
+        productIds: [],
+        category: category.label,
+        tag: null,
+        limit: 8,
+        sort: 'manual' as const,
+        hideUnavailable: true,
+      },
+    }));
+    props.tabbed = {
+      tabs: categoryTabs.length ? categoryTabs : [defaultCommerceBuilderTab()],
+      allTab: { enabled: true, mode: 'combined_tabs', productIds: [] },
+      emptyTabBehavior: 'empty_state',
+      card: { showCategory: true, showDescription: true, ctaMode: 'direct_add' },
+    };
+  }
+
+  if (type === 'ecommerce7') {
+    props.tilesConfig = {
+      tiles: (categoryTiles.length ? categoryTiles : createDefaultEcommerceCategories()).map(
+        (category) => ({
+          id: category.id ?? newId().slice(0, 8),
+          labelEn: category.label,
+          labelAr: category.label,
+          eyebrowEn: category.tag ?? 'Shop',
+          eyebrowAr: category.tag ?? 'تسوق',
+          imageUrl: category.imageUrl ?? '',
+          badge: { labelEn: '', labelAr: '', tone: 'gold', position: 'top-right' },
+          destination: {
+            type: 'category',
+            category: category.label,
+            tag: null,
+            productIds: [],
+            pageSlug: null,
+            url: category.href ?? null,
+          },
+        }),
+      ),
+      tabs: [{ id: 'all', labelEn: 'All', labelAr: 'الكل', tileIds: [] }],
+      behavior: {
+        showTabs: true,
+        clickAction: 'navigate',
+        overlayStyle: 'dark_gradient',
+        allTab: 'show_all',
+      },
+    };
+  }
+
+  return props;
+}
+
+function createShadcnCommerceBlockProps(
+  type: BlockType,
+  productOptions: ProductOption[] = [],
+  variant?: string,
+): Record<string, unknown> {
+  const base = createEcommerceBlockProps('ecommerce5', productOptions);
+  const firstProductId =
+    productOptions.find((product) => product.status === 'active')?.id ?? base.productIds?.[0];
+  const variantByType: Partial<Record<BlockType, string>> = {
+    shadcnNavbar: 'ecommerce-navbar2',
+    shadcnHero: 'ecommerce-hero3',
+    shadcnTrustStrip: 'trust-strip3',
+    shadcnCategories: 'product-categories4',
+    shadcnProductCard: 'product-card24',
+    shadcnProductList: 'product-list6',
+    shadcnProductDetail: 'product-detail9',
+    shadcnQuickView: 'product-quick-view8',
+    shadcnReviews: 'reviews23',
+    shadcnOrderSummary: 'order-summary2',
+    shadcnOfferModal: 'offer-modal5',
+    shadcnFooter: 'ecommerce-footer18',
+  };
+  const titleByType: Partial<Record<BlockType, string>> = {
+    shadcnNavbar: 'Premium storefront navigation',
+    shadcnHero: 'A premium product suite for modern stores',
+    shadcnTrustStrip: 'Why customers buy with confidence',
+    shadcnCategories: 'Shop by collection',
+    shadcnProductCard: 'Featured products',
+    shadcnProductList: 'Best sellers and new arrivals',
+    shadcnProductDetail: 'Signature product',
+    shadcnQuickView: 'Fast product view',
+    shadcnReviews: 'Customer love',
+    shadcnOrderSummary: 'A smoother checkout moment',
+    shadcnOfferModal: 'Launch offer',
+    shadcnFooter: 'Stay close to the store',
+  };
+  const props: Record<string, unknown> = {
+    ...base,
+    variant: variant ?? variantByType[type],
+    kicker: 'Souqna Max+',
+    title: titleByType[type],
+    subtitle:
+      'A paid commerce component optimized for bilingual storefronts, live products, and clean routing.',
+    density: 'balanced',
+    tone: type === 'shadcnHero' ? 'charcoal' : 'sand',
+  };
+
+  if (type === 'shadcnNavbar') {
+    props.sticky = true;
+    props.subtitle = 'Store name, logo, routes, cart, product index, and policy links.';
+    props.announcement = 'Secure checkout and local delivery';
+    props.ctaLabel = 'Shop products';
+    props.ctaHref = '/products';
+    props.showSearch = true;
+    props.showPolicyLinks = true;
+    props.cartLabel = 'Cart';
+  }
+
+  if (type === 'shadcnFooter') {
+    props.showNewsletter = true;
+    props.subtitle = 'Product links, policies, contact, and store updates stay close to checkout.';
+  }
+
+  if (type === 'shadcnTrustStrip') {
+    props.metrics = [
+      { value: '974', labelEn: 'Qatar-ready numbers', labelAr: '\u0623\u0631\u0642\u0627\u0645 \u0642\u0637\u0631\u064a\u0629', icon: 'shield' },
+      { value: 'COD', labelEn: 'Cash and card ready', labelAr: '\u062f\u0641\u0639 \u0646\u0642\u062f\u064a \u0648\u0628\u0637\u0627\u0642\u0629', icon: 'card' },
+      { value: 'Fast', labelEn: 'Delivery notes', labelAr: '\u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0627\u0644\u062a\u0648\u0635\u064a\u0644', icon: 'truck' },
+    ];
+  }
+
+  if (type === 'shadcnProductDetail' || type === 'shadcnQuickView') {
+    props.productId = firstProductId;
+  }
+
+  if (type === 'shadcnReviews') {
+    props.reviews = [
+      {
+        nameEn: 'Aisha',
+        nameAr: '\u0639\u0627\u0626\u0634\u0629',
+        quoteEn: 'The order felt premium from browsing to checkout.',
+        quoteAr: '\u0627\u0644\u0637\u0644\u0628 \u0643\u0627\u0646 \u0645\u0645\u064a\u0632\u0627 \u0645\u0646 \u0627\u0644\u062a\u0635\u0641\u062d \u0625\u0644\u0649 \u0627\u0644\u062f\u0641\u0639.',
+        rating: 5,
+      },
+      {
+        nameEn: 'Noora',
+        nameAr: '\u0646\u0648\u0631\u0629',
+        quoteEn: 'Clear products, fast answers, and a clean cart.',
+        quoteAr: '\u0645\u0646\u062a\u062c\u0627\u062a \u0648\u0627\u0636\u062d\u0629\u060c \u0631\u062f \u0633\u0631\u064a\u0639\u060c \u0648\u0633\u0644\u0629 \u0645\u0631\u062a\u0628\u0629.',
+        rating: 5,
+      },
+      {
+        nameEn: 'Khalid',
+        nameAr: '\u062e\u0627\u0644\u062f',
+        quoteEn: 'I found what I needed without asking for screenshots.',
+        quoteAr: '\u0648\u062c\u062f\u062a \u0645\u0627 \u0623\u062d\u062a\u0627\u062c\u0647 \u0628\u062f\u0648\u0646 \u0637\u0644\u0628 \u0635\u0648\u0631 \u0625\u0636\u0627\u0641\u064a\u0629.',
+        rating: 5,
+      },
+    ];
+  }
+
+  if (type === 'shadcnOrderSummary') {
+    props.note = 'Preview a stronger checkout summary that can be reused on product and checkout pages.';
+  }
+
+  if (type === 'shadcnOfferModal') {
+    props.discountLabel = 'Launch edit';
+    props.delayMs = 1200;
+    props.note = 'Use as a controlled offer module, not a surprise popup.';
+  }
+
+  return props;
+}
+
+function defaultCommerceBuilderTab() {
+  return {
+    id: 'featured',
+    labelEn: 'Featured',
+    labelAr: 'مختارات',
+    value: 'featured',
+    productSource: {
+      source: 'latest' as const,
+      productIds: [],
+      category: null,
+      tag: null,
+      limit: 8,
+      sort: 'newest' as const,
+      hideUnavailable: true,
+    },
   };
 }
 
@@ -6116,6 +7328,13 @@ function BuilderRecommendations({
       'ecommerce5',
       'ecommerce6',
       'ecommerce7',
+      'shadcnCategories',
+      'shadcnProductCard',
+      'shadcnProductList',
+      'shadcnProductDetail',
+      'shadcnQuickView',
+      'shadcnOrderSummary',
+      'shadcnOfferModal',
     ].includes(b.type),
   );
   const hasMotion = blocks.some(
@@ -6126,6 +7345,7 @@ function BuilderRecommendations({
       b.type === 'spotlightCard' ||
       b.type === 'depthShowcase' ||
       b.type === 'auroraRibbon' ||
+      b.type === 'curvedLoop' ||
       b.type === 'showcase1' ||
       b.type === 'showcase2' ||
       b.type === 'showcase3' ||

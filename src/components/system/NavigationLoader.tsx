@@ -54,7 +54,7 @@ export function useNavigationLoader(): LoaderContext {
   return ctx ?? { start: () => {}, stop: () => {} };
 }
 
-const MIN_VISIBLE_MS = 320;
+const MIN_VISIBLE_MS = 240;
 const FAILSAFE_MS = 8_000;
 
 /**
@@ -280,23 +280,25 @@ function Overlay({ target }: { target: string }) {
       role="status"
       aria-live="polite"
       aria-busy="true"
+      className="souqna-skel-overlay"
       style={{
         position: 'fixed',
         inset: 0,
         zIndex: 2147483600,
-        background: 'color-mix(in srgb, var(--surface-bg) 70%, transparent)',
-        backdropFilter: 'blur(2px)',
-        WebkitBackdropFilter: 'blur(2px)',
+        background: 'color-mix(in srgb, var(--surface-bg) 42%, transparent)',
+        backdropFilter: 'blur(10px) saturate(0.96)',
+        WebkitBackdropFilter: 'blur(10px) saturate(0.96)',
         overflow: 'hidden',
-        animation: 'souqnaSkelFade 180ms ease-out both',
+        animation: 'souqnaSkelVeilIn 260ms cubic-bezier(0.22, 1, 0.36, 1) both',
       }}
     >
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          opacity: 0.85,
+          opacity: 0.58,
           pointerEvents: 'none',
+          animation: 'souqnaSkelContentIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both',
         }}
       >
         <RouteSkeleton pathname={target.split('?')[0] ?? '/'} />
@@ -315,30 +317,43 @@ function StyleTag() {
   return (
     <style>{`
       @keyframes souqnaSkelShimmer {
-        0% { background-position: -150% 0; }
-        100% { background-position: 250% 0; }
+        0% { background-position: -180% 0; }
+        100% { background-position: 220% 0; }
       }
-      @keyframes souqnaSkelFade {
-        from { opacity: 0; }
-        to { opacity: 1; }
+      @keyframes souqnaSkelVeilIn {
+        from {
+          opacity: 0;
+          backdrop-filter: blur(0) saturate(1);
+          -webkit-backdrop-filter: blur(0) saturate(1);
+        }
+        to {
+          opacity: 1;
+          backdrop-filter: blur(10px) saturate(0.96);
+          -webkit-backdrop-filter: blur(10px) saturate(0.96);
+        }
+      }
+      @keyframes souqnaSkelContentIn {
+        from { opacity: 0; transform: translateY(4px) scale(0.995); }
+        to { opacity: 0.58; transform: translateY(0) scale(1); }
       }
       @keyframes souqnaSkelSpin {
         to { transform: rotate(360deg); }
       }
       .souqna-skel-bone {
-        background: var(--surface-rule);
+        background: color-mix(in srgb, var(--surface-rule) 42%, transparent);
         background-image: linear-gradient(
           90deg,
-          color-mix(in srgb, var(--surface-rule) 100%, transparent) 0%,
-          color-mix(in srgb, var(--surface-elevated) 65%, transparent) 50%,
-          color-mix(in srgb, var(--surface-rule) 100%, transparent) 100%
+          color-mix(in srgb, var(--surface-rule) 38%, transparent) 0%,
+          color-mix(in srgb, var(--ink-strong) 8%, transparent) 46%,
+          color-mix(in srgb, var(--surface-rule) 38%, transparent) 100%
         );
         background-size: 200% 100%;
         background-repeat: no-repeat;
-        animation: souqnaSkelShimmer 1.4s linear infinite;
+        box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ink-strong) 3%, transparent);
+        animation: souqnaSkelShimmer 2.35s ease-in-out infinite;
       }
       .souqna-skel-spinner {
-        animation: souqnaSkelSpin 0.9s linear infinite;
+        animation: souqnaSkelSpin 1.35s linear infinite;
       }
       [dir='rtl'] .souqna-skel-bone {
         animation-direction: reverse;
@@ -347,6 +362,10 @@ function StyleTag() {
         .souqna-skel-bone,
         .souqna-skel-spinner {
           animation: none;
+        }
+        .souqna-skel-overlay {
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
         }
       }
     `}</style>

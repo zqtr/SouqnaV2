@@ -1,7 +1,9 @@
 'use client';
 
-import { Check } from 'lucide-react';
+import { ArrowRight, Check, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { pollSubscriptionStatus } from '@/app/actions/billing';
 import { PLAN_LIMITS, PLAN_RANK, PLANS, priceFor, type Plan } from '@/lib/plans';
 
 const FEATURES: Record<Plan, string[]> = {
@@ -10,8 +12,9 @@ const FEATURES: Record<Plan, string[]> = {
     '10 products',
     '1 template',
     '25 orders / month',
+    'Basic analytics',
     'Souqna branding locked',
-    'No custom domain, analytics, integrations, or AI',
+    'No custom domain, integrations, or AI',
   ],
   starter: [
     '2 storefronts',
@@ -19,7 +22,8 @@ const FEATURES: Record<Plan, string[]> = {
     'Custom domain',
     'Remove Souqna branding',
     '5 templates',
-    'Basic analytics',
+    'Basic analytics with more history',
+    'Analytics export ready',
     'WhatsApp integration',
     'Discount codes',
     'SEO settings',
@@ -36,6 +40,7 @@ const FEATURES: Record<Plan, string[]> = {
     'Automation flows',
     'Premium templates and blocks',
     'Advanced analytics',
+    'Funnels, behavior, attribution, and AI insights',
     'Priority support',
   ],
   atelier: [
@@ -44,7 +49,8 @@ const FEATURES: Record<Plan, string[]> = {
     'Client permissions',
     'White-label tools',
     'API access',
-    'Advanced analytics',
+    'Advanced analytics with enterprise depth',
+    'Forecasting and multi-store reporting',
     'AI bulk operations',
     'Advanced SEO AI',
     'Early access features',
@@ -59,12 +65,73 @@ const PLAN_LABELS_FROM_HOME: Record<Plan, string> = {
   atelier: 'Built for agencies, operators, and multi-brand sellers.',
 };
 
+const RETURN_BENEFITS: Record<Plan, { title: string; body: string; bullets: string[] }> = {
+  free: {
+    title: 'Free keeps the storefront open.',
+    body: 'A simple branded storefront for testing products and receiving early orders.',
+    bullets: ['Fawran and cash on delivery', 'Basic order intake', 'Starter product limits'],
+  },
+  starter: {
+    title: 'Pro keeps daily selling simple.',
+    body: 'Run the storefront from Souqna with the essentials: products, orders, reminders, and local checkout.',
+    bullets: [
+      'Fawran and cash on delivery checkout',
+      'WhatsApp/manual order reminders',
+      'Custom domain, basic analytics, discounts, and SEO',
+    ],
+  },
+  pro: {
+    title: 'Pro+ unlocks payment providers.',
+    body: 'Built for active stores that need online payments, better analytics, marketing tools, and team workflows.',
+    bullets: [
+      'SADAD, SkipCash, and Tap Payments',
+      'Advanced analytics and conversion signals',
+      'AI branding, marketing apps, teams, and automations',
+    ],
+  },
+  atelier: {
+    title: 'Max+ is the full control room.',
+    body: 'For multi-store operators, agencies, and serious merchants who need the whole Souqna stack.',
+    bullets: [
+      'Unlimited storefronts and team workspace',
+      'All payment providers plus API access',
+      'White-label tools, AI bulk operations, and dedicated support',
+    ],
+  },
+};
+
 export function PlanCompare({ currentPlan }: { currentPlan: Plan }) {
   const skipCashReturn = useSkipCashReturnState();
+  const router = useRouter();
+  const [exploredPlan, setExploredPlan] = useState<Plan | null>(null);
+  const returnPlan = skipCashReturn.plan ?? currentPlan;
+
+  useEffect(() => {
+    if (skipCashReturn.state !== 'success' || !skipCashReturn.paymentId) return;
+
+    let cancelled = false;
+    pollSubscriptionStatus({ paymentId: skipCashReturn.paymentId }).then((res) => {
+      if (!cancelled && res.status === 'active') router.refresh();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, skipCashReturn.paymentId, skipCashReturn.state]);
 
   return (
     <>
-      {skipCashReturn ? <SkipCashReturnBanner state={skipCashReturn} /> : null}
+      {skipCashReturn.state ? (
+        <SkipCashReturnBanner
+          state={skipCashReturn.state}
+          plan={returnPlan}
+          onExplore={() => setExploredPlan(returnPlan)}
+        />
+      ) : null}
+
+      {exploredPlan ? (
+        <ReturnBenefitsPanel plan={exploredPlan} onClose={() => setExploredPlan(null)} />
+      ) : null}
 
       <div className="souqna-plan-grid">
         {PLANS.map((id, index) => (
@@ -394,16 +461,33 @@ function PlanCta({
   );
 }
 
-function useSkipCashReturnState(): 'success' | 'cancel' | null {
-  const [state, setState] = useState<'success' | 'cancel' | null>(null);
+function useSkipCashReturnState(): {
+  state: 'success' | 'cancel' | null;
+  paymentId: string | null;
+  plan: Plan | null;
+} {
+  const [state, setState] = useState<{
+    state: 'success' | 'cancel' | null;
+    paymentId: string | null;
+    plan: Plan | null;
+  }>({ state: null, paymentId: null, plan: null });
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const v = params.get('skipcash') ?? params.get('status');
     if (v !== 'success' && v !== 'cancel') return;
-    setState(v);
+    const paymentId = params.get('id') ?? params.get('paymentId') ?? params.get('PaymentId');
+    const plan = planFromCustom1(params.get('custom1'));
+    setState({ state: v, paymentId, plan });
     params.delete('skipcash');
     params.delete('status');
+    params.delete('statusId');
+    params.delete('transId');
+    params.delete('custom1');
+    params.delete('id');
+    params.delete('paymentId');
+    params.delete('PaymentId');
     params.delete('sub_id');
     params.delete('subscription_id');
     params.delete('ba_token');
@@ -412,11 +496,26 @@ function useSkipCashReturnState(): 'success' | 'cancel' | null {
     const next = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash;
     window.history.replaceState({}, '', next);
   }, []);
+
   return state;
 }
 
-function SkipCashReturnBanner({ state }: { state: 'success' | 'cancel' }) {
+function planFromCustom1(value: string | null): Plan | null {
+  const plan = value?.split(':')[1];
+  return plan === 'starter' || plan === 'pro' || plan === 'atelier' ? plan : null;
+}
+
+function SkipCashReturnBanner({
+  state,
+  plan,
+  onExplore,
+}: {
+  state: 'success' | 'cancel';
+  plan: Plan;
+  onExplore: () => void;
+}) {
   const success = state === 'success';
+  const label = PLAN_LIMITS[plan].label;
   return (
     <div
       role="status"
@@ -431,9 +530,129 @@ function SkipCashReturnBanner({ state }: { state: 'success' | 'cancel' }) {
         lineHeight: 1.5,
       }}
     >
-      {success
-        ? 'Your plan is being activated — confirmation email on its way.'
-        : 'Checkout cancelled. You can try again from the public plans section.'}
+      <div style={{ display: 'grid', gap: 10 }}>
+        <span>
+          {success
+            ? `Your ${label} plan is active. Confirmation email is on its way.`
+            : 'Checkout cancelled. You can try again from the public plans section.'}
+        </span>
+        {success ? (
+          <button
+            type="button"
+            onClick={onExplore}
+            style={{
+              justifySelf: 'start',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              minHeight: 38,
+              padding: '0 14px',
+              borderRadius: 999,
+              border: '1px solid var(--surface-rule-strong)',
+              background: 'var(--ink-strong)',
+              color: 'var(--surface-bg)',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Explore {label}
+            <ArrowRight size={15} aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+function ReturnBenefitsPanel({ plan, onClose }: { plan: Plan; onClose: () => void }) {
+  const label = PLAN_LIMITS[plan].label;
+  const copy = RETURN_BENEFITS[plan];
+  return (
+    <section
+      aria-label={`${label} subscription benefits`}
+      style={{
+        marginBottom: 18,
+        padding: 18,
+        borderRadius: 10,
+        border: '1px solid var(--surface-rule-strong)',
+        background:
+          'linear-gradient(135deg, color-mix(in srgb, var(--ink-strong) 8%, var(--surface-bg)), var(--surface-bg))',
+        color: 'var(--ink-strong)',
+        boxShadow: '0 18px 60px rgba(0,0,0,0.08)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 16,
+        }}
+      >
+        <div>
+          <p
+            style={{
+              margin: '0 0 8px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: 'var(--ink-muted)',
+            }}
+          >
+            {label} benefits
+          </p>
+          <h3 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: 0 }}>
+            {copy.title}
+          </h3>
+          <p
+            style={{
+              margin: '8px 0 0',
+              maxWidth: 640,
+              color: 'var(--ink-muted)',
+              lineHeight: 1.6,
+            }}
+          >
+            {copy.body}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close plan benefits"
+          style={{
+            display: 'inline-grid',
+            placeItems: 'center',
+            width: 36,
+            height: 36,
+            borderRadius: 999,
+            border: '1px solid var(--surface-rule)',
+            background: 'var(--surface-bg)',
+            color: 'var(--ink-strong)',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          <X size={16} aria-hidden="true" />
+        </button>
+      </div>
+      <ul
+        style={{
+          listStyle: 'none',
+          display: 'grid',
+          gap: 10,
+          padding: 0,
+          margin: '18px 0 0',
+        }}
+      >
+        {copy.bullets.map((benefit) => (
+          <li key={benefit} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <Check size={16} style={{ marginTop: 2, flexShrink: 0 }} aria-hidden="true" />
+            <span style={{ color: 'var(--ink-muted)', lineHeight: 1.5 }}>{benefit}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

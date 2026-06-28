@@ -4,8 +4,11 @@ import { useCallback, useState, type CSSProperties, type ReactNode } from 'react
 import { useCart } from './CartContext';
 import {
   DEFAULT_PRODUCT_HEIGHT_OPTIONS,
+  optionPriceDeltaFor,
   normalizeCustomSizeValue,
   normalizeHeightOptions,
+  normalizePricedOptions,
+  normalizeSizeOptions,
   normalizeVariantOptions,
 } from '@/lib/productOptions';
 
@@ -36,8 +39,11 @@ type Props = {
   title: string;
   priceQar: number;
   imageUrl?: string | null;
-  sizeOptions?: string[];
+  sizeOptions?: unknown;
+  sizeOptionPrices?: unknown;
   allowCustomSize?: boolean;
+  variantOptions?: unknown;
+  variantOptionPrices?: unknown;
   requiresHeightInput?: boolean;
   heightInputLabel?: string | null;
   heightOptions?: string[];
@@ -62,7 +68,10 @@ export function AddToCartButton({
   priceQar,
   imageUrl,
   sizeOptions,
+  sizeOptionPrices,
   allowCustomSize = false,
+  variantOptions,
+  variantOptionPrices,
   requiresHeightInput = false,
   heightInputLabel,
   heightOptions,
@@ -77,7 +86,10 @@ export function AddToCartButton({
 }: Props): JSX.Element | null {
   const cart = useCart();
   const [bumpKey, setBumpKey] = useState(0);
-  const sizes = normalizeVariantOptions(sizeOptions);
+  const pricedSizes = normalizePricedOptions(sizeOptionPrices ?? sizeOptions);
+  const pricedVariants = normalizePricedOptions(variantOptionPrices ?? variantOptions);
+  const sizes = normalizeSizeOptions(pricedSizes);
+  const variants = normalizeVariantOptions(pricedVariants);
   const normalizedHeightOptions = normalizeHeightOptions(heightOptions);
   const heights =
     requiresHeightInput && normalizedHeightOptions.length === 0
@@ -88,8 +100,10 @@ export function AddToCartButton({
   );
   const [customSizeValue, setCustomSizeValue] = useState('');
   const [customSizeTouched, setCustomSizeTouched] = useState(false);
+  const [selectedVariant, setSelectedVariant] = useState(variants[0] ?? '');
   const [selectedHeight, setSelectedHeight] = useState(heights[0] ?? '');
   const sizeEnabled = sizes.length > 0 || allowCustomSize;
+  const variantEnabled = variants.length > 0;
   const isCustomSizeSelected = allowCustomSize && selectedSize === CUSTOM_SIZE_VALUE;
   const activeSize = isCustomSizeSelected
     ? CUSTOM_SIZE_VALUE
@@ -98,12 +112,23 @@ export function AddToCartButton({
       : (sizes[0] ?? (allowCustomSize ? CUSTOM_SIZE_VALUE : ''));
   const normalizedCustomSize = normalizeCustomSizeValue(customSizeValue);
   const selectedSizeValue = isCustomSizeSelected ? normalizedCustomSize : activeSize;
+  const activeVariant = variants.includes(selectedVariant) ? selectedVariant : (variants[0] ?? '');
   const activeHeight = heights.includes(selectedHeight) ? selectedHeight : (heights[0] ?? '');
+  const sizePriceDelta =
+    sizeEnabled && selectedSizeValue
+      ? optionPriceDeltaFor(pricedSizes, isCustomSizeSelected ? null : selectedSizeValue)
+      : 0;
+  const variantPriceDelta =
+    variantEnabled && activeVariant ? optionPriceDeltaFor(pricedVariants, activeVariant) : 0;
+  const effectivePriceQar = Math.max(
+    0,
+    Math.round(priceQar + sizePriceDelta + variantPriceDelta),
+  );
   const heightLabel = heightInputLabel?.trim() || (isRtl ? 'الطول' : 'Height');
-  const optionLabel = isRtl ? 'الخيار' : 'Option';
-  const customSizeLabel = isRtl ? 'خيار مخصص' : 'Custom option';
+  const customSizeLabel = isRtl ? 'مقاس مخصص' : 'Custom size';
+  const variantLabel = isRtl ? 'المتغير' : 'Variant';
   const customSizeInvalid = isCustomSizeSelected && customSizeTouched && !normalizedCustomSize;
-  const hasOptionControls = sizeEnabled || requiresHeightInput;
+  const hasOptionControls = sizeEnabled || variantEnabled || requiresHeightInput;
 
   const onClick = useCallback(() => {
     if (!cart.enabled) return;
@@ -112,18 +137,25 @@ export function AddToCartButton({
       return;
     }
     if (sizeEnabled && !selectedSizeValue) return;
+    if (variantEnabled && !activeVariant) return;
     if (requiresHeightInput && !activeHeight) return;
+    const customInputs: Record<string, string> = {};
+    if (variantEnabled && activeVariant) {
+      customInputs.variant = activeVariant;
+      customInputs.variantLabel = variantLabel;
+    }
+    if (requiresHeightInput && activeHeight) {
+      customInputs.height = activeHeight;
+      customInputs.heightLabel = heightLabel;
+    }
     cart.add(
       {
         productId,
         title,
-        priceQar,
+        priceQar: effectivePriceQar,
         imageUrl: imageUrl ?? null,
         variantLabel: sizeEnabled ? selectedSizeValue : null,
-        customInputs:
-          requiresHeightInput && activeHeight
-            ? { height: activeHeight, heightLabel }
-            : undefined,
+        customInputs: Object.keys(customInputs).length > 0 ? customInputs : undefined,
       },
       1,
     );
@@ -133,12 +165,15 @@ export function AddToCartButton({
     cart,
     productId,
     title,
-    priceQar,
+    effectivePriceQar,
     imageUrl,
     sizeEnabled,
     selectedSizeValue,
     isCustomSizeSelected,
     normalizedCustomSize,
+    variantEnabled,
+    activeVariant,
+    variantLabel,
     requiresHeightInput,
     activeHeight,
     heightLabel,
@@ -159,9 +194,9 @@ export function AddToCartButton({
   const sizeSelect =
     sizeEnabled ? (
       <label style={variant === 'icon' ? compactInputWrapStyle : inputWrapStyle}>
-        <span style={inputLabelStyle}>{optionLabel}</span>
+        <span style={inputLabelStyle}>{isRtl ? 'المقاس' : 'Size'}</span>
         <select
-          aria-label={optionLabel}
+          aria-label={isRtl ? 'المقاس' : 'Size'}
           value={activeSize}
           onChange={(event) => {
             setSelectedSize(event.target.value);
@@ -171,7 +206,7 @@ export function AddToCartButton({
         >
           {sizes.map((size) => (
             <option key={size} value={size}>
-              {size}
+              {formatOptionLabel(size, optionPriceDeltaFor(pricedSizes, size), isRtl)}
             </option>
           ))}
           {allowCustomSize ? <option value={CUSTOM_SIZE_VALUE}>{customSizeLabel}</option> : null}
@@ -199,6 +234,28 @@ export function AddToCartButton({
       </label>
     ) : null;
 
+  const variantSelect = variantEnabled ? (
+    <label style={variant === 'icon' ? compactInputWrapStyle : inputWrapStyle}>
+      <span style={inputLabelStyle}>{variantLabel}</span>
+      <select
+        aria-label={variantLabel}
+        value={activeVariant}
+        onChange={(event) => setSelectedVariant(event.target.value)}
+        style={variant === 'icon' ? compactSelectStyle : selectStyle}
+      >
+        {variants.map((variantOption) => (
+          <option key={variantOption} value={variantOption}>
+            {formatOptionLabel(
+              variantOption,
+              optionPriceDeltaFor(pricedVariants, variantOption),
+              isRtl,
+            )}
+          </option>
+        ))}
+      </select>
+    </label>
+  ) : null;
+
   const heightInput = requiresHeightInput ? (
     <label style={variant === 'icon' ? compactInputWrapStyle : inputWrapStyle}>
       <span style={inputLabelStyle}>{heightLabel}</span>
@@ -222,11 +279,13 @@ export function AddToCartButton({
       hasOptionControls && optionLayout === 'stacked' ? (
         <span style={stackedOptionPanelStyle}>
           {sizeSelect}
+          {variantSelect}
           {heightInput}
         </span>
       ) : (
         <>
           {sizeSelect}
+          {variantSelect}
           {heightInput}
         </>
       );
@@ -252,7 +311,13 @@ export function AddToCartButton({
   return (
     <span style={stackWrapStyle}>
       {sizeSelect}
+      {variantSelect}
       {heightInput}
+      {effectivePriceQar !== Math.round(priceQar) ? (
+        <span style={pricePreviewStyle}>
+          {isRtl ? 'السعر' : 'Price'}: QAR {effectivePriceQar}
+        </span>
+      ) : null}
       <button
         type="button"
         onClick={onClick}
@@ -296,6 +361,13 @@ function Bump({ bumpKey }: { bumpKey: number }) {
       +1
     </span>
   );
+}
+
+function formatOptionLabel(label: string, priceDeltaQar: number, isRtl: boolean): string {
+  if (priceDeltaQar === 0) return label;
+  const sign = priceDeltaQar > 0 ? '+' : '-';
+  const value = Math.abs(priceDeltaQar);
+  return isRtl ? `${label} (${sign}${value} ر.ق)` : `${label} (${sign}QAR ${value})`;
 }
 
 const baseButtonStyle: React.CSSProperties = {
@@ -433,6 +505,13 @@ const inputErrorStyle: React.CSSProperties = {
   fontFamily: 'var(--font-mono)',
   fontSize: 10,
   color: '#8b1f2f',
+};
+
+const pricePreviewStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 11,
+  letterSpacing: '0.05em',
+  color: '#7b6259',
 };
 
 const stackedOptionPanelStyle: React.CSSProperties = {

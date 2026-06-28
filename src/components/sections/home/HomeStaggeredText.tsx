@@ -2,7 +2,7 @@
 
 import StaggeredText, {
   type StaggeredTextProps,
-} from '@/components/react-bits/staggered-text';
+} from '@/components/souqna-motion/staggered-text';
 
 type Props = Omit<StaggeredTextProps, 'delay' | 'duration' | 'direction' | 'blur'> & {
   delay?: number;

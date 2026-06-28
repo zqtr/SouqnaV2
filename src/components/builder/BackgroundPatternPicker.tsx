@@ -8,6 +8,7 @@ import {
   type BgPatternCategory,
 } from '@/lib/blocks/backgroundPatterns';
 import { palettes, type PaletteId } from '@/lib/palettes';
+import { useBuilderCopy } from './BuilderCopyContext';
 
 type Props = {
   /** Currently-applied CSS shorthand. Highlights the matching tile. */
@@ -45,6 +46,10 @@ export function BackgroundPatternPicker({
   onClear,
   palette = 'sand_gold',
 }: Props) {
+  const { builder } = useBuilderCopy();
+  const optionCopy = builder.inspector.options as Record<string, string>;
+  const labelCopy = builder.inspector.labels as Record<string, string>;
+  const t = (value: string) => optionCopy[value] ?? labelCopy[value] ?? value;
   const [category, setCategory] = useState<'all' | BgPatternCategory>('all');
 
   // Inject the storefront's palette into the preview tiles via inline
@@ -72,7 +77,7 @@ export function BackgroundPatternPicker({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div
         role="radiogroup"
-        aria-label="Pattern category"
+        aria-label={t('Pattern category')}
         style={{
           display: 'flex',
           flexWrap: 'wrap',
@@ -80,14 +85,14 @@ export function BackgroundPatternPicker({
         }}
       >
         <CategoryChip
-          label="All"
+          label={t('All')}
           active={category === 'all'}
           onClick={() => setCategory('all')}
         />
         {BACKGROUND_PATTERN_CATEGORIES.map((c) => (
           <CategoryChip
             key={c}
-            label={c.charAt(0).toUpperCase() + c.slice(1)}
+            label={t(c.charAt(0).toUpperCase() + c.slice(1))}
             active={category === c}
             onClick={() => setCategory(c)}
           />
@@ -96,7 +101,7 @@ export function BackgroundPatternPicker({
 
       <div
         role="listbox"
-        aria-label="Background patterns"
+        aria-label={t('Background patterns')}
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(4, 1fr)',
@@ -112,7 +117,7 @@ export function BackgroundPatternPicker({
               type="button"
               role="option"
               aria-selected={selected}
-              title={p.name}
+              title={t(p.name)}
               onClick={() => onPick(p)}
               style={{
                 position: 'relative',
@@ -154,7 +159,7 @@ export function BackgroundPatternPicker({
             textDecoration: 'underline',
           }}
         >
-          Clear pattern
+          {t('Clear pattern')}
         </button>
       ) : null}
     </div>

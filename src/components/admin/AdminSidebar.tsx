@@ -108,6 +108,7 @@ export function AdminSidebar({
   const pathname = usePathname() ?? '/account';
   const locale = useLocale();
   const t = adminText(locale);
+  const sidebarDir = locale === 'ar' ? 'rtl' : 'ltr';
   const searchParams = useSearchParams();
   const store = searchParams?.get('store');
   const [mounted, setMounted] = useState(false);
@@ -165,6 +166,7 @@ export function AdminSidebar({
     <>
     <Sidebar
       side={side}
+      dir={sidebarDir}
       collapsible="icon"
       className="border-sidebar-border bg-sidebar text-sidebar-foreground"
       aria-label="Admin navigation"
@@ -600,23 +602,25 @@ function AdminNavLoadingOverlay({ target }: { target: string }) {
       role="status"
       aria-live="polite"
       aria-busy="true"
+      className="souqna-skel-overlay"
       style={{
         position: 'fixed',
         inset: 0,
         zIndex: 2147483600,
-        background: 'color-mix(in srgb, var(--surface-bg) 72%, transparent)',
-        backdropFilter: 'blur(2px)',
-        WebkitBackdropFilter: 'blur(2px)',
+        background: 'color-mix(in srgb, var(--surface-bg) 42%, transparent)',
+        backdropFilter: 'blur(10px) saturate(0.96)',
+        WebkitBackdropFilter: 'blur(10px) saturate(0.96)',
         overflow: 'hidden',
-        animation: 'souqnaSkelFade 150ms ease-out both',
+        animation: 'souqnaSkelVeilIn 260ms cubic-bezier(0.22, 1, 0.36, 1) both',
       }}
     >
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          opacity: 0.9,
+          opacity: 0.58,
           pointerEvents: 'none',
+          animation: 'souqnaSkelContentIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both',
         }}
       >
         <RouteSkeleton pathname={target.split('?')[0] ?? '/account'} />

@@ -210,6 +210,39 @@ export const BACKGROUND_PATTERNS: readonly BgPattern[] = [
     // sophisticated charcoal vignette rather than a loud overlay.
     css: `linear-gradient(135deg, ${ink(24)} 0%, transparent 60%), ${ground}`,
   },
+  {
+    id: 'shadcn-grid-fade',
+    name: 'Grid fade',
+    category: 'grid',
+    css: `linear-gradient(to right, ${ink(10)} 1px, transparent 1px) 0 0/32px 32px, linear-gradient(to bottom, ${ink(10)} 1px, transparent 1px) 0 0/32px 32px, radial-gradient(circle at 50% 0%, ${accent(24)}, transparent 42%), ${ground}`,
+    cssDark: `linear-gradient(to right, rgba(232,220,196,0.08) 1px, transparent 1px) 0 0/32px 32px, linear-gradient(to bottom, rgba(232,220,196,0.08) 1px, transparent 1px) 0 0/32px 32px, radial-gradient(circle at 50% 0%, rgba(201,169,97,0.2), transparent 44%), #12100d`,
+  },
+  {
+    id: 'shadcn-dot-mask',
+    name: 'Dot mask',
+    category: 'dots',
+    css: `radial-gradient(circle at center, ${ink(18)} 1px, transparent 1.5px) 0 0/18px 18px, radial-gradient(circle at 50% 30%, transparent 0 18%, ${ground} 62%), ${ground}`,
+    cssDark: `radial-gradient(circle at center, rgba(232,220,196,0.14) 1px, transparent 1.5px) 0 0/18px 18px, radial-gradient(circle at 50% 30%, transparent 0 18%, #12100d 62%), #12100d`,
+  },
+  {
+    id: 'shadcn-card-corners',
+    name: 'Card corners',
+    category: 'geometric',
+    css: `linear-gradient(135deg, ${accent(18)} 0 10%, transparent 10% 90%, ${ink(10)} 90% 100%), linear-gradient(45deg, transparent 0 72%, ${accent(12)} 72% 100%), ${ground}`,
+  },
+  {
+    id: 'shadcn-spotlight',
+    name: 'Spotlight',
+    category: 'gradient',
+    css: `radial-gradient(circle at 50% -12%, ${accent(38)} 0, transparent 34%), radial-gradient(circle at 8% 16%, ${ink(16)} 0, transparent 24%), linear-gradient(180deg, transparent, ${ink(6)}), ${ground}`,
+    cssDark: `radial-gradient(circle at 50% -12%, rgba(201,169,97,0.34) 0, transparent 38%), radial-gradient(circle at 8% 16%, rgba(232,220,196,0.14) 0, transparent 24%), linear-gradient(180deg, #12100d, #19140f), #12100d`,
+  },
+  {
+    id: 'shadcn-diagonal-grid',
+    name: 'Diagonal grid',
+    category: 'stripes',
+    css: `repeating-linear-gradient(135deg, ${ink(8)} 0 1px, transparent 1px 18px), linear-gradient(135deg, transparent, ${accent(16)}), ${ground}`,
+  },
 ];
 
 /**

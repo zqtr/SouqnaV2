@@ -8,6 +8,7 @@ import {
   loadAppConfigContext,
   type AppConfigContext,
 } from '@/app/actions/appConfig';
+import { useBuilderCopy } from './BuilderCopyContext';
 
 /**
  * Centered modal that mounts the per-app settings React form directly
@@ -77,6 +78,33 @@ const AramexSettingsForm = dynamic(
   () => import('@/components/admin/apps/AramexSettings').then((m) => m.AramexSettingsForm),
   { ssr: false },
 );
+const ReviewsSettingsForm = dynamic(
+  () => import('@/components/admin/apps/ReviewsSettings').then((m) => m.ReviewsSettingsForm),
+  { ssr: false },
+);
+
+const APP_SETTINGS_TEXT = {
+  en: {
+    eyebrow: 'App settings',
+    aria: (name: string) => `${name} settings`,
+    closeAria: 'Close app settings',
+    close: 'Close · Esc',
+    loadError: 'Failed to load app settings.',
+    loading: 'Loading settings…',
+    noSettings:
+      'This app has no in-builder settings yet. Open it from the marketplace to configure it.',
+  },
+  ar: {
+    eyebrow: 'إعدادات التطبيق',
+    aria: (name: string) => `إعدادات ${name}`,
+    closeAria: 'إغلاق إعدادات التطبيق',
+    close: 'إغلاق · Esc',
+    loadError: 'تعذر تحميل إعدادات التطبيق.',
+    loading: 'جارٍ تحميل الإعدادات…',
+    noSettings:
+      'لا يحتوي هذا التطبيق على إعدادات داخل المصمم حتى الآن. افتحه من متجر التطبيقات لإعداده.',
+  },
+} as const;
 
 export function AppSettingsModal({
   appId,
@@ -87,6 +115,8 @@ export function AppSettingsModal({
   storeSlug: string;
   onClose: () => void;
 }) {
+  const { locale } = useBuilderCopy();
+  const t = APP_SETTINGS_TEXT[locale];
   const app = APP_REGISTRY.find((a) => a.id === appId);
   const [state, setState] = useState<
     | { kind: 'loading' }
@@ -120,19 +150,19 @@ export function AppSettingsModal({
         if (cancelled) return;
         setState({
           kind: 'error',
-          message: err instanceof Error ? err.message : 'Failed to load app settings.',
+          message: err instanceof Error ? err.message : t.loadError,
         });
       });
     return () => {
       cancelled = true;
     };
-  }, [appId, storeSlug]);
+  }, [appId, storeSlug, t.loadError]);
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={app ? `${app.name} settings` : 'App settings'}
+      aria-label={t.aria(app?.name ?? appId)}
       onClick={onClose}
       style={{
         position: 'fixed',
@@ -182,7 +212,7 @@ export function AppSettingsModal({
                 color: 'var(--ink-muted)',
               }}
             >
-              App settings
+              {t.eyebrow}
             </div>
             <div
               style={{
@@ -198,7 +228,7 @@ export function AppSettingsModal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close app settings"
+            aria-label={t.closeAria}
             style={{
               border: '1px solid color-mix(in srgb, var(--ink-strong) 14%, transparent)',
               background: 'transparent',
@@ -212,7 +242,7 @@ export function AppSettingsModal({
               cursor: 'pointer',
             }}
           >
-            Close · Esc
+            {t.close}
           </button>
         </header>
 
@@ -225,11 +255,11 @@ export function AppSettingsModal({
           }}
         >
           {state.kind === 'loading' ? (
-            <Loading />
+            <Loading label={t.loading} />
           ) : state.kind === 'error' ? (
             <ErrorState message={state.message} />
           ) : (
-            <FormFor ctx={state.ctx} />
+            <FormFor ctx={state.ctx} emptyMessage={t.noSettings} />
           )}
         </div>
       </div>
@@ -237,7 +267,7 @@ export function AppSettingsModal({
   );
 }
 
-function FormFor({ ctx }: { ctx: AppConfigContext }) {
+function FormFor({ ctx, emptyMessage }: { ctx: AppConfigContext; emptyMessage: string }) {
   const slug = ctx.storefrontSlug;
   const slimProducts = ctx.products.map((p) => ({
     id: p.id,
@@ -365,16 +395,26 @@ function FormFor({ ctx }: { ctx: AppConfigContext }) {
           initial={ctx.aramexSettings as any}
         />
       );
+    case 'reviews':
+      return (
+        <ReviewsSettingsForm
+          storefrontSlug={slug}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          initial={ctx.reviewsSettings as any}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          reviews={(ctx.reviews as any) ?? []}
+        />
+      );
     default:
       return (
         <div style={{ fontSize: 13, color: 'var(--ink-muted)' }}>
-          This app has no in-builder settings yet. Open it from the marketplace to configure it.
+          {emptyMessage}
         </div>
       );
   }
 }
 
-function Loading() {
+function Loading({ label }: { label: string }) {
   return (
     <div
       style={{
@@ -406,7 +446,7 @@ function Loading() {
           color: 'var(--ink-muted)',
         }}
       >
-        Loading settings…
+        {label}
       </span>
     </div>
   );

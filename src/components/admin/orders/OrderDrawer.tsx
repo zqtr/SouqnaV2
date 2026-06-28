@@ -209,7 +209,12 @@ export function OrderDrawer({ open, order, onClose }: Props) {
                         <div className="font-medium">{it.titleSnapshot}</div>
                         {it.variantLabel ? (
                           <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                            Option {it.variantLabel}
+                            Size {it.variantLabel}
+                          </div>
+                        ) : null}
+                        {it.customInputs.variant ? (
+                          <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                            {it.customInputs.variantLabel || 'Variant'} {it.customInputs.variant}
                           </div>
                         ) : null}
                         {it.customInputs.height ? (

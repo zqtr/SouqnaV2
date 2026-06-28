@@ -1,8 +1,29 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import {
+  AlertCircle,
+  ArrowUpRight,
+  Bell,
+  CheckCircle2,
+  Clock3,
+  CreditCard,
+  Gauge,
+  ReceiptText,
+  ShoppingBag,
+  ShoppingCart,
+} from 'lucide-react';
 import { defaultLocale, isLocale, type Locale } from '@/i18n/locales';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
   Table,
@@ -15,11 +36,13 @@ import {
 import {
   EmptyState,
   PageHeader,
-  Stat,
   StatusBadge,
   Surface,
 } from '@/components/admin/primitives';
-import { DashboardTabs } from '@/components/admin/DashboardTabs';
+import {
+  CommerceMetricCard,
+  CommerceMetricGrid,
+} from '@/components/admin/commerce-metrics';
 import { AccountUpdatesModal } from '@/components/account/updates/AccountUpdatesModal';
 import { adminPhrase } from '@/components/admin/adminLocale';
 import { getAdminUserId } from '@/lib/adminAuth';
@@ -29,17 +52,15 @@ import {
   syncProductionDeploymentAccountUpdate,
 } from '@/lib/accountUpdates';
 import { getPlan } from '@/lib/billing';
-import { getAllProducts } from '@/lib/products';
+import { getAllProducts, topProductsByOrders } from '@/lib/products';
 import { countCustomers } from '@/lib/customers';
 import {
   dailyOrdersSince,
+  dailyEventSeriesSince,
   dailyVisitorsSince,
   eventCountSince,
   uniqueVisitorsSince,
 } from '@/lib/analytics';
-import { MiniBarChart } from '@/components/admin/charts/MiniBarChart';
-import { TopProductsCard } from '@/components/admin/home/TopProductsCard';
-import { QuickActionsCard } from '@/components/admin/home/QuickActionsCard';
 import { recentActivity } from '@/lib/audit';
 import { listInstalledApps } from '@/lib/apps/installed';
 import {
@@ -49,6 +70,10 @@ import {
 } from '@/lib/checkout-orders';
 
 type StorefrontForHome = Awaited<ReturnType<typeof getStorefrontsForUser>>[number];
+type HomeLabels = (typeof HOME_STRINGS)[Locale];
+type HomeOrderStats = Awaited<ReturnType<typeof getOrderStatsForStorefront>>;
+type HomeTopProducts = Awaited<ReturnType<typeof topProductsByOrders>>;
+type HomeActivity = Awaited<ReturnType<typeof recentActivity>>;
 
 export default async function AccountHomePage({
   searchParams,
@@ -106,10 +131,12 @@ export default async function AccountHomePage({
     installedApps,
     activity,
     visitors30,
-    ,
+    pageViews30,
     carts30,
     visitorTrend,
     ordersTrend,
+    cartAddTrend,
+    topProductsRows,
   ] = await Promise.all([
     getAllProducts(storefront.slug),
     countCustomers(storefront.slug),
@@ -122,6 +149,8 @@ export default async function AccountHomePage({
     eventCountSince(storefront.slug, 'cart_add', 30),
     dailyVisitorsSince(storefront.slug, 30).catch(() => [] as number[]),
     dailyOrdersSince(storefront.slug, 30).catch(() => [] as number[]),
+    dailyEventSeriesSince(storefront.slug, 'cart_add', 30).catch(() => [] as number[]),
+    topProductsByOrders(storefront.slug, 30, 5).catch(() => []),
   ]);
   const setupItems = [
     { label: t.setupAddProducts, done: products.length > 0, href: `/account/products${storeParam}` },
@@ -133,219 +162,79 @@ export default async function AccountHomePage({
     (setupItems.filter((item) => item.done).length / setupItems.length) * 100,
   );
   const souqyPortalHref = locale === 'ar' ? '/ar/begin/souqy' : '/begin/souqy';
+  const conversionRate =
+    visitors30 > 0 ? (orderStats.totalOrders / visitors30) * 100 : 0;
+  const paidOrderShare =
+    orderStats.totalOrders > 0
+      ? (orderStats.paidOrders / orderStats.totalOrders) * 100
+      : 0;
 
-  const overviewSlot = (
-    <>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: 12,
-        }}
-      >
-        <Stat
-          label={t.revenue}
-          value={formatCurrency(orderStats.revenueQar, storefront.checkout.currency)}
-          hint={`${orderStats.totalOrders} ${t.revenueHint}`}
-          trend={ordersTrend}
-          trendLabel={t.revenueTrendAria}
-        />
-        <Stat
-          label={t.visitors}
-          value={visitors30}
-          hint={t.visitorsHint}
-          trend={visitorTrend}
-          trendLabel={t.visitorTrendAria}
-        />
-        <Stat label={t.products} value={products.length} hint={t.productsHint} />
-        <Stat label={t.customers} value={customersTotal} hint={t.customersHint} />
-      </div>
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.55fr) minmax(280px, 0.9fr)',
-          gap: 16,
-          alignItems: 'start',
-        }}
-        className="souqna-home-overview-grid"
-      >
-        <TopProductsCard
-          slug={storefront.slug}
-          storeParam={storeParam}
-          currency={storefront.checkout.currency}
-          labels={{
-            title: t.topProductsTitle,
-            viewAll: t.topProductsViewAll,
-            empty: t.topProductsEmpty,
-            emptyCta: t.topProductsEmptyCta,
-            ordersSuffix: t.topProductsOrdersSuffix,
-          }}
-        />
-        <Surface padding={18}>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="m-0 font-serif text-lg font-medium text-foreground">
-                {t.ordersTrendTitle}
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {`${ordersTrend.reduce((a, b) => a + b, 0)} ${t.ordersTrendSuffix}`}
-              </p>
-            </div>
-          </div>
-          <div className="mt-4">
-            <MiniBarChart
-              data={ordersTrend}
-              width={300}
-              height={64}
-              ariaLabel={t.ordersBarAria}
-            />
-          </div>
-          <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-            <span>{t.thirtyDaysAgo}</span>
-            <span>{t.today}</span>
-          </div>
-        </Surface>
-      </div>
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.55fr) minmax(280px, 0.9fr)',
-          gap: 16,
-          alignItems: 'start',
-        }}
-        className="souqna-home-overview-grid"
-      >
-        <Surface padding={0} style={{ overflow: 'hidden' }}>
-          <SectionHeader
-            title={t.recentOrdersTitle}
-            actionHref={`/account/orders${storeParam}`}
-            actionLabel={t.topProductsViewAll}
-          />
-          {ordersPage.orders.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t.customer}</TableHead>
-                  <TableHead>{t.status}</TableHead>
-                  <TableHead className="text-right">{t.total}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ordersPage.orders.map((order) => (
-                  <TableRow key={order.id}>
-                    <TableCell>
-                      <Link
-                        href={`/account/orders/${order.id}${storeParam}`}
-                        className="font-medium text-foreground hover:underline"
-                      >
-                        {order.customerName}
-                      </Link>
-                      <div className="text-xs text-muted-foreground">
-                        {formatDate(order.createdAt)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge tone={statusTone(order.orderStatus)}>
-                        {p(order.orderStatus.replace('_', ' '))}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(order.totalQar, order.currency)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <InlineEmpty
-              title={t.noOrdersYet}
-              body={t.noOrdersBody}
-              href={`/account/products${storeParam}`}
-              label={t.setupAddProducts}
-            />
-          )}
-        </Surface>
-
-        <SetupPanel
-          setupProgress={setupProgress}
-          setupItems={setupItems}
-          orderStats={orderStats}
-          carts30={carts30}
-          currency={storefront.checkout.currency}
-          labels={t}
-        />
-      </div>
-    </>
+  const revenueDisplay = formatCurrency(
+    orderStats.revenueQar,
+    storefront.checkout.currency,
   );
-
-  const setupSlot = (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
-        gap: 16,
-        alignItems: 'start',
-      }}
-      className="souqna-home-overview-grid"
-    >
-      <SetupPanel
-        setupProgress={setupProgress}
-        setupItems={setupItems}
-        orderStats={orderStats}
-        carts30={carts30}
-        currency={storefront.checkout.currency}
-        spacious
-        labels={t}
+  const metricsSlot = (
+    <CommerceMetricGrid>
+      <CommerceMetricCard
+        label={t.revenue}
+        value={revenueDisplay}
+        hint={`${orderStats.paidOrders} ${t.paidOrdersHint}`}
+        badge={t.lastThirtyDays}
+        tone="success"
+        trend={ordersTrend}
+        chart="bar"
+        icon={ReceiptText}
+        tooltip={`${pageViews30} ${t.pageViewsHint}`}
       />
-      <QuickActionsCard
-        storeParam={storeParam}
-        labels={{
-          title: t.quickActionsTitle,
-          addProduct: t.quickActionsAddProduct,
-          editStorefront: t.quickActionsEditStorefront,
-          browseApps: t.quickActionsBrowseApps,
-        }}
+      <CommerceMetricCard
+        label={t.conversionRate}
+        value={formatPercent(conversionRate, locale)}
+        hint={`${orderStats.totalOrders} ${t.ordersFromVisitors(visitors30)}`}
+        badge={t.checkoutSignal}
+        tone={conversionRate > 0 ? 'info' : 'neutral'}
+        trend={visitorTrend}
+        icon={Gauge}
+        tooltip={t.conversionTooltip}
       />
-    </div>
-  );
-
-  const activitySlot = (
-    <Surface padding={0} style={{ overflow: 'hidden' }}>
-      <SectionHeader
-        title={t.recentActivityTitle}
-        actionHref={`/account/settings/activity-log${storeParam}`}
-        actionLabel={t.log}
+      <CommerceMetricCard
+        label={t.aov}
+        value={formatCurrency(orderStats.averageOrderQar, storefront.checkout.currency)}
+        hint={t.aovHint}
+        badge={t.average}
+        tone="neutral"
+        trend={ordersTrend}
+        chart="bar"
+        icon={ShoppingBag}
       />
-      {activity.length > 0 ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t.action}</TableHead>
-              <TableHead>{t.summary}</TableHead>
-              <TableHead className="text-right">{t.when}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {activity.map((entry) => (
-              <TableRow key={entry.id}>
-                <TableCell className="font-mono text-xs">{entry.action}</TableCell>
-                <TableCell>{entry.summary ?? entry.targetId ?? t.recordedActivity}</TableCell>
-                <TableCell className="text-right text-muted-foreground">
-                  {formatDate(entry.occurredAt)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      ) : (
-        <InlineEmpty
-          title={t.noActivityYet}
-          body={t.noActivityBody}
-        />
-      )}
-    </Surface>
+      <CommerceMetricCard
+        label={t.paidOrders}
+        value={orderStats.paidOrders}
+        hint={`${formatPercent(paidOrderShare, locale)} ${t.ofOrdersPaid}`}
+        badge={t.settled}
+        tone={orderStats.paidOrders > 0 ? 'success' : 'neutral'}
+        trend={ordersTrend}
+        chart="bar"
+        icon={CreditCard}
+      />
+      <CommerceMetricCard
+        label={t.unpaid}
+        value={orderStats.unpaidOrders}
+        hint={t.unpaidHint}
+        badge={orderStats.unpaidOrders > 0 ? t.needsAction : t.clear}
+        tone={orderStats.unpaidOrders > 0 ? 'warning' : 'neutral'}
+        icon={AlertCircle}
+      />
+      <CommerceMetricCard
+        label={t.cartAdds}
+        value={carts30}
+        hint={t.cartAddsHint}
+        badge={t.intent}
+        tone={carts30 > 0 ? 'info' : 'neutral'}
+        trend={cartAddTrend}
+        chart="bar"
+        icon={ShoppingCart}
+      />
+    </CommerceMetricGrid>
   );
 
   return (
@@ -357,18 +246,95 @@ export default async function AccountHomePage({
         productsCount={products.length}
         customersTotal={customersTotal}
         ordersTotal={ordersPage.total}
-        revenue={formatCurrency(orderStats.revenueQar, storefront.checkout.currency)}
+        revenue={revenueDisplay}
         builderHref={`/account/builder${storeParam}`}
         souqyPortalHref={souqyPortalHref}
         labels={t}
       />
-      <DashboardTabs overview={overviewSlot} setup={setupSlot} activity={activitySlot} />
+      <div className="souqna-dashboard5-home" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
+        {metricsSlot}
+        <div className="souqna-dashboard5-primary-grid">
+          <Dashboard5CommerceFlowCard
+            title={t.ordersTrendTitle}
+            subtitle={`${ordersTrend.reduce((a, b) => a + b, 0)} ${t.ordersTrendSuffix}`}
+            ordersTrend={ordersTrend}
+            cartAddTrend={cartAddTrend}
+            ordersLabel={t.orders}
+            cartAddsLabel={t.cartAdds}
+            thirtyDaysAgo={t.thirtyDaysAgo}
+            today={t.today}
+            windowLabel={t.lastThirtyDays}
+            ariaLabel={t.ordersBarAria}
+          />
+          <div className="souqna-dashboard5-side-stack">
+            <Dashboard5OrderMixCard
+              stats={orderStats}
+              labels={t}
+              locale={locale}
+            />
+            <Dashboard5SetupCard
+              setupProgress={setupProgress}
+              setupItems={setupItems}
+              orderStats={orderStats}
+              carts30={carts30}
+              currency={storefront.checkout.currency}
+              labels={t}
+            />
+          </div>
+        </div>
+        <div className="souqna-dashboard5-secondary-grid">
+          <Dashboard5TopProductsCard
+            rows={topProductsRows}
+            storeParam={storeParam}
+            currency={storefront.checkout.currency}
+            labels={t}
+          />
+          <Dashboard5RecentOrdersCard
+            orders={ordersPage.orders}
+            storeParam={storeParam}
+            labels={t}
+            phrase={p}
+          />
+          <Dashboard5ActivityCard
+            entries={activity}
+            href={`/account/settings/activity-log${storeParam}`}
+            labels={t}
+          />
+        </div>
+      </div>
       <style>{`
-        @media (max-width: 940px) {
-          .souqna-home-overview-grid {
+        .souqna-dashboard5-home {
+          display: grid;
+          gap: 16px;
+          margin-bottom: 32px;
+        }
+
+        .souqna-dashboard5-primary-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.82fr);
+          gap: 16px;
+          align-items: start;
+        }
+
+        .souqna-dashboard5-side-stack {
+          display: grid;
+          gap: 16px;
+        }
+
+        .souqna-dashboard5-secondary-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.25fr) minmax(280px, 0.8fr);
+          gap: 16px;
+          align-items: start;
+        }
+
+        @media (max-width: 1180px) {
+          .souqna-dashboard5-primary-grid,
+          .souqna-dashboard5-secondary-grid {
             grid-template-columns: 1fr !important;
           }
         }
+
       `}</style>
     </>
   );
@@ -521,83 +487,518 @@ function AccountHomeHero({
   );
 }
 
-function SetupPanel({
+function Dashboard5CommerceFlowCard({
+  title,
+  subtitle,
+  ordersTrend,
+  cartAddTrend,
+  ordersLabel,
+  cartAddsLabel,
+  thirtyDaysAgo,
+  today,
+  windowLabel,
+  ariaLabel,
+}: {
+  title: string;
+  subtitle: string;
+  ordersTrend: number[];
+  cartAddTrend: number[];
+  ordersLabel: string;
+  cartAddsLabel: string;
+  thirtyDaysAgo: string;
+  today: string;
+  windowLabel: string;
+  ariaLabel: string;
+}) {
+  const ordersTotal = ordersTrend.reduce((sum, value) => sum + value, 0);
+  const cartAddsTotal = cartAddTrend.reduce((sum, value) => sum + value, 0);
+  return (
+    <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+      <CardHeader className="border-b border-border/80 px-5 py-4">
+        <div>
+          <CardTitle className="text-base">{title}</CardTitle>
+          <CardDescription className="mt-1">{subtitle}</CardDescription>
+        </div>
+        <CardAction>
+          <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+            {windowLabel}
+          </Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid gap-5 px-5 pb-5 pt-4">
+        <Dashboard5AreaChart
+          primary={ordersTrend}
+          secondary={cartAddTrend}
+          primaryLabel={ordersLabel}
+          secondaryLabel={cartAddsLabel}
+          ariaLabel={ariaLabel}
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Signal label={ordersLabel} value={ordersTotal} />
+          <Signal label={cartAddsLabel} value={cartAddsTotal} />
+        </div>
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>{thirtyDaysAgo}</span>
+          <span>{today}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function Dashboard5AreaChart({
+  primary,
+  secondary,
+  primaryLabel,
+  secondaryLabel,
+  ariaLabel,
+}: {
+  primary: number[];
+  secondary: number[];
+  primaryLabel: string;
+  secondaryLabel: string;
+  ariaLabel: string;
+}) {
+  const width = 720;
+  const height = 260;
+  const padding = 22;
+  const maxValue = Math.max(...primary, ...secondary, 1);
+  const primaryPoints = getChartPoints(primary, width, height, padding, maxValue);
+  const secondaryPoints = getChartPoints(secondary, width, height, padding, maxValue);
+  const first = primaryPoints[0] ?? { x: padding, y: height - padding };
+  const last = primaryPoints[primaryPoints.length - 1] ?? first;
+  const baseline = height - padding;
+  const areaPoints = [
+    pointsToString(primaryPoints),
+    `${last.x.toFixed(1)},${baseline.toFixed(1)}`,
+    `${first.x.toFixed(1)},${baseline.toFixed(1)}`,
+  ].join(' ');
+
+  return (
+    <div className="rounded-lg border border-border/80 bg-muted/40 p-3">
+      <svg
+        role="img"
+        aria-label={ariaLabel}
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-[240px] w-full overflow-visible"
+      >
+        <title>{ariaLabel}</title>
+        <defs>
+          <linearGradient id="souqna-dashboard5-flow-fill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="var(--admin-accent)" stopOpacity="0.34" />
+            <stop offset="100%" stopColor="var(--admin-accent)" stopOpacity="0.03" />
+          </linearGradient>
+        </defs>
+        {[0.25, 0.5, 0.75].map((line) => (
+          <line
+            key={line}
+            x1={padding}
+            x2={width - padding}
+            y1={padding + (height - padding * 2) * line}
+            y2={padding + (height - padding * 2) * line}
+            stroke="currentColor"
+            className="text-border/80"
+            strokeDasharray="5 7"
+          />
+        ))}
+        <polygon points={areaPoints} fill="url(#souqna-dashboard5-flow-fill)" />
+        <polyline
+          points={pointsToString(primaryPoints)}
+          fill="none"
+          stroke="var(--admin-accent)"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="4"
+        />
+        <polyline
+          points={pointsToString(secondaryPoints)}
+          fill="none"
+          stroke="#3b82f6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="3"
+          strokeDasharray="7 7"
+        />
+      </svg>
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-[var(--admin-accent)]" />
+          {primaryLabel}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-[#3b82f6]" />
+          {secondaryLabel}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Dashboard5OrderMixCard({
+  stats,
+  labels,
+  locale,
+}: {
+  stats: HomeOrderStats;
+  labels: HomeLabels;
+  locale: Locale;
+}) {
+  const total = Math.max(stats.totalOrders, 1);
+  const rows = [
+    {
+      label: labels.paidOrders,
+      value: stats.paidOrders,
+      icon: CheckCircle2,
+      accent: '#2f9e6d',
+    },
+    {
+      label: labels.unpaid,
+      value: stats.unpaidOrders,
+      icon: AlertCircle,
+      accent: '#c9a961',
+    },
+    {
+      label: labels.pending,
+      value: stats.pendingOrders,
+      icon: Clock3,
+      accent: '#3b82f6',
+    },
+  ];
+
+  return (
+    <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+      <CardHeader className="border-b border-border/80 px-5 py-4">
+        <div>
+          <CardTitle className="text-base">{labels.checkoutSignal}</CardTitle>
+          <CardDescription className="mt-1">{labels.ofOrdersPaid}</CardDescription>
+        </div>
+        <CardAction>
+          <PaidShareRing paid={stats.paidOrders} total={stats.totalOrders} locale={locale} />
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid gap-4 px-5 pb-5 pt-4">
+        {rows.map((row) => {
+          const pct = stats.totalOrders > 0 ? (row.value / total) * 100 : 0;
+          const Icon = row.icon;
+          return (
+            <div key={row.label} className="grid gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex min-w-0 items-center gap-2 text-sm text-foreground">
+                  <span
+                    className="grid size-7 shrink-0 place-items-center rounded-md border"
+                    style={{
+                      borderColor: `color-mix(in srgb, ${row.accent} 28%, transparent)`,
+                      background: `color-mix(in srgb, ${row.accent} 12%, transparent)`,
+                    }}
+                  >
+                    <Icon className="size-3.5" aria-hidden />
+                  </span>
+                  <span className="truncate">{row.label}</span>
+                </span>
+                <span className="font-mono text-sm font-semibold tabular-nums">
+                  {row.value}
+                </span>
+              </div>
+              <Progress
+                value={pct}
+                className="h-1.5 bg-muted [&>[data-slot=progress-indicator]]:bg-[var(--admin-accent)]"
+              />
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PaidShareRing({
+  paid,
+  total,
+  locale,
+}: {
+  paid: number;
+  total: number;
+  locale: Locale;
+}) {
+  const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+  return (
+    <div
+      className="grid size-14 place-items-center rounded-full"
+      style={{
+        background:
+          total > 0
+            ? `conic-gradient(#2f9e6d 0 ${pct}%, color-mix(in srgb, var(--muted) 78%, transparent) ${pct}% 100%)`
+            : 'var(--muted)',
+      }}
+    >
+      <div className="grid size-10 place-items-center rounded-full bg-card font-mono text-[11px] font-semibold tabular-nums">
+        {formatPercent(pct, locale)}
+      </div>
+    </div>
+  );
+}
+
+function Dashboard5SetupCard({
   setupProgress,
   setupItems,
   orderStats,
   carts30,
   currency,
-  spacious = false,
   labels,
 }: {
   setupProgress: number;
   setupItems: Array<{ label: string; done: boolean; href: string }>;
-  orderStats: {
-    averageOrderQar: number;
-    pendingOrders: number;
-    unpaidOrders: number;
-  };
+  orderStats: HomeOrderStats;
   carts30: number;
   currency: string;
-  spacious?: boolean;
-  labels: (typeof HOME_STRINGS)[Locale];
+  labels: HomeLabels;
 }) {
   return (
-    <Surface padding={spacious ? 22 : 18}>
-      <div className="flex items-start justify-between gap-4">
+    <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+      <CardHeader className="border-b border-border/80 px-5 py-4">
         <div>
-          <h2 className="m-0 font-serif text-lg font-medium text-foreground">
-            {labels.setupTitle}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {labels.setupProgress(setupProgress)}
-          </p>
+          <CardTitle className="text-base">{labels.setupTitle}</CardTitle>
+          <CardDescription className="mt-1">{labels.setupProgress(setupProgress)}</CardDescription>
         </div>
-        <StatusBadge tone={setupProgress === 100 ? 'success' : 'warning'}>
-          {setupProgress === 100 ? labels.ready : labels.progress}
-        </StatusBadge>
-      </div>
-      <Progress value={setupProgress} className="mt-4" />
-      <div className="mt-4 flex flex-col gap-2">
-        {setupItems.map((item) => (
-          <Link
-            key={item.label}
-            href={item.href}
-            className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm text-foreground transition hover:bg-accent hover:text-accent-foreground"
-          >
-            <span>{item.label}</span>
-            <span className="font-mono text-xs text-muted-foreground">
-              {item.done ? labels.done : labels.open}
-            </span>
-          </Link>
-        ))}
-      </div>
-      <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
-        <Signal label={labels.cartAdds} value={carts30} />
-        <Signal label={labels.aov} value={formatCurrency(orderStats.averageOrderQar, currency)} />
-        <Signal label={labels.pending} value={orderStats.pendingOrders} />
-        <Signal label={labels.unpaid} value={orderStats.unpaidOrders} />
-      </dl>
-    </Surface>
+        <CardAction>
+          <StatusBadge tone={setupProgress === 100 ? 'success' : 'warning'}>
+            {setupProgress === 100 ? labels.ready : labels.progress}
+          </StatusBadge>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="px-5 pb-5 pt-4">
+        <Progress value={setupProgress} className="h-2" />
+        <div className="mt-4 grid gap-2">
+          {setupItems.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              className="flex items-center justify-between gap-3 rounded-md border border-border/80 bg-muted/35 px-3 py-2 text-sm text-foreground transition hover:bg-accent hover:text-accent-foreground"
+            >
+              <span className="truncate">{item.label}</span>
+              <span className="font-mono text-xs text-muted-foreground">
+                {item.done ? labels.done : labels.open}
+              </span>
+            </Link>
+          ))}
+        </div>
+        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <Signal label={labels.cartAdds} value={carts30} />
+          <Signal label={labels.aov} value={formatCurrency(orderStats.averageOrderQar, currency)} />
+          <Signal label={labels.pending} value={orderStats.pendingOrders} />
+          <Signal label={labels.unpaid} value={orderStats.unpaidOrders} />
+        </dl>
+      </CardContent>
+    </Card>
   );
 }
 
-function SectionHeader({
-  title,
-  actionHref,
-  actionLabel,
+function Dashboard5TopProductsCard({
+  rows,
+  storeParam,
+  currency,
+  labels,
 }: {
-  title: string;
-  actionHref: string;
-  actionLabel: string;
+  rows: HomeTopProducts;
+  storeParam: string;
+  currency: string;
+  labels: HomeLabels;
+}) {
+  const maxRevenue = Math.max(...rows.map((row) => row.revenueQar), 1);
+  return (
+    <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+      <CardHeader className="border-b border-border/80 px-5 py-4">
+        <div>
+          <CardTitle className="text-base">{labels.topProductsTitle}</CardTitle>
+          <CardDescription className="mt-1">{labels.topProductsEmptyCta}</CardDescription>
+        </div>
+        <CardAction>
+          <Button asChild variant="ghost" size="sm">
+            <Link href={`/account/products${storeParam}`}>
+              {labels.topProductsViewAll}
+              <ArrowUpRight className="size-4" aria-hidden />
+            </Link>
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="px-5 pb-5 pt-4">
+        {rows.length > 0 ? (
+          <ol className="grid gap-4">
+            {rows.map((row, index) => {
+              const pct = Math.max(4, Math.round((row.revenueQar / maxRevenue) * 100));
+              return (
+                <li key={row.product.id} className="grid gap-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-md border border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-foreground">
+                          {row.product.title}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {row.ordersCount} {labels.topProductsOrdersSuffix}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-end font-mono text-sm font-semibold tabular-nums">
+                      {formatCurrency(row.revenueQar, currency)}
+                    </div>
+                  </div>
+                  <Progress
+                    value={pct}
+                    className="h-1.5 bg-muted [&>[data-slot=progress-indicator]]:bg-[var(--admin-accent)]"
+                  />
+                </li>
+              );
+            })}
+          </ol>
+        ) : (
+          <InlineEmpty
+            title={labels.topProductsTitle}
+            body={labels.topProductsEmpty}
+            href={`/account/products${storeParam}`}
+            label={labels.topProductsEmptyCta}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function Dashboard5RecentOrdersCard({
+  orders,
+  storeParam,
+  labels,
+  phrase,
+}: {
+  orders: Order[];
+  storeParam: string;
+  labels: HomeLabels;
+  phrase: (text: string) => string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-      <h2 className="m-0 font-serif text-lg font-medium text-foreground">{title}</h2>
-      <Button asChild variant="ghost" size="sm">
-        <Link href={actionHref}>{actionLabel}</Link>
-      </Button>
-    </div>
+    <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+      <CardHeader className="border-b border-border/80 px-5 py-4">
+        <div>
+          <CardTitle className="text-base">{labels.recentOrdersTitle}</CardTitle>
+          <CardDescription className="mt-1">{labels.noOrdersBody}</CardDescription>
+        </div>
+        <CardAction>
+          <Button asChild variant="ghost" size="sm">
+            <Link href={`/account/orders${storeParam}`}>
+              {labels.topProductsViewAll}
+              <ArrowUpRight className="size-4" aria-hidden />
+            </Link>
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="px-0 pb-2">
+        {orders.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{labels.customer}</TableHead>
+                <TableHead>{labels.status}</TableHead>
+                <TableHead className="text-right">{labels.total}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {orders.map((order) => (
+                <TableRow key={order.id}>
+                  <TableCell>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid size-8 shrink-0 place-items-center rounded-full border border-border bg-muted text-xs font-semibold text-muted-foreground">
+                        {initialsFor(order.customerName)}
+                      </span>
+                      <div className="min-w-0">
+                        <Link
+                          href={`/account/orders/${order.id}${storeParam}`}
+                          className="truncate font-medium text-foreground hover:underline"
+                        >
+                          {order.customerName}
+                        </Link>
+                        <div className="text-xs text-muted-foreground">
+                          {formatDate(order.createdAt)}
+                        </div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge tone={statusTone(order.orderStatus)}>
+                      {phrase(order.orderStatus.replace('_', ' '))}
+                    </StatusBadge>
+                  </TableCell>
+                  <TableCell className="text-right font-medium">
+                    {formatCurrency(order.totalQar, order.currency)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <InlineEmpty
+            title={labels.noOrdersYet}
+            body={labels.noOrdersBody}
+            href={`/account/products${storeParam}`}
+            label={labels.setupAddProducts}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function Dashboard5ActivityCard({
+  entries,
+  href,
+  labels,
+}: {
+  entries: HomeActivity;
+  href: string;
+  labels: HomeLabels;
+}) {
+  return (
+    <Card className="overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+      <CardHeader className="border-b border-border/80 px-5 py-4">
+        <div>
+          <CardTitle className="text-base">{labels.recentActivityTitle}</CardTitle>
+          <CardDescription className="mt-1">{labels.recordedActivity}</CardDescription>
+        </div>
+        <CardAction>
+          <Button asChild variant="ghost" size="sm">
+            <Link href={href}>
+              {labels.log}
+              <ArrowUpRight className="size-4" aria-hidden />
+            </Link>
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="px-5 pb-5 pt-4">
+        {entries.length > 0 ? (
+          <ol className="grid gap-3">
+            {entries.slice(0, 5).map((entry) => (
+              <li key={entry.id} className="flex gap-3 rounded-lg border border-border/70 bg-muted/30 p-3">
+                <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border bg-card text-muted-foreground">
+                  <Bell className="size-4" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <p className="m-0 line-clamp-2 text-sm text-foreground">
+                    {entry.summary ?? entry.targetId ?? labels.recordedActivity}
+                  </p>
+                  <p className="m-0 mt-1 font-mono text-[11px] text-muted-foreground">
+                    {entry.action} · {formatDate(entry.occurredAt)}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <InlineEmpty title={labels.noActivityYet} body={labels.noActivityBody} />
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -648,8 +1049,43 @@ function Signal({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function getChartPoints(
+  series: number[],
+  width: number,
+  height: number,
+  padding: number,
+  maxValue: number,
+): Array<{ x: number; y: number }> {
+  const values = series.length > 0 ? series : [0, 0];
+  const plotted = values.length === 1 ? [values[0] ?? 0, values[0] ?? 0] : values;
+  const usableWidth = width - padding * 2;
+  const usableHeight = height - padding * 2;
+  const scale = Math.max(maxValue, 1);
+
+  return plotted.map((rawValue, index) => ({
+    x: padding + (usableWidth * index) / Math.max(plotted.length - 1, 1),
+    y: height - padding - (Math.max(0, rawValue) / scale) * usableHeight,
+  }));
+}
+
+function pointsToString(points: Array<{ x: number; y: number }>): string {
+  return points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
+}
+
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const letters = `${parts[0]?.charAt(0) ?? '?'}${parts[1]?.charAt(0) ?? ''}`;
+  return letters.toUpperCase();
+}
+
 function formatCurrency(value: number, currency: string): string {
   return `${currency} ${Intl.NumberFormat('en-GB').format(value)}`;
+}
+
+function formatPercent(value: number, locale?: Locale): string {
+  return `${Intl.NumberFormat(locale === 'ar' ? 'ar-QA' : 'en-US', {
+    maximumFractionDigits: value > 0 && value < 10 ? 1 : 0,
+  }).format(value)}%`;
 }
 
 function formatDate(value: string | Date): string {
@@ -683,10 +1119,17 @@ const HOME_STRINGS = {
     visitors: 'Visitors',
     products: 'Products',
     customers: 'Customers',
+    conversionRate: 'Conversion rate',
     customer: 'Customer',
     status: 'Status',
     total: 'Total',
     revenueHint: 'total orders',
+    paidOrdersHint: 'paid orders',
+    pageViewsHint: 'page views in the same window',
+    lastThirtyDays: '30d',
+    checkoutSignal: 'checkout',
+    conversionTooltip: 'Orders divided by unique visitors over the last 30 days.',
+    ordersFromVisitors: (n: number) => `orders from ${n} visitors`,
     visitorsHint: 'Last 30 days',
     productsHint: 'Published and draft items',
     customersHint: 'Saved customer records',
@@ -714,6 +1157,16 @@ const HOME_STRINGS = {
     recentOrdersTitle: 'Recent orders',
     noOrdersYet: 'No orders yet',
     noOrdersBody: 'Orders placed from checkout will appear here automatically.',
+    paidOrders: 'Paid orders',
+    ofOrdersPaid: 'of orders paid',
+    settled: 'settled',
+    aovHint: 'Average checkout value',
+    average: 'average',
+    unpaidHint: 'Awaiting payment or cash confirmation',
+    needsAction: 'needs action',
+    clear: 'clear',
+    cartAddsHint: 'Buyers who added an item to cart',
+    intent: 'intent',
     recentActivityTitle: 'Recent activity',
     log: 'Log',
     action: 'Action',
@@ -746,10 +1199,17 @@ const HOME_STRINGS = {
     visitors: 'الزوّار',
     products: 'المنتجات',
     customers: 'العملاء',
+    conversionRate: 'معدل التحويل',
     customer: 'العميل',
     status: 'الحالة',
     total: 'الإجمالي',
     revenueHint: 'إجمالي الطلبات',
+    paidOrdersHint: 'طلبات مدفوعة',
+    pageViewsHint: 'مشاهدات صفحة في نفس الفترة',
+    lastThirtyDays: '٣٠ يوم',
+    checkoutSignal: 'الدفع',
+    conversionTooltip: 'الطلبات مقسومة على الزوار الفريدين خلال آخر ٣٠ يوماً.',
+    ordersFromVisitors: (n: number) => `طلبات من ${n.toLocaleString('ar-QA')} زائر`,
     visitorsHint: 'آخر ٣٠ يوماً',
     productsHint: 'منتجات منشورة ومسوّدات',
     customersHint: 'سجلات العملاء',
@@ -777,6 +1237,16 @@ const HOME_STRINGS = {
     recentOrdersTitle: 'أحدث الطلبات',
     noOrdersYet: 'لا توجد طلبات بعد',
     noOrdersBody: 'ستظهر الطلبات القادمة من الدفع هنا تلقائياً.',
+    paidOrders: 'الطلبات المدفوعة',
+    ofOrdersPaid: 'من الطلبات مدفوعة',
+    settled: 'تمت التسوية',
+    aovHint: 'متوسط قيمة الطلب',
+    average: 'متوسط',
+    unpaidHint: 'بانتظار الدفع أو تأكيد الدفع عند الاستلام',
+    needsAction: 'يحتاج إجراء',
+    clear: 'لا يوجد',
+    cartAddsHint: 'عملاء أضافوا منتجاً إلى السلة',
+    intent: 'نية شراء',
     recentActivityTitle: 'النشاط الأخير',
     log: 'السجل',
     action: 'الإجراء',

@@ -156,6 +156,15 @@ export async function dailyVisitorsSince(
   return fillDailySeries(rows, sinceDays);
 }
 
+export async function dailyEventSeriesSince(
+  storefrontSlug: string,
+  kind: string,
+  sinceDays: number,
+): Promise<number[]> {
+  const rows = await dailyEventCounts(storefrontSlug, kind, sinceDays);
+  return fillDailySeries(rows, sinceDays);
+}
+
 /**
  * Per-day order count across the requested window. Drives the
  * dashboard home orders bar chart. Cancelled orders are excluded so
@@ -198,6 +207,20 @@ function fillDailySeries(
 
 export type TopReferrer = { host: string; count: number };
 export type BreakdownRow = { label: string; count: number };
+export type VisitorMix = {
+  totalVisitors: number;
+  uniqueVisitors: number;
+  newVisitors: number;
+  returningVisitors: number;
+};
+export type SearchAnalytics = {
+  topKeywords: Array<{ keyword: string; count: number }>;
+  noResultSearches: number;
+};
+export type RealtimeAnalyticsSnapshot = {
+  liveVisitors: number;
+  activeCarts: number;
+};
 
 export async function topReferrersSince(
   storefrontSlug: string,
@@ -216,6 +239,124 @@ export async function topReferrersSince(
     limit ${limit}
   `) as unknown as TopReferrer[];
   return rows;
+}
+
+export async function visitorMixSince(
+  storefrontSlug: string,
+  sinceDays: number,
+): Promise<VisitorMix> {
+  noStore();
+  const rows = (await db()`
+    with bounds as (
+      select now() - (${sinceDays}::int * interval '1 day') as start_at
+    ),
+    window_visitors as (
+      select distinct visitor_id
+      from analytics_events, bounds
+      where storefront_slug = ${storefrontSlug}
+        and visitor_id is not null
+        and kind = 'page_view'
+        and occurred_at >= bounds.start_at
+    ),
+    first_seen as (
+      select visitor_id, min(occurred_at) as first_at
+      from analytics_events
+      where storefront_slug = ${storefrontSlug}
+        and visitor_id is not null
+        and kind = 'page_view'
+      group by visitor_id
+    )
+    select
+      (select count(*)::int
+       from analytics_events, bounds
+       where storefront_slug = ${storefrontSlug}
+         and kind = 'page_view'
+         and occurred_at >= bounds.start_at) as total_visitors,
+      count(window_visitors.visitor_id)::int as unique_visitors,
+      count(window_visitors.visitor_id) filter (where first_seen.first_at >= bounds.start_at)::int as new_visitors,
+      count(window_visitors.visitor_id) filter (where first_seen.first_at < bounds.start_at)::int as returning_visitors
+    from bounds
+    left join window_visitors on true
+    left join first_seen on first_seen.visitor_id = window_visitors.visitor_id
+    group by bounds.start_at
+  `) as unknown as Array<{
+    total_visitors: number;
+    unique_visitors: number;
+    new_visitors: number;
+    returning_visitors: number;
+  }>;
+  const row = rows[0];
+  return {
+    totalVisitors: row?.total_visitors ?? 0,
+    uniqueVisitors: row?.unique_visitors ?? 0,
+    newVisitors: row?.new_visitors ?? 0,
+    returningVisitors: row?.returning_visitors ?? 0,
+  };
+}
+
+export async function searchAnalyticsSince(
+  storefrontSlug: string,
+  sinceDays: number,
+  limit = 6,
+): Promise<SearchAnalytics> {
+  noStore();
+  const [keywordRows, noResultRows] = await Promise.all([
+    db()`
+      select lower(trim(coalesce(meta->>'query', meta->>'keyword', meta->>'q', ''))) as keyword,
+             count(*)::int as count
+      from analytics_events
+      where storefront_slug = ${storefrontSlug}
+        and kind in ('search', 'search_query', 'storefront_search')
+        and occurred_at >= now() - (${sinceDays}::int * interval '1 day')
+      group by 1
+      having lower(trim(coalesce(meta->>'query', meta->>'keyword', meta->>'q', ''))) <> ''
+      order by count desc, keyword asc
+      limit ${limit}
+    `,
+    db()`
+      select count(*)::int as n
+      from analytics_events
+      where storefront_slug = ${storefrontSlug}
+        and kind in ('search_no_results', 'storefront_search_no_results')
+        and occurred_at >= now() - (${sinceDays}::int * interval '1 day')
+    `,
+  ]);
+  return {
+    topKeywords: (keywordRows as unknown as Array<{ keyword: string; count: number }>).map(
+      (row) => ({
+        keyword: row.keyword,
+        count: Number(row.count ?? 0),
+      }),
+    ),
+    noResultSearches: Number((noResultRows as unknown as Array<{ n: number }>)[0]?.n ?? 0),
+  };
+}
+
+export async function realtimeAnalyticsSnapshot(
+  storefrontSlug: string,
+): Promise<RealtimeAnalyticsSnapshot> {
+  noStore();
+  const rows = (await db()`
+    select
+      count(distinct coalesce(visitor_id, session_id)) filter (
+        where kind = 'page_view'
+          and occurred_at >= now() - interval '5 minutes'
+          and coalesce(visitor_id, session_id) is not null
+      )::int as live_visitors,
+      count(distinct coalesce(session_id, visitor_id)) filter (
+        where kind = 'cart_add'
+          and occurred_at >= now() - interval '30 minutes'
+          and coalesce(session_id, visitor_id) is not null
+      )::int as active_carts
+    from analytics_events
+    where storefront_slug = ${storefrontSlug}
+      and occurred_at >= now() - interval '30 minutes'
+  `) as unknown as Array<{ live_visitors: number; active_carts: number }>;
+  const row = rows[0];
+  return {
+    liveVisitors: row?.live_visitors ?? 0,
+    activeCarts: row?.active_carts ?? 0,
+  };
 }
 
 export async function funnelCountsSince(

@@ -30,9 +30,9 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react';
-import ChromaCard from '@/components/react-bits/chroma-card';
-import DepthCard from '@/components/react-bits/depth-card';
-import GlassFlow from '@/components/react-bits/glass-flow';
+import ChromaCard from '@/components/souqna-motion/chroma-card';
+import DepthCard from '@/components/souqna-motion/depth-card';
+import GlassFlow from '@/components/souqna-motion/glass-flow';
 import type { Copy } from '@/content/copy';
 import type { Locale } from '@/i18n/locales';
 import { cn } from '@/lib/utils';
@@ -102,7 +102,7 @@ type IconKey =
 
 const dashboardCopy: Record<Locale, DashboardCopy> = {
   en: {
-    badge: 'ReactBits Pro dashboard concept',
+    badge: 'Souqna premium dashboard concept',
     title: 'AI SaaS dashboard for Gulf commerce.',
     subtitle:
       'A dense, product-first dashboard where Souqy monitors stores, drafts actions, and keeps commerce operations moving from one workspace.',
@@ -151,7 +151,7 @@ const dashboardCopy: Record<Locale, DashboardCopy> = {
     },
   },
   ar: {
-    badge: 'تصور لوحة ReactBits Pro',
+    badge: 'تصور لوحة سوقنا المميزة',
     title: 'لوحة SaaS ذكية لتجارة الخليج.',
     subtitle:
       'واجهة تشغيل كثيفة وواضحة يتابع فيها سوقي المتاجر، يقترح الإجراءات، ويبقي العمل التجاري في مساحة واحدة.',
@@ -214,7 +214,7 @@ const iconMap: Record<IconKey, LucideIcon> = {
   security: ShieldCheck,
 };
 
-const reactBitsAsset = '/reactbits/ai-dashboard-surface.png';
+const premiumDashboardAsset = '/souqna-motion/ai-dashboard-surface.png';
 
 export function HomeLanding(props: Props) {
   const isRtl = props.locale === 'ar';
@@ -280,7 +280,7 @@ export function HomeLanding(props: Props) {
       <section className="px-[var(--gutter)] pb-20">
         <div className="mx-auto grid max-w-[1480px] gap-5 lg:grid-cols-[1.2fr_0.8fr]">
           <AutomationBoard t={t} />
-          <ReactBitsShowcase t={t} motionReady={motionReady} />
+          <PremiumDashboardShowcase t={t} motionReady={motionReady} />
         </div>
       </section>
     </div>
@@ -300,7 +300,7 @@ function DashboardShell({
     <div className="relative min-h-[680px] w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-white/10 bg-[#f4ecdc] text-[#171916] shadow-[0_50px_160px_rgba(0,0,0,0.36)]">
       {motionReady ? (
         <GlassFlow
-          imageSrc={reactBitsAsset}
+          imageSrc={premiumDashboardAsset}
           stripeCount={8}
           angle={isRtl ? 12 : -12}
           refraction={0.045}
@@ -478,7 +478,7 @@ function ModelPanel({ t, motionReady }: { t: DashboardCopy; motionReady: boolean
     <section className="relative overflow-hidden rounded-lg border border-[#1b1d19]/10 bg-[#223027] p-4 text-[#fff8eb]">
       {motionReady ? (
         <ChromaCard
-          imageSrc={reactBitsAsset}
+          imageSrc={premiumDashboardAsset}
           imageAspectRatio={1.2}
           cardWidth={4.4}
           cardHeight={3.1}
@@ -589,7 +589,7 @@ function RightRail({ t, motionReady }: { t: DashboardCopy; motionReady: boolean 
         <section className="rounded-lg border border-[#1b1d19]/10 bg-[#11140f] p-4 text-[#fff8eb]">
           {motionReady ? (
             <DepthCard
-              image={reactBitsAsset}
+              image={premiumDashboardAsset}
               title="Launch health"
               description="Store signals, app status, and AI approvals in one view."
               width={252}
@@ -673,12 +673,12 @@ function AutomationBoard({ t }: { t: DashboardCopy }) {
   );
 }
 
-function ReactBitsShowcase({ t, motionReady }: { t: DashboardCopy; motionReady: boolean }) {
+function PremiumDashboardShowcase({ t, motionReady }: { t: DashboardCopy; motionReady: boolean }) {
   return (
     <section className="relative overflow-hidden rounded-lg border border-white/10 bg-[#f1e6d4] p-5 text-[#151713] shadow-[0_34px_100px_rgba(0,0,0,0.18)]">
       {motionReady ? (
         <GlassFlow
-          imageSrc={reactBitsAsset}
+          imageSrc={premiumDashboardAsset}
           stripeCount={9}
           angle={18}
           speed={0.05}
@@ -689,7 +689,7 @@ function ReactBitsShowcase({ t, motionReady }: { t: DashboardCopy; motionReady: 
       ) : null}
       <SurfaceImageOverlay className="z-0 opacity-[0.22] mix-blend-multiply saturate-125" />
       <div className="relative z-10">
-        <p className="text-sm font-semibold text-[#6c5a25]">ReactBits Pro surfaces</p>
+        <p className="text-sm font-semibold text-[#6c5a25]">Souqna premium surfaces</p>
         <h2 className="mt-2 max-w-[520px] text-3xl font-semibold">
           Motion where it supports the workflow.
         </h2>
@@ -726,7 +726,7 @@ function SurfaceImageOverlay({
 }) {
   return (
     <Image
-      src={reactBitsAsset}
+      src={premiumDashboardAsset}
       alt=""
       fill
       priority={priority}

@@ -5,6 +5,7 @@ import { getCopy } from '@/content/copy';
 import { getVocabulary } from '@/lib/storefront-vocabulary';
 import { storefrontBaseUrl } from '@/lib/storefrontUrl';
 import { loadSouqyComponent, renderSouqyComponent } from '@/lib/souqy/load';
+import type { ChromeLegalPolicy, ChromeNavPage } from './StorefrontChrome';
 
 /**
  * Async server component that wires the Souqy artifact loader into the
@@ -22,6 +23,8 @@ export async function SouqyMount({
   products,
   fallback,
   categoriesBySlug,
+  navPages,
+  legalPolicies,
 }: {
   data: Storefront;
   products: Product[];
@@ -30,6 +33,8 @@ export async function SouqyMount({
    * SDK so generated components resolve the new `categorySlug` prop
    * against real categories (defaults to an empty Map). */
   categoriesBySlug?: Map<string, Set<string>>;
+  navPages?: ChromeNavPage[];
+  legalPolicies?: ChromeLegalPolicy[];
 }): Promise<ReactNode> {
   if (!data.souqyRevision || !data.souqyBlobUrl) return fallback;
 
@@ -57,6 +62,8 @@ export async function SouqyMount({
     vocabulary: getVocabulary(data.locale, data.businessType),
     isRtl: data.locale === 'ar',
     categoriesBySlug: categoriesBySlug ?? new Map<string, Set<string>>(),
+    navPages: navPages ?? [],
+    legalPolicies: legalPolicies ?? [],
   };
   try {
     return <>{renderSouqyComponent(result.Component, ctx)}</>;

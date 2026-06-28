@@ -5,6 +5,10 @@ import type { Product } from '@/lib/products';
 import type { ThemeOverrides } from '@/lib/blocks/types';
 import type { getCopy } from '@/content/copy';
 import type { getVocabulary } from '@/lib/storefront-vocabulary';
+import type {
+  ChromeLegalPolicy,
+  ChromeNavPage,
+} from '@/components/storefront/StorefrontChrome';
 
 /**
  * SouqyContext is the request-scoped bundle every SDK component needs:
@@ -30,6 +34,8 @@ export type SouqyContext = {
    * free-text category match.
    */
   categoriesBySlug: Map<string, Set<string>>;
+  navPages: ChromeNavPage[];
+  legalPolicies: ChromeLegalPolicy[];
 };
 
 /**

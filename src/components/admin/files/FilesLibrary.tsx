@@ -1,10 +1,16 @@
 ﻿'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import { useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { upload } from '@vercel/blob/client';
 import { deleteStorefrontFile } from '@/app/actions/files';
+import {
+  STOREFRONT_MEDIA_ACCEPT,
+  STOREFRONT_MEDIA_FORMATS_LABEL,
+  mediaKindFromUrlOrContentType,
+} from '@/lib/media';
 
 type FileItem = {
   url: string;
@@ -23,7 +29,7 @@ type Props = {
   storageLimitBytes?: number;
 };
 
-const DEFAULT_STORAGE_LIMIT_BYTES = 1_073_741_824;
+const DEFAULT_STORAGE_LIMIT_BYTES = 350 * 1024 * 1024;
 const MAX_FILE_BYTES = 52_428_800;
 
 const NAMESPACE_LABELS: Record<string, string> = {
@@ -363,7 +369,7 @@ export function FilesLibrary({
           ref={inputRef}
           type="file"
           multiple
-          accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+          accept={STOREFRONT_MEDIA_ACCEPT}
           onChange={(e) => {
             void handleFiles(e.target.files);
             e.currentTarget.value = '';
@@ -505,10 +511,7 @@ function FileTile({
   onCopy: () => void;
   onDelete: () => void;
 }) {
-  const isImage =
-    !file.contentType ||
-    file.contentType.startsWith('image/') ||
-    /\.(png|jpe?g|webp|svg|gif|avif)$/i.test(file.name);
+  const mediaKind = mediaKindFromUrlOrContentType(file.url || file.name, file.contentType);
   return (
     <div
       style={{
@@ -537,7 +540,7 @@ function FileTile({
           overflow: 'hidden',
         }}
       >
-        {isImage ? (
+        {mediaKind === 'image' ? (
           <img
             src={file.url}
             alt=""
@@ -548,6 +551,28 @@ function FileTile({
               width: '100%',
               height: '100%',
               objectFit: 'contain',
+            }}
+          />
+        ) : mediaKind === 'video' ? (
+          <video
+            src={file.url}
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              background: 'var(--surface-sunken)',
+            }}
+            onMouseEnter={(event) => {
+              void event.currentTarget.play().catch(() => undefined);
+            }}
+            onMouseLeave={(event) => {
+              event.currentTarget.pause();
             }}
           />
         ) : (
@@ -688,21 +713,21 @@ function storageCopy(locale: string | undefined) {
     eyebrow: ar ? 'مكتبة التخزين' : 'Storage library',
     title: ar ? 'كل صور متجرك في مكان واحد' : 'One visual vault for your storefront',
     subtitle: ar
-      ? 'ارفع الصور مرة واحدة، ثم استخدمها في المنتجات والبنّاء والهوية بدون فقدان الروابط.'
-      : 'Upload once, then reuse images across products, the builder, brand assets, and share previews without losing the source file.',
+      ? 'ارفع الصور والفيديو وملفات GIF مرة واحدة، ثم استخدمها في المنتجات والبنّاء والهوية بدون فقدان الروابط.'
+      : 'Upload once, then reuse images, GIFs, and videos across products, the builder, brand assets, and share previews without losing the source file.',
     usageLabel: ar ? 'استخدام التخزين' : 'Storage usage',
     remaining: ar ? 'المتبقي' : 'Remaining',
     used: ar ? 'المستخدم' : 'Used',
     limit: ar ? 'الحد' : 'Limit',
     files: ar ? 'الملفات' : 'Files',
     uploading: ar ? 'جاري الرفع...' : 'Uploading...',
-    dropOrBrowse: ar ? 'اسحب الصور هنا أو اضغط للاختيار' : 'Drop files here or click to browse',
+    dropOrBrowse: ar ? 'اسحب الصور أو الفيديو هنا أو اضغط للاختيار' : 'Drop media here or click to browse',
     formats: ar
-      ? 'PNG · JPG · WEBP · SVG · حتى 50MB · يمكن رفع أكثر من ملف'
-      : 'PNG · JPG · WEBP · SVG · up to 50 MB · multiple files at once',
+      ? `${STOREFRONT_MEDIA_FORMATS_LABEL} · حتى 50MB · يمكن رفع أكثر من ملف`
+      : `${STOREFRONT_MEDIA_FORMATS_LABEL} · up to 50 MB · multiple files at once`,
     uploadFailed: ar
-      ? 'تعذر رفع الصورة. جرّب صورة أصغر بصيغة PNG أو JPG أو WEBP أو SVG.'
-      : 'Upload failed. Try a smaller image (PNG, JPG, WEBP, SVG).',
+      ? 'تعذر رفع الملف. جرّب ملفاً أصغر بصيغة مدعومة.'
+      : 'Upload failed. Try a smaller supported media file.',
     search: ar ? 'ابحث في الملفات...' : 'Search files...',
     all: ar ? 'الكل' : 'All',
     empty: ar

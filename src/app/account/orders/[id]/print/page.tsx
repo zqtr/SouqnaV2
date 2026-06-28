@@ -190,7 +190,12 @@ export default async function PrintInvoicePage({
                         <div>{it.titleSnapshot}</div>
                         {it.variantLabel ? (
                           <div style={{ marginTop: 2, fontSize: '9pt', color: '#71717a' }}>
-                            Option: {it.variantLabel}
+                            Size: {it.variantLabel}
+                          </div>
+                        ) : null}
+                        {it.customInputs.variant ? (
+                          <div style={{ marginTop: 2, fontSize: '9pt', color: '#71717a' }}>
+                            {it.customInputs.variantLabel || 'Variant'}: {it.customInputs.variant}
                           </div>
                         ) : null}
                         {it.customInputs.height ? (

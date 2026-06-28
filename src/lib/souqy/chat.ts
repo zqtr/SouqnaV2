@@ -43,7 +43,21 @@ export const SouqyPlanSchema = z.object({
     imageUrl: z.string().trim().url().nullable().optional().or(z.literal('').transform(() => null)),
     category: z.string().trim().max(80).nullable().optional(),
     status: SouqyProductStatusSchema.optional(),
+    seoTitle: z.string().trim().max(160).nullable().optional(),
+    seoDescription: z.string().trim().max(220).nullable().optional(),
+    mediaAltText: z.string().trim().max(180).nullable().optional(),
   })).max(20).default([]),
+  categoryAssignments: z.array(z.object({
+    categoryName: z.string().trim().min(1).max(80),
+    description: z.string().trim().max(300).nullable().optional().default(null),
+    productIds: z.array(z.string().uuid()).min(1).max(20),
+    preserveExisting: z.boolean().optional().default(true),
+  })).max(8).default([]),
+  checkoutPaymentRules: z.array(z.object({
+    method: z.enum(['cod', 'bank_transfer', 'fawran', 'skipcash', 'sadad', 'pay_link']),
+    mode: z.literal('allow_only'),
+    cities: z.array(z.string().trim().min(1).max(80)).min(1).max(12),
+  })).max(8).default([]),
   seo: z.object({
     title: z.string().trim().max(140).nullable().optional(),
     description: z.string().trim().max(260).nullable().optional(),

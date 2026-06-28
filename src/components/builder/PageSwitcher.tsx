@@ -33,22 +33,248 @@ import {
   setStorefrontPageSeo,
   toggleStorefrontPageInNav,
 } from '@/app/actions/pages';
+import { updateSystemPageEnabled } from '@/app/actions/systemPages';
 import {
   isReservedPageSlug,
   normalizePageSlug,
   type StorefrontPage,
 } from '@/lib/storefrontPages';
 import { MediaUploader } from './MediaUploader';
+import { useBuilderCopy } from './BuilderCopyContext';
 
 type Props = {
   slug: string;
   pages: StorefrontPage[];
   activePageId: string;
+  activeSystemPage?: 'checkout' | 'products' | null;
+  systemPages?: {
+    productsEnabled: boolean;
+  };
+  onSystemPageEnabledChange?: (page: 'products', enabled: boolean) => void;
   onBeforeSwitch?: () => Promise<void> | void;
   giphyStorefrontSlug?: string;
 };
 
 type Toast = { id: number; kind: 'ok' | 'err'; message: string };
+
+type PageSwitcherText = {
+  pages: string;
+  addPage: string;
+  edit: string;
+  systemPage: string;
+  systemBadge: string;
+  offBadge: string;
+  checkoutTitle: string;
+  checkoutSubtitle: string;
+  productsTitle: string;
+  productsSubtitle: string;
+  turnOn: string;
+  turnOff: string;
+  dragToReorder: string;
+  homePinned: string;
+  pageActions: string;
+  homeBadge: string;
+  navBadge: string;
+  editingBadge: string;
+  rename: string;
+  setAsHomepage: string;
+  onlyPageExists: string;
+  hideFromNav: string;
+  showInNav: string;
+  editSeo: string;
+  publishPage: string;
+  noDraftChanges: string;
+  deletePage: string;
+  published: string;
+  draftAhead: string;
+  draftOnly: string;
+  homePageToast: (title: string) => string;
+  hiddenNavToast: (title: string) => string;
+  shownNavToast: (title: string) => string;
+  createdToast: (title: string) => string;
+  publishedToast: (title: string) => string;
+  deletedToast: (title: string) => string;
+  renamedToast: (title: string) => string;
+  seoUpdatedToast: (title: string) => string;
+  systemPageToggledToast: (title: string, enabled: boolean) => string;
+  deleteConfirmTitle: (title: string) => string;
+  deleteConfirmBody: string;
+  addPageTitle: string;
+  renamePageTitle: string;
+  titleLabel: string;
+  titlePlaceholder: string;
+  descriptionLabel: string;
+  slugLabel: string;
+  slugPlaceholder: string;
+  homeSlugHint: string;
+  slugHint: string;
+  missingTitleError: string;
+  invalidSlugError: string;
+  reservedSlugError: string;
+  duplicateFromLabel: string;
+  duplicateFromHint: string;
+  blankPageOption: string;
+  save: string;
+  cancel: string;
+  working: string;
+  seoTitle: (title: string) => string;
+  editSeoAria: (title: string) => string;
+  seoTitleHint: string;
+  seoDescriptionHint: string;
+  openGraphImageLabel: string;
+  openGraphImageHint: string;
+  saveSeo: string;
+};
+
+function pageSwitcherText(locale: 'en' | 'ar'): PageSwitcherText {
+  if (locale === 'ar') {
+    return {
+      pages: '\u0627\u0644\u0635\u0641\u062d\u0627\u062a',
+      addPage: '\u0625\u0636\u0627\u0641\u0629 \u0635\u0641\u062d\u0629',
+      edit: '\u062a\u062d\u0631\u064a\u0631',
+      systemPage: '\u0635\u0641\u062d\u0629 \u0646\u0638\u0627\u0645',
+      systemBadge: '\u0646\u0638\u0627\u0645',
+      offBadge: '\u0645\u0637\u0641\u0623',
+      checkoutTitle: '\u0627\u0644\u062f\u0641\u0639',
+      checkoutSubtitle: '\u0635\u0641\u062d\u0629 \u062f\u0641\u0639 \u0645\u062a\u062d\u0643\u0645 \u0628\u0647\u0627',
+      productsTitle: '\u0643\u0644 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a',
+      productsSubtitle: '\u0643\u062a\u0627\u0644\u0648\u062c \u0645\u0646\u062a\u062c\u0627\u062a \u0645\u0639 \u0641\u0644\u0627\u062a\u0631',
+      turnOn: '\u062a\u0634\u063a\u064a\u0644',
+      turnOff: '\u0625\u064a\u0642\u0627\u0641',
+      dragToReorder: '\u0627\u0633\u062d\u0628 \u0644\u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u062a\u0631\u062a\u064a\u0628',
+      homePinned: '\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629 \u0645\u062b\u0628\u062a\u0629',
+      pageActions: '\u0625\u062c\u0631\u0627\u0621\u0627\u062a \u0627\u0644\u0635\u0641\u062d\u0629',
+      homeBadge: '\u0631\u0626\u064a\u0633\u064a\u0629',
+      navBadge: '\u062a\u0646\u0642\u0644',
+      editingBadge: '\u062a\u062d\u0631\u064a\u0631',
+      rename: '\u0625\u0639\u0627\u062f\u0629 \u062a\u0633\u0645\u064a\u0629',
+      setAsHomepage: '\u062c\u0639\u0644\u0647\u0627 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629',
+      onlyPageExists: '\u062a\u0648\u062c\u062f \u0635\u0641\u062d\u0629 \u0648\u0627\u062d\u062f\u0629 \u0641\u0642\u0637.',
+      hideFromNav: '\u0625\u062e\u0641\u0627\u0621 \u0645\u0646 \u0627\u0644\u062a\u0646\u0642\u0644',
+      showInNav: '\u0625\u0638\u0647\u0627\u0631 \u0641\u064a \u0627\u0644\u062a\u0646\u0642\u0644',
+      editSeo: '\u062a\u062d\u0631\u064a\u0631 SEO',
+      publishPage: '\u0646\u0634\u0631 \u0627\u0644\u0635\u0641\u062d\u0629',
+      noDraftChanges: '\u0644\u0627 \u062a\u0648\u062c\u062f \u062a\u063a\u064a\u064a\u0631\u0627\u062a \u0645\u0633\u0648\u062f\u0629 \u0644\u0644\u0646\u0634\u0631.',
+      deletePage: '\u062d\u0630\u0641 \u0627\u0644\u0635\u0641\u062d\u0629',
+      published: '\u0645\u0646\u0634\u0648\u0631\u0629',
+      draftAhead: '\u0627\u0644\u0645\u0633\u0648\u062f\u0629 \u0623\u062d\u062f\u062b \u0645\u0646 \u0627\u0644\u0645\u0646\u0634\u0648\u0631',
+      draftOnly: '\u0645\u0633\u0648\u062f\u0629 \u0641\u0642\u0637',
+      homePageToast: (title) => `\u201c${title}\u201d \u0623\u0635\u0628\u062d\u062a \u0627\u0644\u0635\u0641\u062d\u0629 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629.`,
+      hiddenNavToast: (title) => `\u062a\u0645 \u0625\u062e\u0641\u0627\u0621 \u201c${title}\u201d \u0645\u0646 \u0627\u0644\u062a\u0646\u0642\u0644.`,
+      shownNavToast: (title) => `\u062a\u0645 \u0625\u0638\u0647\u0627\u0631 \u201c${title}\u201d \u0641\u064a \u0627\u0644\u062a\u0646\u0642\u0644.`,
+      createdToast: (title) => `\u062a\u0645 \u0625\u0646\u0634\u0627\u0621 \u201c${title}\u201d.`,
+      publishedToast: (title) => `\u062a\u0645 \u0646\u0634\u0631 \u201c${title}\u201d.`,
+      deletedToast: (title) => `\u062a\u0645 \u062d\u0630\u0641 \u201c${title}\u201d.`,
+      renamedToast: (title) => `\u062a\u0645\u062a \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u062a\u0633\u0645\u064a\u0629 \u0625\u0644\u0649 \u201c${title}\u201d.`,
+      seoUpdatedToast: (title) => `\u062a\u0645 \u062a\u062d\u062f\u064a\u062b SEO \u0644\u0635\u0641\u062d\u0629 \u201c${title}\u201d.`,
+      systemPageToggledToast: (title, enabled) =>
+        enabled
+          ? `\u062a\u0645 \u062a\u0634\u063a\u064a\u0644 \u201c${title}\u201d.`
+          : `\u062a\u0645 \u0625\u064a\u0642\u0627\u0641 \u201c${title}\u201d.`,
+      deleteConfirmTitle: (title) => `\u062d\u0630\u0641 \u201c${title}\u201d\u061f`,
+      deleteConfirmBody:
+        '\u0633\u064a\u062a\u0645 \u062d\u0630\u0641 \u0627\u0644\u0635\u0641\u062d\u0629 \u0648\u0645\u0633\u0648\u062f\u0627\u062a\u0647\u0627 \u0648\u0643\u062a\u0644\u0647\u0627 \u0627\u0644\u0645\u0646\u0634\u0648\u0631\u0629 \u0646\u0647\u0627\u0626\u064a\u064b\u0627. \u0644\u0627 \u064a\u0645\u0643\u0646 \u0627\u0644\u062a\u0631\u0627\u062c\u0639 \u0639\u0646 \u0647\u0630\u0627.',
+      addPageTitle: '\u0625\u0636\u0627\u0641\u0629 \u0635\u0641\u062d\u0629',
+      renamePageTitle: '\u0625\u0639\u0627\u062f\u0629 \u062a\u0633\u0645\u064a\u0629 \u0627\u0644\u0635\u0641\u062d\u0629',
+      titleLabel: '\u0627\u0644\u0639\u0646\u0648\u0627\u0646',
+      titlePlaceholder: '\u0645\u0646 \u0646\u062d\u0646',
+      descriptionLabel: '\u0627\u0644\u0648\u0635\u0641',
+      slugLabel: '\u0627\u0644\u0631\u0627\u0628\u0637',
+      slugPlaceholder: 'about',
+      homeSlugHint: '\u0631\u0627\u0628\u0637 \u0627\u0644\u0635\u0641\u062d\u0629 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629 \u062b\u0627\u0628\u062a.',
+      slugHint: '\u0623\u062d\u0631\u0641 \u0625\u0646\u062c\u0644\u064a\u0632\u064a\u0629 \u0635\u063a\u064a\u0631\u0629\u060c \u0623\u0631\u0642\u0627\u0645\u060c \u0648\u0634\u0631\u0637\u0627\u062a.',
+      missingTitleError: '\u0623\u0636\u0641 \u0639\u0646\u0648\u0627\u0646\u064b\u0627 \u0644\u0644\u0635\u0641\u062d\u0629.',
+      invalidSlugError:
+        '\u064a\u0645\u0643\u0646 \u0623\u0646 \u064a\u062d\u062a\u0648\u064a \u0627\u0644\u0631\u0627\u0628\u0637 \u0639\u0644\u0649 \u0623\u062d\u0631\u0641 \u0625\u0646\u062c\u0644\u064a\u0632\u064a\u0629 \u0635\u063a\u064a\u0631\u0629 \u0648\u0623\u0631\u0642\u0627\u0645 \u0648\u0634\u0631\u0637\u0627\u062a \u0641\u0642\u0637.',
+      reservedSlugError:
+        '\u0647\u0630\u0627 \u0627\u0644\u0631\u0627\u0628\u0637 \u0645\u062d\u062c\u0648\u0632 \u0644\u0633\u0648\u0642\u0646\u0627. \u0627\u062e\u062a\u0631 \u0631\u0627\u0628\u0637\u064b\u0627 \u0622\u062e\u0631.',
+      duplicateFromLabel: '\u0646\u0633\u062e \u0645\u0646',
+      duplicateFromHint:
+        '\u0627\u062e\u062a\u064a\u0627\u0631\u064a - \u064a\u0646\u0633\u062e \u0627\u0644\u0643\u062a\u0644 \u0648SEO \u0645\u0646 \u0635\u0641\u062d\u0629 \u0623\u062e\u0631\u0649.',
+      blankPageOption: '(\u0641\u0627\u0631\u063a\u0629)',
+      save: '\u062d\u0641\u0638',
+      cancel: '\u0625\u0644\u063a\u0627\u0621',
+      working: '\u062c\u0627\u0631\u064d \u0627\u0644\u062a\u0646\u0641\u064a\u0630\u2026',
+      seoTitle: (title) => `SEO \u00b7 ${title}`,
+      editSeoAria: (title) => `\u062a\u062d\u0631\u064a\u0631 SEO \u0644\u0635\u0641\u062d\u0629 ${title}`,
+      seoTitleHint: '\u064a\u0638\u0647\u0631 \u0641\u064a \u0646\u062a\u0627\u0626\u062c \u0627\u0644\u0628\u062d\u062b \u0648\u062a\u0628\u0648\u064a\u0628 \u0627\u0644\u0645\u062a\u0635\u0641\u062d.',
+      seoDescriptionHint: '\u062c\u0645\u0644\u0629 \u0623\u0648 \u062c\u0645\u0644\u062a\u0627\u0646 \u0644\u0645\u0642\u062a\u0637\u0641\u0627\u062a \u0627\u0644\u0628\u062d\u062b.',
+      openGraphImageLabel: '\u0635\u0648\u0631\u0629 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629',
+      openGraphImageHint: '\u062a\u0638\u0647\u0631 \u0639\u0646\u062f \u0645\u0634\u0627\u0631\u0643\u0629 \u0627\u0644\u0635\u0641\u062d\u0629 \u0639\u0644\u0649 \u0627\u0644\u0634\u0628\u0643\u0627\u062a.',
+      saveSeo: '\u062d\u0641\u0638 SEO',
+    };
+  }
+  return {
+    pages: 'Pages',
+    addPage: 'Add page',
+    edit: 'Edit',
+    systemPage: 'System page',
+    systemBadge: 'System',
+    offBadge: 'Off',
+    checkoutTitle: 'Checkout',
+    checkoutSubtitle: 'Controlled checkout page',
+    productsTitle: 'All Products',
+    productsSubtitle: 'Filtered product catalogue',
+    turnOn: 'Turn on',
+    turnOff: 'Turn off',
+    dragToReorder: 'Drag to reorder',
+    homePinned: 'Home is pinned',
+    pageActions: 'Page actions',
+    homeBadge: 'home',
+    navBadge: 'nav',
+    editingBadge: 'editing',
+    rename: 'Rename',
+    setAsHomepage: 'Set as homepage',
+    onlyPageExists: 'Only one page exists.',
+    hideFromNav: 'Hide from nav',
+    showInNav: 'Show in nav',
+    editSeo: 'Edit SEO',
+    publishPage: 'Publish page',
+    noDraftChanges: 'No draft changes to publish.',
+    deletePage: 'Delete page',
+    published: 'Published',
+    draftAhead: 'Draft ahead of published',
+    draftOnly: 'Draft only',
+    homePageToast: (title) => `“${title}” is now the home page.`,
+    hiddenNavToast: (title) => `Hid “${title}” from the nav.`,
+    shownNavToast: (title) => `Showed “${title}” in the nav.`,
+    createdToast: (title) => `Created “${title}”.`,
+    publishedToast: (title) => `Published “${title}”.`,
+    deletedToast: (title) => `Deleted “${title}”.`,
+    renamedToast: (title) => `Renamed to “${title}”.`,
+    seoUpdatedToast: (title) => `Updated SEO on “${title}”.`,
+    systemPageToggledToast: (title, enabled) =>
+      `${title} is now ${enabled ? 'on' : 'off'}.`,
+    deleteConfirmTitle: (title) => `Delete “${title}”?`,
+    deleteConfirmBody:
+      'This permanently removes the page and its draft + published blocks. This can’t be undone.',
+    addPageTitle: 'Add page',
+    renamePageTitle: 'Rename page',
+    titleLabel: 'Title',
+    titlePlaceholder: 'About',
+    descriptionLabel: 'Description',
+    slugLabel: 'Slug',
+    slugPlaceholder: 'about',
+    homeSlugHint: 'The home page slug is fixed.',
+    slugHint: 'Lowercase letters, numbers, dashes.',
+    missingTitleError: 'Give the page a title.',
+    invalidSlugError: 'Slug can only contain lowercase letters, numbers, and dashes.',
+    reservedSlugError: 'That slug is reserved by Souqna. Pick another.',
+    duplicateFromLabel: 'Duplicate from',
+    duplicateFromHint: 'Optional - copies blocks + SEO from another page.',
+    blankPageOption: '(blank)',
+    save: 'Save',
+    cancel: 'Cancel',
+    working: 'Working…',
+    seoTitle: (title) => `SEO · ${title}`,
+    editSeoAria: (title) => `Edit SEO for ${title}`,
+    seoTitleHint: 'Shown in search results and the browser tab.',
+    seoDescriptionHint: 'One or two sentences for search snippets.',
+    openGraphImageLabel: 'Open Graph image',
+    openGraphImageHint: 'Shown when the page is shared on social networks.',
+    saveSeo: 'Save SEO',
+  };
+}
 
 type PageMutation =
   | { kind: 'create' }
@@ -74,10 +300,15 @@ export function PageSwitcher({
   slug,
   pages,
   activePageId,
+  activeSystemPage = null,
+  systemPages = { productsEnabled: true },
+  onSystemPageEnabledChange,
   onBeforeSwitch,
   giphyStorefrontSlug,
 }: Props) {
   const router = useRouter();
+  const { locale } = useBuilderCopy();
+  const text = useMemo(() => pageSwitcherText(locale), [locale]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [mutation, setMutation] = useState<PageMutation | null>(null);
@@ -140,6 +371,17 @@ export function PageSwitcher({
     [onBeforeSwitch, router, slug],
   );
 
+  const goToSystemPage = useCallback(
+    async (pageSlug: 'checkout' | 'products') => {
+      if (onBeforeSwitch) await onBeforeSwitch();
+      const params = new URLSearchParams();
+      params.set('store', slug);
+      params.set('page', pageSlug);
+      router.push(`/account/builder?${params.toString()}`);
+    },
+    [onBeforeSwitch, router, slug],
+  );
+
   // ---- mutations ---------------------------------------------------------
 
   const handleSetHome = useCallback(
@@ -152,10 +394,10 @@ export function PageSwitcher({
         pushToast('err', res.message);
         return;
       }
-      pushToast('ok', `“${page.title}” is now the home page.`);
+      pushToast('ok', text.homePageToast(page.title));
       refresh();
     },
-    [pushToast, refresh, slug],
+    [pushToast, refresh, slug, text],
   );
 
   const handleToggleNav = useCallback(
@@ -173,13 +415,11 @@ export function PageSwitcher({
       }
       pushToast(
         'ok',
-        page.showInNav
-          ? `Hid “${page.title}” from the nav.`
-          : `Showed “${page.title}” in the nav.`,
+        page.showInNav ? text.hiddenNavToast(page.title) : text.shownNavToast(page.title),
       );
       refresh();
     },
-    [pushToast, refresh, slug],
+    [pushToast, refresh, slug, text],
   );
 
   const handlePublish = useCallback(
@@ -191,10 +431,10 @@ export function PageSwitcher({
         pushToast('err', res.message);
         return;
       }
-      pushToast('ok', `Published “${page.title}”.`);
+      pushToast('ok', text.publishedToast(page.title));
       refresh();
     },
-    [pushToast, refresh, slug],
+    [pushToast, refresh, slug, text],
   );
 
   const handleDelete = useCallback(
@@ -207,7 +447,7 @@ export function PageSwitcher({
         pushToast('err', res.message);
         return;
       }
-      pushToast('ok', `Deleted “${page.title}”.`);
+      pushToast('ok', text.deletedToast(page.title));
       // If the founder deleted the page they were editing, route back
       // to home so the canvas doesn't 404 on next refresh.
       if (page.id === activePageId) {
@@ -218,7 +458,24 @@ export function PageSwitcher({
         refresh();
       }
     },
-    [activePageId, pushToast, refresh, router, slug],
+    [activePageId, pushToast, refresh, router, slug, text],
+  );
+
+  const handleToggleSystemPage = useCallback(
+    async (page: 'products', enabled: boolean) => {
+      const busyKey = `system:${page}`;
+      setBusyId(busyKey);
+      const res = await updateSystemPageEnabled({ slug, page, enabled });
+      setBusyId(null);
+      if (res.status === 'error') {
+        pushToast('err', res.message);
+        return;
+      }
+      onSystemPageEnabledChange?.(page, enabled);
+      pushToast('ok', text.systemPageToggledToast(text.productsTitle, enabled));
+      refresh();
+    },
+    [onSystemPageEnabledChange, pushToast, refresh, slug, text],
   );
 
   const handleReorderEnd = useCallback(
@@ -283,14 +540,14 @@ export function PageSwitcher({
             color: 'var(--bld-text-muted)',
           }}
         >
-          Pages · {pages.length}
+          {text.pages} · {pages.length + 2}
         </span>
         <button
           type="button"
           onClick={() => setMutation({ kind: 'create' })}
           style={iconButtonStyle()}
-          aria-label="Add page"
-          title="Add page"
+          aria-label={text.addPage}
+          title={text.addPage}
         >
           <svg
             width="14"
@@ -319,7 +576,7 @@ export function PageSwitcher({
           }}
         >
           {orderedPages.map((page) => {
-            const isActive = page.id === activePageId;
+            const isActive = activeSystemPage == null && page.id === activePageId;
             if (page.isHome) {
               return (
                 <PageRow
@@ -343,6 +600,7 @@ export function PageSwitcher({
                     if (action === 'publish') void handlePublish(page);
                   }}
                   onlyPage={pages.length === 1}
+                  text={text}
                 />
               );
             }
@@ -370,9 +628,31 @@ export function PageSwitcher({
                   if (action === 'delete') setMutation({ kind: 'delete', page });
                 }}
                 onlyPage={pages.length === 1}
+                text={text}
               />
             );
           })}
+          <SystemPageRow
+            title={text.checkoutTitle}
+            subtitle={text.checkoutSubtitle}
+            isActive={activeSystemPage === 'checkout'}
+            text={text}
+            onSelect={() => {
+              if (activeSystemPage !== 'checkout') void goToSystemPage('checkout');
+            }}
+          />
+          <SystemPageRow
+            title={text.productsTitle}
+            subtitle={text.productsSubtitle}
+            isActive={activeSystemPage === 'products'}
+            enabled={systemPages.productsEnabled}
+            busy={busyId === 'system:products'}
+            text={text}
+            onToggle={(enabled) => void handleToggleSystemPage('products', enabled)}
+            onSelect={() => {
+              if (activeSystemPage !== 'products') void goToSystemPage('products');
+            }}
+          />
           <SortableContext
             items={sortableIds}
             strategy={verticalListSortingStrategy}
@@ -389,6 +669,7 @@ export function PageSwitcher({
         <PageFormModal
           mode="create"
           slug={slug}
+          text={text}
           existingPages={pages}
           onClose={() => setMutation(null)}
           onSuccess={(newSlug, message) => {
@@ -407,6 +688,7 @@ export function PageSwitcher({
         <PageFormModal
           mode="rename"
           slug={slug}
+          text={text}
           existingPages={pages}
           page={mutation.page}
           onClose={() => setMutation(null)}
@@ -423,6 +705,7 @@ export function PageSwitcher({
         <PageSeoModal
           slug={slug}
           page={mutation.page}
+          text={text}
           giphyStorefrontSlug={giphyStorefrontSlug}
           onClose={() => setMutation(null)}
           onSuccess={(message) => {
@@ -436,9 +719,11 @@ export function PageSwitcher({
 
       {mutation?.kind === 'delete' ? (
         <ConfirmDialog
-          title={`Delete “${mutation.page.title}”?`}
-          body="This permanently removes the page and its draft + published blocks. This can’t be undone."
-          confirmLabel="Delete page"
+          title={text.deleteConfirmTitle(mutation.page.title)}
+          body={text.deleteConfirmBody}
+          confirmLabel={text.deletePage}
+          cancelLabel={text.cancel}
+          workingLabel={text.working}
           danger
           busy={busyId === mutation.page.id}
           onCancel={() => setMutation(null)}
@@ -474,7 +759,142 @@ type RowProps = {
    *  Set-as-home tooltips that would otherwise leave the storefront
    *  without a home page. */
   onlyPage: boolean;
+  text: PageSwitcherText;
 };
+
+function SystemPageRow({
+  title,
+  subtitle,
+  isActive,
+  enabled = true,
+  busy = false,
+  text,
+  onToggle,
+  onSelect,
+}: {
+  title: string;
+  subtitle: string;
+  isActive: boolean;
+  enabled?: boolean;
+  busy?: boolean;
+  text: PageSwitcherText;
+  onToggle?: (enabled: boolean) => void;
+  onSelect: () => void;
+}) {
+  return (
+    <li style={{ position: 'relative', listStyle: 'none' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '8px 10px',
+          borderRadius: 6,
+          border: `1px solid ${
+            isActive ? 'var(--bld-accent-line)' : 'var(--bld-divider)'
+          }`,
+          background: isActive ? 'var(--bld-accent-soft)' : 'var(--bld-tile-bg)',
+          transition: 'background 140ms, border-color 140ms',
+        }}
+      >
+        <span
+          aria-hidden
+          style={{
+            width: 18,
+            height: 22,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: isActive ? 'var(--bld-accent)' : 'var(--bld-text-muted)',
+          }}
+          title={text.systemPage}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M7 8h10M7 12h6M15 16h2" />
+          </svg>
+        </span>
+        <button
+          type="button"
+          onClick={onSelect}
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            gap: 2,
+            padding: 0,
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--bld-text)',
+            cursor: 'pointer',
+            textAlign: 'start',
+            minWidth: 0,
+          }}
+          aria-current={isActive ? 'page' : undefined}
+          aria-label={`${text.edit} ${title}`}
+        >
+          <span
+            style={{
+              fontFamily: 'var(--font-serif)',
+              fontSize: 13,
+              lineHeight: 1.2,
+              fontWeight: isActive ? 600 : 500,
+              color: 'var(--bld-text)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              maxWidth: 180,
+            }}
+          >
+            {title}
+          </span>
+          <span
+            style={{
+              fontSize: 10,
+              color: 'var(--bld-text-muted)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              maxWidth: 180,
+            }}
+          >
+            {subtitle}
+          </span>
+        </button>
+        <Badge kind={enabled ? (isActive ? 'editing' : 'nav') : 'disabled'}>
+          {enabled ? text.systemBadge : text.offBadge}
+        </Badge>
+        {onToggle ? (
+          <button
+            type="button"
+            aria-label={`${enabled ? text.turnOff : text.turnOn} ${title}`}
+            aria-pressed={enabled}
+            title={`${enabled ? text.turnOff : text.turnOn} ${title}`}
+            disabled={busy}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggle(!enabled);
+            }}
+            style={systemToggleStyle(enabled, busy)}
+          >
+            <span style={systemToggleDotStyle(enabled)} />
+          </button>
+        ) : null}
+      </div>
+    </li>
+  );
+}
 
 function SortablePageRow(props: RowProps) {
   const {
@@ -510,6 +930,7 @@ function PageRow({
   onSelect,
   onAction,
   onlyPage,
+  text,
   sortRef,
   sortStyle,
   dragHandleProps,
@@ -560,8 +981,8 @@ function PageRow({
           <button
             type="button"
             {...dragHandleProps}
-            aria-label="Drag to reorder"
-            title="Drag to reorder"
+            aria-label={text.dragToReorder}
+            title={text.dragToReorder}
             style={{
               ...iconButtonStyle(),
               width: 18,
@@ -598,7 +1019,7 @@ function PageRow({
               justifyContent: 'center',
               color: 'var(--bld-text-muted)',
             }}
-            title="Home is pinned"
+            title={text.homePinned}
           >
             <svg
               width="11"
@@ -630,7 +1051,7 @@ function PageRow({
             minWidth: 0,
           }}
           aria-current={isActive ? 'page' : undefined}
-          aria-label={`Edit ${page.title}`}
+          aria-label={`${text.edit} ${page.title}`}
         >
           <span
             style={{
@@ -662,17 +1083,18 @@ function PageRow({
             <StatusDot
               status={page.status}
               hasDraftChanges={hasDraftChanges}
+              text={text}
             />
-            {page.isHome ? <Badge kind="home">home</Badge> : null}
-            {page.showInNav ? <Badge kind="nav">nav</Badge> : null}
-            {isActive ? <Badge kind="editing">editing</Badge> : null}
+            {page.isHome ? <Badge kind="home">{text.homeBadge}</Badge> : null}
+            {page.showInNav ? <Badge kind="nav">{text.navBadge}</Badge> : null}
+            {isActive ? <Badge kind="editing">{text.editingBadge}</Badge> : null}
           </span>
         </button>
 
         <button
           type="button"
           onClick={onMenuToggle}
-          aria-label="Page actions"
+          aria-label={text.pageActions}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           disabled={busy}
@@ -715,32 +1137,32 @@ function PageRow({
             gap: 1,
           }}
         >
-          <MenuItem onSelect={() => onAction('rename')}>Rename</MenuItem>
+          <MenuItem onSelect={() => onAction('rename')}>{text.rename}</MenuItem>
           {!page.isHome ? (
             <MenuItem
               disabled={onlyPage}
               tooltip={
-                onlyPage ? 'Only one page exists.' : undefined
+                onlyPage ? text.onlyPageExists : undefined
               }
               onSelect={() => onAction('set-home')}
             >
-              Set as homepage
+              {text.setAsHomepage}
             </MenuItem>
           ) : null}
           {!page.isHome ? (
             <MenuItem onSelect={() => onAction('toggle-nav')}>
-              {page.showInNav ? 'Hide from nav' : 'Show in nav'}
+              {page.showInNav ? text.hideFromNav : text.showInNav}
             </MenuItem>
           ) : null}
-          <MenuItem onSelect={() => onAction('seo')}>Edit SEO</MenuItem>
+          <MenuItem onSelect={() => onAction('seo')}>{text.editSeo}</MenuItem>
           <MenuItem
             disabled={!hasDraftChanges}
             tooltip={
-              !hasDraftChanges ? 'No draft changes to publish.' : undefined
+              !hasDraftChanges ? text.noDraftChanges : undefined
             }
             onSelect={() => onAction('publish')}
           >
-            Publish page
+            {text.publishPage}
           </MenuItem>
           {!page.isHome ? (
             <>
@@ -752,7 +1174,7 @@ function PageRow({
                 }}
               />
               <MenuItem danger onSelect={() => onAction('delete')}>
-                Delete page
+                {text.deletePage}
               </MenuItem>
             </>
           ) : null}
@@ -817,7 +1239,7 @@ function Badge({
   kind,
   children,
 }: {
-  kind: 'home' | 'nav' | 'editing';
+  kind: 'home' | 'nav' | 'editing' | 'disabled';
   children: React.ReactNode;
 }) {
   const styles: Record<string, React.CSSProperties> = {
@@ -835,6 +1257,11 @@ function Badge({
       color: '#E8DCC4',
       borderColor: '#E8DCC477',
       background: 'rgba(232,220,196,0.08)',
+    },
+    disabled: {
+      color: 'var(--bld-text-muted)',
+      borderColor: 'var(--bld-divider)',
+      background: 'transparent',
     },
   };
   return (
@@ -858,9 +1285,11 @@ function Badge({
 function StatusDot({
   status,
   hasDraftChanges,
+  text,
 }: {
   status: StorefrontPage['status'];
   hasDraftChanges: boolean;
+  text: PageSwitcherText;
 }) {
   // Three states:
   //   • published, no draft changes → solid green
@@ -874,10 +1303,10 @@ function StatusDot({
         : 'var(--bld-text-faint)';
   const label =
     status === 'published' && !hasDraftChanges
-      ? 'Published'
+      ? text.published
       : status === 'published'
-        ? 'Draft ahead of published'
-        : 'Draft only';
+        ? text.draftAhead
+        : text.draftOnly;
   return (
     <span
       title={label}
@@ -898,6 +1327,7 @@ function StatusDot({
 function PageFormModal({
   mode,
   slug,
+  text,
   existingPages,
   page,
   onClose,
@@ -906,6 +1336,7 @@ function PageFormModal({
 }: {
   mode: 'create' | 'rename';
   slug: string;
+  text: PageSwitcherText;
   existingPages: StorefrontPage[];
   page?: StorefrontPage;
   onClose: () => void;
@@ -935,16 +1366,16 @@ function PageFormModal({
     ev.preventDefault();
     setError(null);
     if (!title.trim()) {
-      setError('Give the page a title.');
+      setError(text.missingTitleError);
       return;
     }
     if (!slugLocked) {
       if (!pageSlug || !/^[a-z0-9-]+$/.test(pageSlug)) {
-        setError('Slug can only contain lowercase letters, numbers, and dashes.');
+        setError(text.invalidSlugError);
         return;
       }
       if (reserved) {
-        setError('That slug is reserved by Souqna. Pick another.');
+        setError(text.reservedSlugError);
         return;
       }
     }
@@ -958,7 +1389,7 @@ function PageFormModal({
       });
       setBusy(false);
       if (res.status === 'success' && 'page' in res) {
-        onSuccess(res.page.slug, `Created “${res.page.title}”.`);
+        onSuccess(res.page.slug, text.createdToast(res.page.title));
       } else if (res.status === 'error') {
         if (res.field) setError(res.message);
         else onError(res.message);
@@ -975,7 +1406,7 @@ function PageFormModal({
     });
     setBusy(false);
     if (res.status === 'success' && 'page' in res) {
-      onSuccess(res.page.slug, `Renamed to “${res.page.title}”.`);
+      onSuccess(res.page.slug, text.renamedToast(res.page.title));
     } else if (res.status === 'error') {
       if (res.field) setError(res.message);
       else onError(res.message);
@@ -983,27 +1414,23 @@ function PageFormModal({
   }
 
   return (
-    <ModalShell onClose={onClose} ariaLabel={mode === 'create' ? 'Add page' : 'Rename page'}>
+    <ModalShell
+      onClose={onClose}
+      ariaLabel={mode === 'create' ? text.addPageTitle : text.renamePageTitle}
+    >
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <ModalHeader title={mode === 'create' ? 'Add page' : 'Rename page'} />
-        <Field label="Title">
+        <ModalHeader title={mode === 'create' ? text.addPageTitle : text.renamePageTitle} />
+        <Field label={text.titleLabel}>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             autoFocus
-            placeholder="About"
+            placeholder={text.titlePlaceholder}
             style={inputStyle()}
           />
         </Field>
-        <Field
-          label="Slug"
-          hint={
-            slugLocked
-              ? 'The home page slug is fixed.'
-              : 'Lowercase letters, numbers, dashes.'
-          }
-        >
+        <Field label={text.slugLabel} hint={slugLocked ? text.homeSlugHint : text.slugHint}>
           <input
             type="text"
             value={pageSlug}
@@ -1015,7 +1442,7 @@ function PageFormModal({
             onBlur={(e) =>
               setPageSlug(normalizePageSlug(e.target.value))
             }
-            placeholder="about"
+            placeholder={text.slugPlaceholder}
             style={{
               ...inputStyle(),
               fontFamily: 'var(--font-mono)',
@@ -1025,15 +1452,15 @@ function PageFormModal({
         </Field>
         {mode === 'create' && existingPages.length > 0 ? (
           <Field
-            label="Duplicate from"
-            hint="Optional — copies blocks + SEO from another page."
+            label={text.duplicateFromLabel}
+            hint={text.duplicateFromHint}
           >
             <select
               value={duplicateFromPageId}
               onChange={(e) => setDuplicateFromPageId(e.target.value)}
               style={inputStyle()}
             >
-              <option value="">(blank)</option>
+              <option value="">{text.blankPageOption}</option>
               {existingPages.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.title} (/{p.slug})
@@ -1046,7 +1473,9 @@ function PageFormModal({
         <ModalFooter
           busy={busy}
           onCancel={onClose}
-          submitLabel={mode === 'create' ? 'Add page' : 'Save'}
+          submitLabel={mode === 'create' ? text.addPageTitle : text.save}
+          cancelLabel={text.cancel}
+          workingLabel={text.working}
         />
       </form>
     </ModalShell>
@@ -1056,6 +1485,7 @@ function PageFormModal({
 function PageSeoModal({
   slug,
   page,
+  text,
   giphyStorefrontSlug,
   onClose,
   onSuccess,
@@ -1063,6 +1493,7 @@ function PageSeoModal({
 }: {
   slug: string;
   page: StorefrontPage;
+  text: PageSwitcherText;
   giphyStorefrontSlug?: string;
   onClose: () => void;
   onSuccess: (message: string) => void;
@@ -1093,14 +1524,14 @@ function PageSeoModal({
       else onError(res.message);
       return;
     }
-    onSuccess(`Updated SEO on “${page.title}”.`);
+    onSuccess(text.seoUpdatedToast(page.title));
   }
 
   return (
-    <ModalShell onClose={onClose} ariaLabel={`Edit SEO for ${page.title}`}>
+    <ModalShell onClose={onClose} ariaLabel={text.editSeoAria(page.title)}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <ModalHeader title={`SEO · ${page.title}`} />
-        <Field label="Title" hint="Shown in search results and the browser tab.">
+        <ModalHeader title={text.seoTitle(page.title)} />
+        <Field label={text.titleLabel} hint={text.seoTitleHint}>
           <input
             type="text"
             value={title}
@@ -1110,7 +1541,7 @@ function PageSeoModal({
             style={inputStyle()}
           />
         </Field>
-        <Field label="Description" hint="One or two sentences for search snippets.">
+        <Field label={text.descriptionLabel} hint={text.seoDescriptionHint}>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -1119,7 +1550,7 @@ function PageSeoModal({
             style={{ ...inputStyle(), resize: 'vertical' }}
           />
         </Field>
-        <Field label="Open Graph image" hint="Shown when the page is shared on social networks.">
+        <Field label={text.openGraphImageLabel} hint={text.openGraphImageHint}>
           <MediaUploader
             value={image}
             onChange={setImage}
@@ -1129,7 +1560,13 @@ function PageSeoModal({
           />
         </Field>
         {error ? <ErrorLine>{error}</ErrorLine> : null}
-        <ModalFooter busy={busy} onCancel={onClose} submitLabel="Save SEO" />
+        <ModalFooter
+          busy={busy}
+          onCancel={onClose}
+          submitLabel={text.saveSeo}
+          cancelLabel={text.cancel}
+          workingLabel={text.working}
+        />
       </form>
     </ModalShell>
   );
@@ -1139,6 +1576,8 @@ function ConfirmDialog({
   title,
   body,
   confirmLabel,
+  cancelLabel,
+  workingLabel,
   danger,
   busy,
   onCancel,
@@ -1147,6 +1586,8 @@ function ConfirmDialog({
   title: string;
   body: string;
   confirmLabel: string;
+  cancelLabel: string;
+  workingLabel: string;
   danger?: boolean;
   busy: boolean;
   onCancel: () => void;
@@ -1181,7 +1622,7 @@ function ConfirmDialog({
             disabled={busy}
             style={secondaryButtonStyle()}
           >
-            Cancel
+            {cancelLabel}
           </button>
           <button
             type="button"
@@ -1193,7 +1634,7 @@ function ConfirmDialog({
                 : primaryButtonStyle()
             }
           >
-            {busy ? 'Working…' : confirmLabel}
+            {busy ? workingLabel : confirmLabel}
           </button>
         </div>
       </div>
@@ -1279,10 +1720,14 @@ function ModalFooter({
   busy,
   onCancel,
   submitLabel,
+  cancelLabel,
+  workingLabel,
 }: {
   busy: boolean;
   onCancel: () => void;
   submitLabel: string;
+  cancelLabel: string;
+  workingLabel: string;
 }) {
   return (
     <div
@@ -1299,10 +1744,10 @@ function ModalFooter({
         disabled={busy}
         style={secondaryButtonStyle()}
       >
-        Cancel
+        {cancelLabel}
       </button>
       <button type="submit" disabled={busy} style={primaryButtonStyle()}>
-        {busy ? 'Saving…' : submitLabel}
+        {busy ? workingLabel : submitLabel}
       </button>
     </div>
   );
@@ -1417,6 +1862,34 @@ function iconButtonStyle(): React.CSSProperties {
     borderRadius: 5,
     cursor: 'pointer',
     flex: '0 0 auto',
+  };
+}
+
+function systemToggleStyle(enabled: boolean, busy: boolean): React.CSSProperties {
+  return {
+    width: 34,
+    height: 20,
+    borderRadius: 999,
+    border: `1px solid ${enabled ? 'var(--bld-accent-line)' : 'var(--bld-divider)'}`,
+    background: enabled ? 'var(--bld-accent)' : 'var(--bld-input-bg)',
+    padding: 2,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: enabled ? 'flex-end' : 'flex-start',
+    cursor: busy ? 'wait' : 'pointer',
+    opacity: busy ? 0.62 : 1,
+    flex: '0 0 auto',
+    transition: 'background 140ms ease, border-color 140ms ease, opacity 140ms ease',
+  };
+}
+
+function systemToggleDotStyle(enabled: boolean): React.CSSProperties {
+  return {
+    width: 14,
+    height: 14,
+    borderRadius: '50%',
+    background: enabled ? 'var(--bld-surface)' : 'var(--bld-text-muted)',
+    boxShadow: enabled ? '0 4px 10px rgba(0,0,0,0.18)' : undefined,
   };
 }
 

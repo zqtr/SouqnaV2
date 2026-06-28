@@ -22,6 +22,7 @@ import type {
   Notification,
   NotificationStreamEvent,
 } from '@/types/notification';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const PANEL_WIDTH = 380;
 const MAX_ITEMS = 20;
@@ -537,6 +538,14 @@ const ACCENT: Record<string, string> = {
   'billing.subscription.expired': 'var(--color-maroon, #7a2230)',
   'billing.payment.failed': 'var(--color-maroon, #7a2230)',
   'billing.payment.succeeded': 'var(--admin-accent, #b58a3a)',
+  'order.created': 'var(--admin-accent, #b58a3a)',
+  'product.created': 'var(--color-gold, #c9a24a)',
+  'product.updated': 'var(--ink-muted, #6c6256)',
+  'product.deleted': 'var(--color-maroon, #7a2230)',
+  'product.duplicated': 'var(--color-gold, #c9a24a)',
+  'product.imported': 'var(--color-gold, #c9a24a)',
+  'product.reordered': 'var(--ink-muted, #6c6256)',
+  'products.demo.removed': 'var(--color-maroon, #7a2230)',
   'system.welcome': 'var(--ink-muted, #6c6256)',
 };
 
@@ -569,28 +578,30 @@ function Row({
 
   const tintAlpha = unread && !fadingTint ? 14 : 0;
 
-  const inner: CSSProperties = {
-    display: 'flex',
-    gap: 10,
-    padding: '10px 10px 10px 0',
+  const alertStyle: CSSProperties = {
+    gridTemplateColumns: '4px minmax(0, 1fr) auto',
+    columnGap: 10,
+    padding: '10px',
     paddingInlineStart: 12,
     borderRadius: 10,
+    borderColor: hovered
+      ? 'color-mix(in srgb, var(--ink-strong) 18%, transparent)'
+      : 'color-mix(in srgb, var(--ink-strong) 10%, transparent)',
     background: hovered
       ? 'color-mix(in srgb, var(--ink-strong) 5%, transparent)'
       : `color-mix(in srgb, var(--color-gold, #c9a24a) ${tintAlpha}%, transparent)`,
-    transition: 'background 320ms ease',
-    position: 'relative',
+    transition: 'background 320ms ease, border-color 220ms ease',
     color: 'inherit',
     textDecoration: 'none',
   };
 
   const content = (
-    <div
+    <Alert
       role="menuitem"
       tabIndex={0}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={inner}
+      style={alertStyle}
     >
       <span
         aria-hidden
@@ -611,7 +622,7 @@ function Row({
             gap: 8,
           }}
         >
-          <span
+          <AlertTitle
             style={{
               fontSize: 12.5,
               fontWeight: 600,
@@ -622,11 +633,11 @@ function Row({
             }}
           >
             {title}
-          </span>
+          </AlertTitle>
           <RelativeTime iso={row.createdAt} isAr={isAr} />
         </div>
         {body ? (
-          <div
+          <AlertDescription
             style={{
               fontSize: 11.5,
               color: 'var(--ink-muted)',
@@ -639,7 +650,7 @@ function Row({
             }}
           >
             {body}
-          </div>
+          </AlertDescription>
         ) : null}
       </div>
       {unread && !fadingTint ? (
@@ -658,7 +669,7 @@ function Row({
           }}
         />
       ) : null}
-    </div>
+    </Alert>
   );
 
   if (row.href) {

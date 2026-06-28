@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useBuilderCopy } from './BuilderCopyContext';
 
 type GiphyHit = {
   id: string;
@@ -28,7 +29,30 @@ export function GiphyPicker({
   onClose: () => void;
   onPick: (url: string) => void;
 }) {
-  const [q, setQ] = useState('joy');
+  const { dir, locale } = useBuilderCopy();
+  const text =
+    locale === 'ar'
+      ? {
+          dialog: 'اختيار GIF',
+          close: 'إغلاق',
+          placeholder: 'ابحث عن GIF... قطر، عود، هدايا',
+          searchFailed: 'تعذر البحث',
+          networkError: 'تعذر الاتصال.',
+          searching: 'جاري البحث...',
+          empty: 'لا توجد صور GIF للعرض. جرّب بحثاً آخر.',
+          footer: 'مدعوم من Giphy · وكيل سوقنا',
+        }
+      : {
+          dialog: 'Pick a GIF',
+          close: 'Close',
+          placeholder: 'Search GIFs... joy, oud, qatar',
+          searchFailed: 'Search failed',
+          networkError: 'Network error.',
+          searching: 'Searching...',
+          empty: 'No GIFs to show. Try another search.',
+          footer: 'Powered by Giphy · Souqna proxy',
+        };
+  const [q, setQ] = useState(() => (locale === 'ar' ? 'qatar' : 'joy'));
   const [hits, setHits] = useState<GiphyHit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,13 +88,13 @@ export function GiphyPicker({
           error?: string;
         };
         if (!res.ok || !json.ok) {
-          setError(json.error ?? 'Search failed');
+          setError(json.error ?? text.searchFailed);
           setHits([]);
         } else {
           setHits(json.results ?? []);
         }
       } catch {
-        setError('Network error.');
+        setError(text.networkError);
       } finally {
         setLoading(false);
       }
@@ -78,7 +102,7 @@ export function GiphyPicker({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [q, open, storefrontSlug]);
+  }, [q, open, storefrontSlug, text.networkError, text.searchFailed]);
 
   if (!open) return null;
 
@@ -86,7 +110,8 @@ export function GiphyPicker({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Pick a GIF"
+      aria-label={text.dialog}
+      dir={dir}
       style={{
         position: 'fixed',
         inset: 0,
@@ -133,7 +158,7 @@ export function GiphyPicker({
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search GIFs… joy, oud, qatar"
+            placeholder={text.placeholder}
             style={{
               flex: 1,
               padding: '9px 12px',
@@ -149,7 +174,7 @@ export function GiphyPicker({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={text.close}
             style={{
               padding: '9px 12px',
               borderRadius: 8,
@@ -160,7 +185,7 @@ export function GiphyPicker({
               cursor: 'pointer',
             }}
           >
-            Close
+            {text.close}
           </button>
         </header>
 
@@ -202,7 +227,7 @@ export function GiphyPicker({
                 color: 'rgba(232,220,196,0.55)',
               }}
             >
-              SEARCHING…
+              {text.searching}
             </p>
           ) : hits.length === 0 ? (
             <p
@@ -214,7 +239,7 @@ export function GiphyPicker({
                 color: 'rgba(232,220,196,0.55)',
               }}
             >
-              No GIFs to show. Try another search.
+              {text.empty}
             </p>
           ) : (
             hits.map((g) => (
@@ -272,7 +297,7 @@ export function GiphyPicker({
             textAlign: 'right',
           }}
         >
-          Powered by Giphy · Souqna proxy
+          {text.footer}
         </footer>
       </div>
     </div>

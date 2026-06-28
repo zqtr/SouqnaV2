@@ -6,6 +6,7 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { ShoppingBag } from 'lucide-react';
 import { AddToCartButton } from '../cart/AddToCartButton';
 import { PriceText, formatMonthlyPrice, formatPrice } from './helpers';
+import { isVideoMediaUrl } from '@/lib/media';
 
 export type UnifiedProductCardProduct = {
   id: string;
@@ -23,7 +24,10 @@ export type UnifiedProductCardProduct = {
   isCustomizable?: boolean;
   customizationLabel?: string | null;
   sizeOptions?: string[];
+  sizeOptionPrices?: unknown;
   allowCustomSize?: boolean;
+  variantOptions?: string[];
+  variantOptionPrices?: unknown;
   requiresHeightInput?: boolean;
   heightInputLabel?: string | null;
   heightOptions?: string[];
@@ -61,10 +65,13 @@ export function UnifiedProductCard({
   const displayPrice = isMonthly ? product.monthlyPriceQar! : product.priceQar;
   const hasPrice = typeof displayPrice === 'number';
   const canCart = showAddToCart && !isSoldOut && hasPrice;
+  const isVideoMedia = isVideoMediaUrl(product.imageUrl);
+  const cartImageUrl = isVideoMedia ? null : (product.imageUrl ?? null);
   const hasOptionControls =
     canCart &&
     (Boolean(product.allowCustomSize) ||
       Boolean(product.requiresHeightInput) ||
+      (product.variantOptions?.length ?? 0) > 0 ||
       (product.sizeOptions?.length ?? 0) > 0);
   const fontFamily = isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)';
   const serifFamily = isRtl ? 'var(--font-arabic-serif), var(--font-serif), serif' : 'var(--font-serif), serif';
@@ -98,6 +105,7 @@ export function UnifiedProductCard({
         color: 'var(--sf-ink)',
         display: 'flex',
         flexDirection: 'column',
+        ['containerType' as string]: 'inline-size',
         ...style,
       }}
     >
@@ -115,16 +123,7 @@ export function UnifiedProductCard({
         }}
       >
         {product.imageUrl ? (
-          <img
-            src={product.imageUrl}
-            alt={product.title}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              display: 'block',
-            }}
-          />
+          <ProductMedia url={product.imageUrl} title={product.title} isVideo={isVideoMedia} />
         ) : (
           <div
             aria-hidden
@@ -191,7 +190,7 @@ export function UnifiedProductCard({
 
       <div
         style={{
-          padding: variant === 'compact' ? '18px 18px 20px' : '24px clamp(20px, 4vw, 32px) 26px',
+          padding: variant === 'compact' ? '18px 18px 20px' : '24px clamp(18px, 7cqw, 32px) 26px',
           display: 'flex',
           flex: '1 1 auto',
           flexDirection: 'column',
@@ -221,10 +220,10 @@ export function UnifiedProductCard({
             fontWeight: 700,
             fontSize:
               variant === 'feature'
-                ? 'clamp(28px, 4vw, 44px)'
+                ? 'clamp(28px, 7cqw, 44px)'
                 : variant === 'compact'
-                  ? 'clamp(18px, 2.2vw, 24px)'
-                  : 'clamp(24px, 3vw, 34px)',
+                  ? 'clamp(18px, 7cqw, 24px)'
+                  : 'clamp(22px, 8cqw, 34px)',
             lineHeight: 1.12,
             overflow: 'hidden',
             display: '-webkit-box',
@@ -240,7 +239,7 @@ export function UnifiedProductCard({
               margin: 0,
               color: 'color-mix(in srgb, var(--sf-ink) 70%, transparent)',
               fontFamily,
-              fontSize: 'clamp(15px, 2vw, 20px)',
+              fontSize: 'clamp(14px, 4.8cqw, 20px)',
               lineHeight: 1.5,
               overflow: 'hidden',
               display: '-webkit-box',
@@ -267,9 +266,12 @@ export function UnifiedProductCard({
               productId={product.id}
               title={product.title}
               priceQar={displayPrice!}
-              imageUrl={product.imageUrl ?? null}
+              imageUrl={cartImageUrl}
               sizeOptions={product.sizeOptions}
+              sizeOptionPrices={product.sizeOptionPrices}
               allowCustomSize={product.allowCustomSize}
+              variantOptions={product.variantOptions}
+              variantOptionPrices={product.variantOptionPrices}
               requiresHeightInput={product.requiresHeightInput}
               heightInputLabel={product.heightInputLabel}
               heightOptions={product.heightOptions}
@@ -300,8 +302,8 @@ export function UnifiedProductCard({
                   fontWeight: 700,
                   fontSize:
                     variant === 'compact'
-                      ? 'clamp(18px, 2.2vw, 24px)'
-                      : 'clamp(24px, 3vw, 34px)',
+                      ? 'clamp(18px, 7cqw, 24px)'
+                      : 'clamp(22px, 8cqw, 34px)',
                   whiteSpace: 'nowrap',
                   alignSelf: hasOptionControls ? (isRtl ? 'flex-start' : 'flex-end') : undefined,
                 }}
@@ -314,8 +316,8 @@ export function UnifiedProductCard({
                   fontWeight: 700,
                   fontSize:
                     variant === 'compact'
-                      ? 'clamp(18px, 2.2vw, 24px)'
-                      : 'clamp(24px, 3vw, 34px)',
+                      ? 'clamp(18px, 7cqw, 24px)'
+                      : 'clamp(22px, 8cqw, 34px)',
                   whiteSpace: 'nowrap',
                   alignSelf: hasOptionControls ? (isRtl ? 'flex-start' : 'flex-end') : undefined,
                 }}
@@ -328,6 +330,47 @@ export function UnifiedProductCard({
       </div>
     </article>
   );
+}
+
+function ProductMedia({
+  url,
+  title,
+  isVideo,
+}: {
+  url: string;
+  title: string;
+  isVideo: boolean;
+}) {
+  const style: CSSProperties = {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    objectPosition: 'center',
+    display: 'block',
+    padding: 12,
+  };
+
+  if (isVideo) {
+    return (
+      <video
+        src={url}
+        aria-label={title}
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        style={style}
+        onMouseEnter={(event) => {
+          void event.currentTarget.play().catch(() => undefined);
+        }}
+        onMouseLeave={(event) => {
+          event.currentTarget.pause();
+        }}
+      />
+    );
+  }
+
+  return <img src={url} alt={title} style={style} />;
 }
 
 function isRecent(value: UnifiedProductCardProduct['createdAt']) {
@@ -357,13 +400,13 @@ function Badge({ tone, children }: { tone: 'new' | 'custom' | 'sold'; children: 
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        maxWidth: 'min(220px, 58vw)',
+        maxWidth: 'min(220px, 78cqw)',
         minHeight: 38,
         padding: '8px 18px',
         borderRadius: 999,
         fontFamily: 'inherit',
         fontWeight: 800,
-        fontSize: 'clamp(14px, 2.8vw, 22px)',
+        fontSize: 'clamp(12px, 5cqw, 22px)',
         lineHeight: 1,
         whiteSpace: 'nowrap',
         boxShadow: '0 12px 30px -20px rgba(0,0,0,0.42)',

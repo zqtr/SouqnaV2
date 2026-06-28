@@ -119,7 +119,9 @@ export const ADMIN_NAV_LABELS_AR: Record<string, string> = {
   Brand: 'العلامة',
   'Brand & logo': 'العلامة والشعار',
   Checkout: 'الدفع',
+  'Checkout settings': 'إعدادات الدفع',
   Commerce: 'التجارة',
+  'Commerce operations': 'عمليات التجارة',
   Contact: 'التواصل',
   'Contact details': 'بيانات التواصل',
   Customers: 'العملاء',
@@ -142,6 +144,7 @@ export const ADMIN_NAV_LABELS_AR: Record<string, string> = {
   Orders: 'الطلبات',
   Overview: 'نظرة عامة',
   Payments: 'المدفوعات',
+  'Payment providers': 'مزودو الدفع',
   Plan: 'الخطة',
   Policies: 'السياسات',
   'Store policies': 'سياسات المتجر',
@@ -202,6 +205,7 @@ export const ADMIN_STATIC_AR: Record<string, string> = {
   SOON: 'قريباً',
   Status: 'الحالة',
   Store: 'المتجر',
+  'Store settings': 'إعدادات المتجر',
   Total: 'الإجمالي',
   Unpaid: 'غير مدفوع',
   Visitors: 'الزوّار',
@@ -214,6 +218,34 @@ export const ADMIN_STATIC_AR: Record<string, string> = {
   'Orders trend': 'منحنى الطلبات',
   'Top products': 'أكثر المنتجات مبيعاً',
   'Manage catalogue': 'إدارة الكتالوج',
+  'Page views · 30d': 'مشاهدات الصفحة · ٣٠ يوم',
+  'Unique visitors · 30d': 'زوّار فريدون · ٣٠ يوم',
+  'Product views · 30d': 'مشاهدات المنتجات · ٣٠ يوم',
+  'Cart adds · 30d': 'إضافات السلة · ٣٠ يوم',
+  'Inquiries · 30d': 'الاستفسارات · ٣٠ يوم',
+  'Conversion rate': 'معدل التحويل',
+  'Storefront visits': 'زيارات المتجر',
+  'People, not sessions': 'أشخاص وليس جلسات',
+  'Orders divided by unique visitors': 'الطلبات مقسومة على الزوار الفريدين',
+  'Catalogue engagement': 'تفاعل الكتالوج',
+  'Purchase intent': 'نية الشراء',
+  'cart removes': 'إزالة من السلة',
+  traffic: 'الزيارات',
+  audience: 'الجمهور',
+  checkout: 'الدفع',
+  products: 'المنتجات',
+  cart: 'السلة',
+  messages: 'الرسائل',
+  'Top products by sales': 'أكثر المنتجات حسب المبيعات',
+  'Paid and active orders from the last 30 days.': 'طلبات مدفوعة ونشطة خلال آخر ٣٠ يوماً.',
+  'No paid product sales yet. Once checkout orders are paid, the sales leaderboard appears here.':
+    'لا توجد مبيعات منتجات مدفوعة بعد. بعد دفع الطلبات سيظهر ترتيب المبيعات هنا.',
+  'Product engagement': 'تفاعل المنتجات',
+  'Product views compared with storefront page views.': 'مشاهدات المنتجات مقارنة بمشاهدات صفحات المتجر.',
+  'Cart to order': 'من السلة إلى الطلب',
+  'Orders created from shoppers who added items to cart.': 'طلبات أنشأها متسوقون أضافوا منتجات إلى السلة.',
+  'Inquiry rate': 'معدل الاستفسارات',
+  'Inquiry submissions compared with unique visitors.': 'الاستفسارات المرسلة مقارنة بالزوار الفريدين.',
 };
 
 export const ADMIN_PHRASES_AR: Record<string, string> = {
@@ -545,6 +577,14 @@ export const ADMIN_PHRASES_AR: Record<string, string> = {
     'هذه هي بيانات التاجر الرسمية التي يستخدمها هذا المزود. يبقى التفعيل متوقفاً حتى تنتهي سوقنا من مسار الدفع والاسترداد والتنبيهات لهذا المزود.',
   'Settings': 'الإعدادات',
   'Choose a section from the sidebar, or open one below.': 'اختر قسماً من الشريط الجانبي أو افتح واحداً أدناه.',
+  'Identity, storefront appearance, contact, checkout, and payment providers.':
+    'هوية المتجر ومظهره وبيانات التواصل والدفع ومزودو الدفع.',
+  'Locations, shipping, taxes, markets, and customer-facing policies.':
+    'المواقع والشحن والضرائب والأسواق والسياسات الظاهرة للعملاء.',
+  'Customer accounts, email notifications, and buyer communication.':
+    'حسابات العملاء وتنبيهات البريد والتواصل مع المشترين.',
+  'Plan, account, team access, audit log, files, and custom data.':
+    'الخطة والحساب وصلاحيات الفريق وسجل النشاط والملفات والبيانات المخصصة.',
   'Identity, branding, contact details, domain, and plan.':
     'الهوية والعلامة وبيانات التواصل والنطاق والخطة.',
   'Locations, checkout, payment methods, shipping, taxes, and duties.':
@@ -602,4 +642,52 @@ export const ADMIN_PHRASES_AR: Record<string, string> = {
   'Files': 'الملفات',
   'Your asset library — logos, product photography, share images.':
     'مكتبة الأصول الخاصة بك: الشعارات وصور المنتجات وصور المشاركة.',
+
+  'Configure how customers pay you and which policies they accept. Online providers only reveal their credential setup after you click their logo.':
+    'اضبط كيف يدفع العملاء وما السياسات التي يوافقون عليها. تظهر بيانات مزودي الدفع الإلكتروني فقط بعد الضغط على شعار المزود.',
+  'Free and Pro can use cash on delivery and Fawran. Upgrade to Pro+ or Max+ to unlock SADAD, SkipCash, Tap Payments, and provider credentials.':
+    'يمكن لخطة Free و Pro استخدام الدفع عند الاستلام وفوران. الترقية إلى Pro+ أو Max+ تفتح SADAD و SkipCash و Tap Payments وبيانات المزودين.',
+  'Souqna City': 'مدينة سوقنا',
+  'City-specific checkout controls for payment methods and delivery amounts. Exact city matches win; nearest region fallback can cover northern, western, eastern, southern, and central areas.':
+    'تحكم بالدفع والتوصيل حسب المدينة. المطابقة الدقيقة للمدينة لها الأولوية، ويمكن لاختيار أقرب منطقة تغطية المناطق الشمالية والغربية والشرقية والجنوبية والوسطى.',
+  'Enable Souqna City': 'تفعيل مدينة سوقنا',
+  'Apply city payment and delivery rules during buyer checkout.':
+    'طبّق قواعد الدفع والتوصيل حسب المدينة أثناء إتمام الطلب.',
+  'Automatically pick nearest region': 'اختيار أقرب منطقة تلقائياً',
+  'If the buyer types a city without an exact rule, use the first matching regional rule.':
+    'إذا كتب المشتري مدينة لا تملك قاعدة دقيقة، استخدم أول قاعدة مطابقة للمنطقة.',
+  'Add custom city': 'إضافة مدينة مخصصة',
+  'No city rules yet. Add a preset or custom city.':
+    'لا توجد قواعد مدن بعد. أضف مدينة جاهزة أو مدينة مخصصة.',
+  'Default delivery fee': 'رسوم التوصيل الافتراضية',
+  'City': 'المدينة',
+  'Region': 'المنطقة',
+  'Used for nearest fallback.': 'تستخدم لاختيار أقرب منطقة.',
+  'Delivery amount': 'مبلغ التوصيل',
+  'Blank uses the default fee.': 'اتركه فارغاً لاستخدام الرسوم الافتراضية.',
+  'Default': 'الافتراضي',
+  'Remove': 'إزالة',
+  'Northern areas': 'المناطق الشمالية',
+  'Western areas': 'المناطق الغربية',
+  'Eastern areas': 'المناطق الشرقية',
+  'Southern areas': 'المناطق الجنوبية',
+  'Central areas': 'المناطق الوسطى',
+  'Custom': 'مخصص',
+  'Cash on delivery': 'الدفع عند الاستلام',
+  'Buyer pays the courier in cash on hand-off.':
+    'يدفع المشتري للمندوب نقداً عند التسليم.',
+  'Bank transfer': 'تحويل بنكي',
+  'Buyer wires you the order total before you ship.':
+    'يحوّل المشتري إجمالي الطلب قبل الشحن.',
+  'Use the Fawran number or CR configured during setup.':
+    'استخدم رقم فوران أو السجل التجاري المضبوط أثناء الإعداد.',
+  'SkipCash online payments': 'الدفع الإلكتروني عبر SkipCash',
+  'Redirect buyers to SkipCash checkout using your merchant credentials.':
+    'حوّل المشترين إلى دفع SkipCash باستخدام بيانات التاجر الخاصة بك.',
+  'SADAD online payments': 'الدفع الإلكتروني عبر SADAD',
+  'Redirect buyers to SADAD Web Checkout using your merchant credentials.':
+    'حوّل المشترين إلى SADAD Web Checkout باستخدام بيانات التاجر الخاصة بك.',
+  'Hosted payment link': 'رابط دفع مستضاف',
+  'Send buyers to a Tap, bank, invoice, or hosted gateway payment page.':
+    'أرسل المشترين إلى صفحة دفع عبر Tap أو البنك أو فاتورة أو بوابة دفع مستضافة.',
 };

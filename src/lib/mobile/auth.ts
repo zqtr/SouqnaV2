@@ -3,12 +3,7 @@ import 'server-only';
 import { auth, clerkClient, currentUser, verifyToken } from '@clerk/nextjs/server';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
-import {
-  getPlan,
-  getPlanMeta,
-  listPlanHistory,
-  planUnlocksOnlinePayments,
-} from '@/lib/billing';
+import { getPlan, getPlanMeta, listPlanHistory, planUnlocksOnlinePayments } from '@/lib/billing';
 import { db } from '@/lib/db';
 import { env } from '@/lib/env';
 import { assertStorefrontAccess, type StorefrontAccess } from '@/lib/products';
@@ -395,6 +390,7 @@ export async function getMobileBilling(userId: string): Promise<MobileBillingSum
       ? meta.skipcashPendingCycle
       : null;
   const provider =
+    typeof meta.skipcashRecurringSubscriptionId === 'string' ||
     typeof meta.skipcashPaymentId === 'string'
       ? 'skipcash'
       : plan === 'free'
@@ -423,9 +419,13 @@ export async function getMobileBilling(userId: string): Promise<MobileBillingSum
     currentPeriodEnd: typeof meta.currentPeriodEnd === 'string' ? meta.currentPeriodEnd : null,
     nextBillingTime: typeof meta.nextBillingTime === 'string' ? meta.nextBillingTime : null,
     subscriptionId:
-      typeof meta.skipcashPaymentId === 'string'
-        ? meta.skipcashPaymentId
-        : null,
+      typeof meta.skipcashRecurringSubscriptionId === 'string'
+        ? meta.skipcashRecurringSubscriptionId
+        : typeof meta.subscriptionId === 'string'
+          ? meta.subscriptionId
+          : typeof meta.skipcashPaymentId === 'string'
+            ? meta.skipcashPaymentId
+            : null,
     cardBrand: null,
     cardLast4: null,
     credits: mobileCreditsSummary({

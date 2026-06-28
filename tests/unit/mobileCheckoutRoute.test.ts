@@ -52,11 +52,27 @@ vi.mock('@/lib/apps/crypto', () => ({
 }));
 
 vi.mock('@/lib/storefrontSettings', () => ({
+  CHECKOUT_ADDRESS_DESIGNS: ['qatar_plate', 'soft_card', 'classic'],
+  DEFAULT_CHECKOUT_EXPERIENCE: {
+    heroTitle: null,
+    heroSubtitle: null,
+    buttonStyle: 'solid',
+    trustBadges: ['secure_checkout', 'whatsapp_support'],
+    deliveryNotes: null,
+    paymentCardStyle: 'soft',
+    orderSummaryLayout: 'side',
+    thankYouStyle: 'warm',
+  },
   PAYMENT_METHODS: ['cod', 'bank_transfer', 'fawran', 'skipcash', 'sadad', 'pay_link'],
   POLICY_KEYS: ['terms', 'privacy', 'refund', 'shipping'],
-  checkoutPaymentMethodsForPlan: (methods: string[], canAcceptOnlinePayments: boolean) =>
-    canAcceptOnlinePayments ? Array.from(new Set(methods)) : ['cod'],
-  isOnlinePaymentMethod: (method: string) => method !== 'cod',
+  checkoutPaymentMethodsForPlan: (methods: string[], canAcceptOnlinePayments: boolean) => {
+    const allowed = canAcceptOnlinePayments
+      ? ['cod', 'bank_transfer', 'fawran', 'skipcash', 'sadad', 'pay_link']
+      : ['cod', 'fawran'];
+    const unique = Array.from(new Set(methods.filter((method) => allowed.includes(method))));
+    return unique.length > 0 ? unique : ['cod'];
+  },
+  isOnlinePaymentMethod: (method: string) => !['cod', 'fawran'].includes(method),
   writeStorefrontCheckoutSettings: routeMocks.writeStorefrontCheckoutSettings,
   writeStorefrontSkipCashSetup: routeMocks.writeStorefrontSkipCashSetup,
   writeStorefrontSadadSetup: routeMocks.writeStorefrontSadadSetup,
@@ -94,6 +110,7 @@ function makeStorefront(overrides: Record<string, unknown> = {}) {
     crNumber: null,
     crConfirmedAt: null,
     checkout: {
+      enabled: true,
       paymentMethods: ['cod'],
       bankDetails: null,
       payLink: null,
@@ -103,6 +120,17 @@ function makeStorefront(overrides: Record<string, unknown> = {}) {
       currency: 'QAR',
       minOrderQar: null,
       shippingFlatQar: null,
+      addressDesign: 'qatar_plate',
+      experience: {
+        heroTitle: null,
+        heroSubtitle: null,
+        buttonStyle: 'solid',
+        trustBadges: ['secure_checkout', 'whatsapp_support'],
+        deliveryNotes: null,
+        paymentCardStyle: 'soft',
+        orderSummaryLayout: 'side',
+        thankYouStyle: 'warm',
+      },
       thankYou: {
         title: null,
         message: null,
@@ -168,6 +196,7 @@ describe('mobile storefront checkout route', () => {
     expect(body.checkout).toMatchObject({
       paymentMethods: ['cod'],
       currency: 'QAR',
+      addressDesign: 'qatar_plate',
       skipCash: { hasCredentials: false, enabled: false },
       sadad: { hasCredentials: false, enabled: false },
     });
@@ -219,6 +248,40 @@ describe('mobile storefront checkout route', () => {
     expect(routeMocks.writeStorefrontCheckoutSettings).not.toHaveBeenCalled();
   });
 
+  it('allows Fawran and cash on delivery on Pro/starter mobile stores', async () => {
+    routeMocks.getPlan.mockResolvedValue('starter');
+    const { PATCH } = await loadRoute();
+
+    const response = await PATCH(
+      patchRequest({
+        store: 'souqna-preview',
+        paymentMethods: ['cod', 'fawran'],
+        fawran: {
+          mode: 'fawran_number',
+          number: '+97455000000',
+        },
+      }),
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.writeStorefrontCheckoutSettings).toHaveBeenCalledWith(
+      'souqna-preview',
+      expect.objectContaining({
+        paymentMethods: ['cod', 'fawran'],
+        bankDetails: expect.objectContaining({
+          accountName: 'Souqna Preview',
+          bankName: 'Fawran',
+          iban: 'Fawran',
+          notes: 'Fawran Number: +97455000000',
+        }),
+      }),
+    );
+    expect(body.checkout).toMatchObject({
+      paymentMethods: ['cod', 'fawran'],
+    });
+  });
+
   it('saves native provider choices with normalized bank details and payment link', async () => {
     const { PATCH } = await loadRoute();
 
@@ -240,6 +303,7 @@ describe('mobile storefront checkout route', () => {
         requiredPolicies: ['terms', 'refund'],
         minOrderQar: 25,
         shippingFlatQar: 15,
+        addressDesign: 'soft_card',
       }),
     );
     const body = await json(response);
@@ -261,6 +325,7 @@ describe('mobile storefront checkout route', () => {
         requiredPolicies: ['terms', 'refund'],
         minOrderQar: 25,
         shippingFlatQar: 15,
+        addressDesign: 'soft_card',
       }),
     );
     expect(routeMocks.recordAudit).toHaveBeenCalledWith(
@@ -274,6 +339,7 @@ describe('mobile storefront checkout route', () => {
     );
     expect(body.checkout).toMatchObject({
       paymentMethods: ['cod', 'bank_transfer', 'pay_link'],
+      addressDesign: 'soft_card',
       payLink: { label: 'Pay by secure link', url: 'https://pay.souqna.qa/preview' },
     });
   });

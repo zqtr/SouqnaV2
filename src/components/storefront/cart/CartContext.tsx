@@ -324,9 +324,6 @@ export function CartProvider(props: {
 
   const open = useCallback(() => {
     if (!enabled) return;
-    if (typeof console !== 'undefined') {
-      console.trace('[souqna/cart] open() called');
-    }
     setIsOpen(true);
   }, [enabled]);
   const close = useCallback(() => setIsOpen(false), []);

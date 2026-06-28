@@ -6,7 +6,7 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@clerk/nextjs/server';
 import { env } from '@/lib/env';
-import { hasDb } from '@/lib/db';
+import { db, hasDb } from '@/lib/db';
 import { aiCreditsForPlan, gateAtelierPro, planLabel, type Plan } from '@/lib/billing';
 import { rateLimit } from '@/lib/rate-limit';
 import { recordAudit } from '@/lib/audit';
@@ -17,10 +17,12 @@ import {
   insertProduct,
   updateProductRow,
   type Product,
+  type ProductWriteInput,
   type StorefrontAccess,
 } from '@/lib/products';
 import {
   getCategories,
+  getProductCategoryIdsBatch,
   insertCategory,
   setProductCategories,
   uniqueSlug,
@@ -33,6 +35,10 @@ import {
   ORDER_STATUSES as CHECKOUT_ORDER_STATUSES,
   listOrdersForStorefront,
 } from '@/lib/checkout-orders';
+import {
+  getStorefrontCheckoutSettings,
+  writeStorefrontCheckoutSettings,
+} from '@/lib/storefrontSettings';
 import {
   SouqyPlanSchema,
   addMessage,
@@ -125,6 +131,8 @@ export type SouqyApplyState =
         productsCreated: number;
         productsUpdated: number;
         categoriesCreated: number;
+        categoryAssignmentsApplied: number;
+        checkoutRulesUpdated: boolean;
         seoUpdated: boolean;
       };
     }
@@ -193,6 +201,8 @@ function inferChatMode(message: string): 'ask' | 'agent' {
   const trimmed = message.trim();
   const lower = trimmed.toLowerCase();
 
+  if (isConversionDiagnosisRequest(lower)) return 'ask';
+
   if (
     isUnderstandingQuestion(lower) ||
     isModelQuestion(lower) ||
@@ -210,17 +220,26 @@ function inferChatMode(message: string): 'ask' | 'agent' {
       lower,
     );
   const asksToAct =
-    /\b(add|create|make|update|edit|change|set|publish|unpublish|activate|deactivate|draft|stage|rewrite|improve|fix|apply|enable|disable)\b/u.test(
+    /\b(add|create|make|update|edit|change|set|publish|unpublish|activate|deactivate|draft|stage|rewrite|improve|fix|apply|enable|disable|only)\b/u.test(
       lower,
-    ) || /أضف|انشئ|اكتب|عدّل|عدل|غيّر|غير|انشر|فعّل|فعل|حسّن|حسن/u.test(trimmed);
+    ) || /أضف|انشئ|اكتب|عدّل|عدل|غيّر|غير|انشر|فعّل|فعل|حسّن|حسن|فقط/u.test(trimmed);
   const executableTarget =
     /\b(product|products|category|categories|catalog|seo|meta|title|description|home page|copy)\b/u.test(
       lower,
     ) || /منتج|منتجات|تصنيف|تصنيفات|سيو|عنوان|وصف/u.test(trimmed);
 
-  if (asksToAct && executableTarget && !asksQuestion) return 'agent';
+  const souqnaOperatorTarget =
+    /\b(collection|collections|campaign|checkout|cod|cash on delivery|payment|delivery|shipping|best sellers?|ramadan)\b/u.test(
+      lower,
+    ) ||
+    /مجموعة|مجموعات|حملة|رمضان|الدفع|السداد|التوصيل|الشحن|الاستلام|التسليم|المدينة|مدن|الأكثر\s+مبيع/u.test(
+      trimmed,
+    );
+  const canStageChange = executableTarget || souqnaOperatorTarget;
+
+  if (asksToAct && canStageChange && !asksQuestion) return 'agent';
   if (asksQuestion) return 'ask';
-  if (asksToAct && executableTarget) return 'agent';
+  if (asksToAct && canStageChange) return 'agent';
   return 'ask';
 }
 
@@ -363,11 +382,12 @@ async function sendSouqyMessageForOwner(
     metadata: { mode, inferredMode: !data.mode },
   });
 
-  const [products, categories, homePage, orderSummary] = await Promise.all([
+  const [products, categories, homePage, orderSummary, checkout] = await Promise.all([
     getAllProducts(data.storefrontSlug),
     getCategories(data.storefrontSlug),
     getHomePage(data.storefrontSlug),
     getOrderSummary(data.storefrontSlug),
+    getStorefrontCheckoutSettings(data.storefrontSlug),
   ]);
 
   const context = {
@@ -384,6 +404,19 @@ async function sendSouqyMessageForOwner(
     categories,
     seo: homePage?.seo ?? { title: null, description: null, image: null },
     orders: orderSummary,
+    checkout: {
+      currency: checkout.currency,
+      paymentMethods: checkout.paymentMethods,
+      shippingFlatQar: checkout.shippingFlatQar,
+      minOrderQar: checkout.minOrderQar,
+      paymentAvailabilityRules: checkout.experience.paymentAvailabilityRules,
+      souqnaCity: checkout.experience.souqnaCity,
+      providers: {
+        payLink: Boolean(checkout.payLink),
+        skipCash: checkout.skipCash?.enabled === true,
+        sadad: checkout.sadad?.enabled === true,
+      },
+    },
   };
 
   if (mode === 'ask') {
@@ -408,6 +441,8 @@ async function sendSouqyMessageForOwner(
     plan.productCreates.length ||
     plan.productUpdates.length ||
     plan.categoryCreates.length ||
+    plan.categoryAssignments.length ||
+    plan.checkoutPaymentRules.length ||
     plan.seo
       ? "Here's the plan I'll execute."
       : plan.summary;
@@ -470,8 +505,10 @@ export async function applySouqyPlan(input: z.input<typeof ApplySchema>): Promis
     });
     revalidatePath('/account', 'layout');
     revalidatePath('/account/products');
+    revalidatePath('/account/settings/checkout');
     revalidatePath(`/account/${data.storefrontSlug}/preview`);
     revalidatePath(`/brief/${data.storefrontSlug}`, 'layout');
+    revalidatePath(`/brief/${data.storefrontSlug}/checkout`);
     const nextMessages = await listMessages(conversation.id);
     return {
       status: 'success',
@@ -498,11 +535,15 @@ async function applyPlan(
   productsCreated: number;
   productsUpdated: number;
   categoriesCreated: number;
+  categoryAssignmentsApplied: number;
+  checkoutRulesUpdated: boolean;
   seoUpdated: boolean;
 }> {
   let productsCreated = 0;
   let productsUpdated = 0;
   let categoriesCreated = 0;
+  let categoryAssignmentsApplied = 0;
+  let checkoutRulesUpdated = false;
   const categoryIndex = await buildCategoryIndex(storefrontSlug);
 
   for (const item of plan.categoryCreates) {
@@ -525,6 +566,47 @@ async function applyPlan(
       summary: `Assistant created category ${category.name}`,
       meta: { planId: plan.id, slug: category.slug },
     });
+  }
+
+  for (const assignment of plan.categoryAssignments) {
+    const validProductIds: string[] = [];
+    for (const productId of assignment.productIds) {
+      const product = await getProduct(storefrontSlug, productId);
+      if (product) validProductIds.push(productId);
+    }
+    if (validProductIds.length === 0) continue;
+    const categoryExisted = categoryIndex.has(normalizeCategory(assignment.categoryName));
+    const category = await ensureCategoryForPlan(
+      storefrontSlug,
+      assignment.categoryName,
+      assignment.description ?? null,
+      categoryIndex,
+    );
+    if (!categoryExisted) {
+      categoriesCreated += 1;
+    }
+    const currentByProduct = await getProductCategoryIdsBatch(validProductIds);
+    let assignedInGroup = 0;
+    for (const productId of validProductIds) {
+      const currentIds = currentByProduct.get(productId) ?? [];
+      const nextIds =
+        assignment.preserveExisting === false
+          ? [category.id]
+          : uniqueStrings([...currentIds, category.id]);
+      await setProductCategories(storefrontSlug, productId, nextIds);
+      categoryAssignmentsApplied += 1;
+      assignedInGroup += 1;
+    }
+    if (assignedInGroup > 0) {
+      await recordAudit({
+        storefrontSlug,
+        clerkUserId,
+        action: 'souqy.collection.assign',
+        targetId: category.id,
+        summary: `Assistant assigned ${assignedInGroup} product${assignedInGroup === 1 ? '' : 's'} to ${category.name}`,
+        meta: { planId: plan.id, categoryName: category.name, productCount: assignedInGroup },
+      });
+    }
   }
 
   for (const item of plan.productCreates) {
@@ -562,22 +644,17 @@ async function applyPlan(
         ? await resolveCategoryIds(storefrontSlug, patch.category ?? null, categoryIndex)
         : null;
     const product = await updateProductRow(storefrontSlug, patch.id, {
+      ...productWriteInputFromCurrent(current),
       title: patch.title ?? current.title,
       description: 'description' in patch ? (patch.description ?? null) : current.description,
       priceQar: 'priceQar' in patch ? (patch.priceQar ?? null) : current.priceQar,
-      pricingMode: current.pricingMode,
-      monthlyPriceQar: current.monthlyPriceQar,
       imageUrl: 'imageUrl' in patch ? patch.imageUrl || null : current.imageUrl,
       category: 'category' in patch ? (patch.category ?? null) : current.category,
-      eventAt: current.eventAt,
       status: patch.status ?? current.status,
-      isCustomizable: current.isCustomizable,
-      customizationLabel: current.customizationLabel,
-      sizeOptions: current.sizeOptions,
-      allowCustomSize: current.allowCustomSize,
-      requiresHeightInput: current.requiresHeightInput,
-      heightInputLabel: current.heightInputLabel,
-      heightOptions: current.heightOptions,
+      seoTitle: 'seoTitle' in patch ? (patch.seoTitle ?? null) : current.seoTitle,
+      seoDescription:
+        'seoDescription' in patch ? (patch.seoDescription ?? null) : current.seoDescription,
+      mediaAltText: 'mediaAltText' in patch ? (patch.mediaAltText ?? null) : current.mediaAltText,
     });
     if (product) {
       if (categoryIds) await setProductCategories(storefrontSlug, product.id, categoryIds);
@@ -612,13 +689,55 @@ async function applyPlan(
     });
   }
 
-  return { productsCreated, productsUpdated, categoriesCreated, seoUpdated };
+  if (plan.checkoutPaymentRules.length > 0) {
+    const settings = await getStorefrontCheckoutSettings(storefrontSlug);
+    const nextRules = [
+      ...settings.experience.paymentAvailabilityRules.filter(
+        (existing) =>
+          !plan.checkoutPaymentRules.some(
+            (rule) => rule.method === existing.method && rule.mode === existing.mode,
+          ),
+      ),
+      ...plan.checkoutPaymentRules.map((rule) => ({
+        method: rule.method,
+        mode: 'allow_only' as const,
+        cities: uniqueStrings(rule.cities).slice(0, 12),
+      })),
+    ].slice(0, 8);
+    await writeStorefrontCheckoutSettings(storefrontSlug, {
+      ...settings,
+      experience: {
+        ...settings.experience,
+        paymentAvailabilityRules: nextRules,
+      },
+    });
+    checkoutRulesUpdated = true;
+    await recordAudit({
+      storefrontSlug,
+      clerkUserId,
+      action: 'souqy.checkout.payment_rules.update',
+      targetId: storefrontSlug,
+      summary: 'Assistant updated checkout payment availability rules',
+      meta: { planId: plan.id, rules: plan.checkoutPaymentRules },
+    });
+  }
+
+  return {
+    productsCreated,
+    productsUpdated,
+    categoriesCreated,
+    categoryAssignmentsApplied,
+    checkoutRulesUpdated,
+    seoUpdated,
+  };
 }
 
 function appliedSummary(applied: {
   productsCreated: number;
   productsUpdated: number;
   categoriesCreated: number;
+  categoryAssignmentsApplied: number;
+  checkoutRulesUpdated: boolean;
   seoUpdated: boolean;
 }) {
   const parts = [];
@@ -634,6 +753,11 @@ function appliedSummary(applied: {
     parts.push(
       `${applied.productsUpdated} product${applied.productsUpdated === 1 ? '' : 's'} updated`,
     );
+  if (applied.categoryAssignmentsApplied)
+    parts.push(
+      `${applied.categoryAssignmentsApplied} product${applied.categoryAssignmentsApplied === 1 ? '' : 's'} assigned to collections`,
+    );
+  if (applied.checkoutRulesUpdated) parts.push('checkout rules updated');
   if (applied.seoUpdated) parts.push('home SEO updated');
   return parts.length ? `Done — ${parts.join(', ')}.` : 'Done — no changes were needed.';
 }
@@ -669,8 +793,20 @@ async function askSouqy(input: {
   categories: Category[];
   seo: { title: string | null; description: string | null; image: string | null };
   orders: OrderSummary;
+  checkout: {
+    currency: string;
+    paymentMethods: string[];
+    shippingFlatQar: number | null;
+    minOrderQar: number | null;
+    paymentAvailabilityRules: Array<{ method: string; mode: 'allow_only'; cities: string[] }>;
+    souqnaCity: unknown;
+    providers: { payLink: boolean; skipCash: boolean; sadad: boolean };
+  };
   credits: CreditsContext;
 }): Promise<string> {
+  if (isConversionDiagnosisRequest(input.message.toLowerCase())) {
+    return conversionDiagnosisAnswer(input);
+  }
   const userPrompt = buildPlannerUser(input);
   const fanarConfigured = isFanarConfigured();
   if (fanarConfigured) {
@@ -980,6 +1116,175 @@ function formatSeo(seo: {
   return parts.length ? parts.join(', ') : 'not set';
 }
 
+function isConversionDiagnosisRequest(message: string): boolean {
+  return (
+    /\bconversion\b.*\b(drop|dropped|down|fall|fell|decrease|decreased|decline|declined)\b/u.test(message) ||
+    /\b(show|tell|explain|why|analyze|analyse)\b.*\b(conversion|sales|orders|checkout)\b/u.test(message) &&
+      /\b(this week|last 7 days|dropped|down|decline|problem|issue)\b/u.test(message)
+  );
+}
+
+type ConversionWindow = {
+  pageViews: number;
+  productViews: number;
+  cartAdds: number;
+  orders: number;
+  inquiries: number;
+  checkoutOrders: number;
+  paidOrders: number;
+  failedPayments: number;
+};
+
+async function conversionDiagnosisAnswer(
+  input: Parameters<typeof askSouqy>[0],
+): Promise<string> {
+  const [current, previous] = await Promise.all([
+    conversionWindow(input.storefront.slug, 0, 7),
+    conversionWindow(input.storefront.slug, 7, 14),
+  ]);
+
+  const currentConversion = ratio(current.orders || current.checkoutOrders, current.pageViews);
+  const previousConversion = ratio(previous.orders || previous.checkoutOrders, previous.pageViews);
+  const productRateNow = ratio(current.productViews, current.pageViews);
+  const productRatePrev = ratio(previous.productViews, previous.pageViews);
+  const cartRateNow = ratio(current.cartAdds, current.productViews);
+  const cartRatePrev = ratio(previous.cartAdds, previous.productViews);
+  const orderRateNow = ratio(current.checkoutOrders || current.orders, current.cartAdds);
+  const orderRatePrev = ratio(previous.checkoutOrders || previous.orders, previous.cartAdds);
+
+  const findings = [
+    {
+      label: 'Traffic',
+      drop: previous.pageViews > 0 ? (previous.pageViews - current.pageViews) / previous.pageViews : 0,
+      message: `page views ${current.pageViews} vs ${previous.pageViews}`,
+    },
+    {
+      label: 'Product browsing',
+      drop: productRatePrev > 0 ? (productRatePrev - productRateNow) / productRatePrev : 0,
+      message: `product-view rate ${formatPercent(productRateNow)} vs ${formatPercent(productRatePrev)}`,
+    },
+    {
+      label: 'Cart intent',
+      drop: cartRatePrev > 0 ? (cartRatePrev - cartRateNow) / cartRatePrev : 0,
+      message: `cart-add rate ${formatPercent(cartRateNow)} vs ${formatPercent(cartRatePrev)}`,
+    },
+    {
+      label: 'Checkout completion',
+      drop: orderRatePrev > 0 ? (orderRatePrev - orderRateNow) / orderRatePrev : 0,
+      message: `checkout/order rate ${formatPercent(orderRateNow)} vs ${formatPercent(orderRatePrev)}`,
+    },
+    {
+      label: 'Payment failures',
+      drop:
+        current.failedPayments > previous.failedPayments && current.failedPayments > 0
+          ? 1
+          : 0,
+      message: `failed payments ${current.failedPayments} vs ${previous.failedPayments}`,
+    },
+  ].sort((a, b) => b.drop - a.drop);
+
+  const primary = findings[0];
+  const likelyCause =
+    !primary || current.pageViews + previous.pageViews < 20
+      ? 'Not enough traffic yet to isolate one cause. Treat this as directional, not final.'
+      : primary.drop <= 0.1
+        ? 'No sharp funnel drop stands out from the available data. The issue may be seasonality, product mix, or small sample size.'
+        : `${primary.label} is the biggest change: ${primary.message}.`;
+
+  return [
+    `For ${input.storefront.businessName}, last 7 days vs the previous 7 days:`,
+    `Conversion: ${formatPercent(currentConversion)} vs ${formatPercent(previousConversion)} (${formatDelta(currentConversion, previousConversion)}).`,
+    `Funnel: ${current.pageViews} page views, ${current.productViews} product views, ${current.cartAdds} cart adds, ${current.checkoutOrders || current.orders} checkout orders.`,
+    `Likely reason: ${likelyCause}`,
+    `Next check: ${conversionNextStep(primary?.label ?? 'Data')}`,
+    'I used aggregate analytics and order counts only; no customer details were inspected.',
+  ].join('\n\n');
+}
+
+async function conversionWindow(
+  storefrontSlug: string,
+  startDaysAgo: number,
+  endDaysAgo: number,
+): Promise<ConversionWindow> {
+  const [events, orders] = await Promise.all([
+    db()`
+      select
+        count(*) filter (where kind = 'page_view')::int as page_views,
+        count(*) filter (where kind = 'product_view')::int as product_views,
+        count(*) filter (where kind = 'cart_add')::int as cart_adds,
+        count(*) filter (where kind = 'order_placed')::int as orders,
+        count(*) filter (where kind = 'inquire_submit')::int as inquiries
+      from analytics_events
+      where storefront_slug = ${storefrontSlug}
+        and occurred_at >= now() - (${endDaysAgo}::int * interval '1 day')
+        and occurred_at < now() - (${startDaysAgo}::int * interval '1 day')
+    `,
+    db()`
+      select
+        count(*) filter (where order_status <> 'cancelled')::int as checkout_orders,
+        count(*) filter (where payment_status = 'marked_paid')::int as paid_orders,
+        count(*) filter (where payment_status = 'payment_failed')::int as failed_payments
+      from checkout_orders
+      where storefront_slug = ${storefrontSlug}
+        and created_at >= now() - (${endDaysAgo}::int * interval '1 day')
+        and created_at < now() - (${startDaysAgo}::int * interval '1 day')
+    `,
+  ]);
+  const eventRow = (events as unknown as Array<{
+    page_views: number;
+    product_views: number;
+    cart_adds: number;
+    orders: number;
+    inquiries: number;
+  }>)[0];
+  const orderRow = (orders as unknown as Array<{
+    checkout_orders: number;
+    paid_orders: number;
+    failed_payments: number;
+  }>)[0];
+  return {
+    pageViews: Number(eventRow?.page_views ?? 0),
+    productViews: Number(eventRow?.product_views ?? 0),
+    cartAdds: Number(eventRow?.cart_adds ?? 0),
+    orders: Number(eventRow?.orders ?? 0),
+    inquiries: Number(eventRow?.inquiries ?? 0),
+    checkoutOrders: Number(orderRow?.checkout_orders ?? 0),
+    paidOrders: Number(orderRow?.paid_orders ?? 0),
+    failedPayments: Number(orderRow?.failed_payments ?? 0),
+  };
+}
+
+function ratio(value: number, base: number): number {
+  return base > 0 ? value / base : 0;
+}
+
+function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(value < 0.1 ? 1 : 0)}%`;
+}
+
+function formatDelta(current: number, previous: number): string {
+  if (previous <= 0) return current > 0 ? 'up from 0%' : 'no prior baseline';
+  const delta = ((current - previous) / previous) * 100;
+  return `${delta >= 0 ? '+' : ''}${delta.toFixed(0)}%`;
+}
+
+function conversionNextStep(stage: string): string {
+  switch (stage) {
+    case 'Traffic':
+      return 'review campaign traffic sources, referrers, and whether recent posts or ads slowed down.';
+    case 'Product browsing':
+      return 'check the first storefront section, collection placement, product images, and product titles.';
+    case 'Cart intent':
+      return 'review pricing, variants, stock, delivery notes, and whether product pages answer common buyer questions.';
+    case 'Checkout completion':
+      return 'test checkout payment choices, delivery city rules, required policies, and mobile checkout friction.';
+    case 'Payment failures':
+      return 'check online provider status, failed payment callbacks, and whether buyers have an offline fallback.';
+    default:
+      return 'wait for more traffic, then compare the funnel again.';
+  }
+}
+
 async function planWithSouqy(input: {
   message: string;
   storefront: {
@@ -994,7 +1299,19 @@ async function planWithSouqy(input: {
   categories: Category[];
   seo: { title: string | null; description: string | null; image: string | null };
   orders: OrderSummary;
+  checkout: {
+    currency: string;
+    paymentMethods: string[];
+    shippingFlatQar: number | null;
+    minOrderQar: number | null;
+    paymentAvailabilityRules: Array<{ method: string; mode: 'allow_only'; cities: string[] }>;
+    souqnaCity: unknown;
+    providers: { payLink: boolean; skipCash: boolean; sadad: boolean };
+  };
 }): Promise<SouqyPlan> {
+  const localOperator = await localOperatorPlan(input);
+  if (localOperator) return localOperator;
+
   const userPrompt = buildPlannerUser(input);
   const fanarConfigured = isFanarConfigured();
   if (fanarConfigured) {
@@ -1048,13 +1365,17 @@ function buildPlannerSystem(): string {
   return [
     'You are the AI store manager for Souqna.',
     'Return only JSON matching this TypeScript shape:',
-    '{"summary":string,"checklist":[{"title":string,"detail":string}],"questions":[{"id":string,"label":string,"detail":string,"options":[{"label":string,"prompt":string}]}],"categoryCreates":[{"name":string,"description":string|null,"imageUrl":string|null}],"productCreates":[],"productUpdates":[],"seo":null}',
+    '{"summary":string,"checklist":[{"title":string,"detail":string}],"questions":[{"id":string,"label":string,"detail":string,"options":[{"label":string,"prompt":string}]}],"categoryCreates":[{"name":string,"description":string|null,"imageUrl":string|null}],"productCreates":[],"productUpdates":[{"id":string,"title":string,"description":string|null,"priceQar":number|null,"imageUrl":string|null,"category":string|null,"status":"active|draft|sold_out","seoTitle":string|null,"seoDescription":string|null,"mediaAltText":string|null}],"categoryAssignments":[{"categoryName":string,"description":string|null,"productIds":[string],"preserveExisting":boolean}],"checkoutPaymentRules":[{"method":"cod|bank_transfer|fawran|skipcash|sadad|pay_link","mode":"allow_only","cities":[string]}],"seo":null}',
     'When a founder asks for a supported change, stage a concrete approval plan. The founder must still click Apply before database changes happen.',
-    'Allowed executable work in this drawer: create/update products, create categories, and draft home page SEO only.',
+    'Allowed executable work in this drawer: create/update products, create categories/collections, assign products to collections, draft product/home SEO fields, and update checkout payment availability by city.',
+    'Checkout secrets are locked. You may only use safe checkout context: enabled payment methods, provider enabled flags, currency, shipping/minimum order, and existing city availability rules. Never request, reveal, infer, or edit provider credentials.',
     'For design, page layout, theme, or builder commands, return a checklist and questions with no mutations, and tell the founder to use the Builder page editor for the final design execution.',
     'For image, poster, logo, banner, menu visual, packaging mockup, product card, or brand asset generation, return a short checklist that points the founder to Souqy Studio. Do not claim Chat generated an asset.',
     'Do not generate code, TypeScript, Builder architecture, storefront source, or design-system reasoning. Those belong to GPT-backed Souqna surfaces, not Souqy Chat.',
-    'Never delete products. Never install apps. Never change orders, checkout, billing, credits, drops, or page layout.',
+    'Never delete products. Never install apps. Never change orders, billing, credits, drops, or page layout.',
+    'For COD only in a city, return checkoutPaymentRules with method "cod", mode "allow_only", and the requested city names only.',
+    'For best seller or campaign collections, use categoryAssignments with product IDs from context. If order data is insufficient, choose ready active products and say so in checklist detail.',
+    'For product SEO, use productUpdates with seoTitle, seoDescription, and mediaAltText. Use only product IDs from context.',
     'Never stage or claim credit purchases, credit top-ups, credit balance changes, plan changes, or billing changes.',
     'Default new products to status "draft" unless the founder explicitly asks to publish or activate.',
     'For new products, ask for product image URL and category if missing. Offer existing categories and a create-new category option in questions.',
@@ -1073,7 +1394,14 @@ function buildPlannerUser(input: Parameters<typeof planWithSouqy>[0]): string {
     description: p.description,
     priceQar: p.priceQar,
     category: p.category,
+    productType: p.productType,
+    tags: p.tags,
     status: p.status,
+    seoTitle: p.seoTitle,
+    seoDescription: p.seoDescription,
+    mediaAltText: p.mediaAltText,
+    stock: p.stock,
+    trackInventory: p.trackInventory,
   }));
   const categories = input.categories.map((c) => ({
     id: c.id,
@@ -1087,6 +1415,7 @@ function buildPlannerUser(input: Parameters<typeof planWithSouqy>[0]): string {
     credits: input.credits,
     homeSeo: input.seo,
     orderSummary: input.orders,
+    checkout: input.checkout,
     categories,
     products,
   });
@@ -1106,6 +1435,316 @@ function parsePlannerJson(text: string): SouqyPlan | null {
   } catch {
     return null;
   }
+}
+
+async function localOperatorPlan(input: Parameters<typeof planWithSouqy>[0]): Promise<SouqyPlan | null> {
+  const lower = input.message.toLowerCase();
+  const trimmed = input.message.trim();
+  const wantsBestSellers =
+    /\bbest sellers?\b/u.test(lower) &&
+    /\b(create|add|make|collection|category)\b/u.test(lower);
+  if (wantsBestSellers) {
+    const productIds = await bestSellerProductIds(input.storefront.slug, input.products, 8);
+    if (productIds.length === 0) return emptyOperatorPlan('I need products or recent orders before I can build a Best Sellers collection.');
+    return SouqyPlanSchema.parse({
+      id: crypto.randomUUID(),
+      summary: 'I can create or update a Best Sellers collection from your strongest products.',
+      checklist: [
+        { title: 'Create Best Sellers collection', detail: 'Use recent order activity first, then ready active products as fallback' },
+        { title: 'Assign products', detail: `${productIds.length} product${productIds.length === 1 ? '' : 's'} will be linked without removing existing collections` },
+        { title: 'Ready to review', detail: 'Apply only after you approve this collection plan' },
+      ],
+      categoryCreates: [],
+      productCreates: [],
+      productUpdates: [],
+      categoryAssignments: [
+        {
+          categoryName: 'Best Sellers',
+          description: 'A curated collection of products with the strongest recent sales signals.',
+          productIds,
+          preserveExisting: true,
+        },
+      ],
+      checkoutPaymentRules: [],
+      seo: null,
+    });
+  }
+
+  const wantsRamadan =
+    /\bramadan\b/u.test(lower) || /رمضان/u.test(trimmed);
+  if (wantsRamadan && /\b(add|create|make|campaign|collection)\b/u.test(lower)) {
+    const productIds =
+      (await bestSellerProductIds(input.storefront.slug, input.products, 8)).slice(0, 8);
+    const fallbackIds = readyProductIds(input.products, 8);
+    const selectedIds = productIds.length > 0 ? productIds : fallbackIds;
+    return SouqyPlanSchema.parse({
+      id: crypto.randomUUID(),
+      summary: 'I can stage a Ramadan campaign collection and home SEO update.',
+      checklist: [
+        { title: 'Create Ramadan Picks', detail: selectedIds.length ? `${selectedIds.length} products will be assigned` : 'No products are ready to assign yet' },
+        { title: 'Update home SEO', detail: 'Use Ramadan-specific search and sharing copy' },
+        { title: 'Keep secrets locked', detail: 'No payment provider credentials are exposed or changed' },
+      ],
+      categoryCreates: selectedIds.length ? [] : [{ name: 'Ramadan Picks', description: 'Seasonal Ramadan campaign collection.', imageUrl: null }],
+      productCreates: [],
+      productUpdates: [],
+      categoryAssignments: selectedIds.length
+        ? [
+            {
+              categoryName: 'Ramadan Picks',
+              description: 'Seasonal products selected for Ramadan shoppers.',
+              productIds: selectedIds,
+              preserveExisting: true,
+            },
+          ]
+        : [],
+      checkoutPaymentRules: [],
+      seo: {
+        title: `${input.storefront.businessName} Ramadan Picks`,
+        description: `Shop Ramadan-ready products from ${input.storefront.businessName} with simple checkout and bilingual support.`,
+      },
+    });
+  }
+
+  const wantsArabicDescriptions =
+    /\barabic\b/u.test(lower) &&
+    /\b(rewrite|write|update|improve|description|descriptions|copy)\b/u.test(lower);
+  if (wantsArabicDescriptions || /وصف|عربي|العربية/u.test(trimmed) && /منتج|منتجات/u.test(trimmed)) {
+    const products = input.products.slice(0, 20);
+    if (products.length === 0) return emptyOperatorPlan('There are no products to rewrite yet.');
+    return SouqyPlanSchema.parse({
+      id: crypto.randomUUID(),
+      summary: `I can rewrite ${products.length} product description${products.length === 1 ? '' : 's'} in Arabic.`,
+      checklist: [
+        { title: 'Rewrite Arabic descriptions', detail: 'Use each product title, category, price, and store context' },
+        { title: 'Preserve product settings', detail: 'Prices, inventory, variants, SEO, and images stay unchanged unless listed' },
+        { title: 'Ready to review', detail: 'Apply after reviewing the generated Arabic copy' },
+      ],
+      categoryCreates: [],
+      productCreates: [],
+      productUpdates: products.map((product) => ({
+        id: product.id,
+        description: arabicDescriptionForProduct(product, input.storefront.businessName),
+      })),
+      categoryAssignments: [],
+      checkoutPaymentRules: [],
+      seo: null,
+    });
+  }
+
+  const codOnlyCity = extractCodOnlyCity(input.message);
+  if (codOnlyCity) {
+    const codCities = cityAliasesForCodRule(codOnlyCity);
+    return SouqyPlanSchema.parse({
+      id: crypto.randomUUID(),
+      summary: `I can make cash on delivery available only for ${codOnlyCity} buyers.`,
+      checklist: [
+        { title: 'Update checkout rule', detail: `COD will require city ${codCities.join(' or ')} at checkout` },
+        { title: 'Keep other methods unchanged', detail: 'Bank transfer, Fawran, and online providers keep their current configuration' },
+        { title: 'Enforce server-side', detail: 'The final order action checks the same rule before creating an order' },
+      ],
+      categoryCreates: [],
+      productCreates: [],
+      productUpdates: [],
+      categoryAssignments: [],
+      checkoutPaymentRules: [
+        {
+          method: 'cod',
+          mode: 'allow_only',
+          cities: codCities,
+        },
+      ],
+      seo: null,
+    });
+  }
+
+  const wantsPerfumeSeo =
+    /\bseo\b|search|google|meta/u.test(lower) &&
+    /\b(perfume|perfumes|oud|fragrance|fragrances|scent|scents)\b/u.test(lower);
+  if (wantsPerfumeSeo || (/عطر|عطور|عود/u.test(trimmed) && /seo|سيو/u.test(lower))) {
+    const products = input.products.filter((product) => isPerfumeProduct(product)).slice(0, 20);
+    if (products.length === 0) {
+      return emptyOperatorPlan('I could not find perfume or oud products in the current catalog.');
+    }
+    return SouqyPlanSchema.parse({
+      id: crypto.randomUUID(),
+      summary: `I can improve SEO for ${products.length} perfume product${products.length === 1 ? '' : 's'}.`,
+      checklist: [
+        { title: 'Draft product SEO', detail: 'Add search titles, descriptions, and image alt text' },
+        { title: 'Use catalog context', detail: 'Only products that look like perfume, oud, fragrance, or scent items are included' },
+        { title: 'Ready to review', detail: 'Apply after reviewing product-level SEO changes' },
+      ],
+      categoryCreates: [],
+      productCreates: [],
+      productUpdates: products.map((product) => ({
+        id: product.id,
+        ...seoForPerfumeProduct(product, input.storefront.businessName),
+      })),
+      categoryAssignments: [],
+      checkoutPaymentRules: [],
+      seo: null,
+    });
+  }
+
+  return null;
+}
+
+function emptyOperatorPlan(summary: string): SouqyPlan {
+  return SouqyPlanSchema.parse({
+    id: crypto.randomUUID(),
+    summary,
+    checklist: [
+      { title: 'No store changes staged', detail: 'Souqy needs enough store data before it can apply this request' },
+    ],
+    categoryCreates: [],
+    productCreates: [],
+    productUpdates: [],
+    categoryAssignments: [],
+    checkoutPaymentRules: [],
+    seo: null,
+  });
+}
+
+function extractCodOnlyCity(message: string): string | null {
+  const lower = message.toLowerCase();
+  const mentionsCod =
+    /\b(cod|cash on delivery)\b/u.test(lower) ||
+    /الدفع\s+عند\s+(?:الاستلام|التسليم)|كاش\s*اون\s*دليفري/u.test(message);
+  const mentionsRestriction =
+    /\b(only|enable|available|allow|restrict)\b/u.test(lower) ||
+    /فقط|فعّل|فعل|تفعيل|متاح|اسمح|حصر|اقصر|خصص/u.test(message);
+  if (!mentionsCod) return null;
+  if (!mentionsRestriction) return null;
+  const known = [
+    'Al Wakrah',
+    'الوكرة',
+    'Al Khor',
+    'الخور',
+    'Al Thumamah',
+    'الثمامة',
+    'Riyadh',
+    'الرياض',
+    'Doha',
+    'الدوحة',
+    'Al Wukair',
+    'الوكير',
+    'Lusail',
+    'لوسيل',
+    'Al Rayyan',
+    'الريان',
+  ];
+  const knownMatch = known.find((city) => lower.includes(city.toLowerCase()));
+  if (knownMatch) return knownMatch;
+  const quoted = message.match(/["'“”]([^"'“”]{2,80})["'“”]/u)?.[1]?.trim();
+  if (quoted) return quoted;
+  const directional = message.match(/\b(?:for|in|to)\s+([A-Za-z][A-Za-z\s-]{1,80})/iu)?.[1];
+  if (!directional) return null;
+  return directional
+    .replace(/\b(checkout|buyers?|customers?|city|only|please|now)\b.*$/iu, '')
+    .replace(/[.?!،,]+$/u, '')
+    .trim() || null;
+}
+
+function cityAliasesForCodRule(city: string): string[] {
+  const normalized = city.trim().toLowerCase();
+  const aliases: Record<string, string[]> = {
+    'al wakrah': ['Al Wakrah', 'الوكرة'],
+    wakrah: ['Al Wakrah', 'الوكرة'],
+    الوكرة: ['Al Wakrah', 'الوكرة'],
+    'al khor': ['Al Khor', 'الخور'],
+    alkhor: ['Al Khor', 'الخور'],
+    الخور: ['Al Khor', 'الخور'],
+    'al thumamah': ['Al Thumamah', 'الثمامة'],
+    thumamah: ['Al Thumamah', 'الثمامة'],
+    الثمامة: ['Al Thumamah', 'الثمامة'],
+    riyadh: ['Riyadh', 'الرياض'],
+    الرياض: ['Riyadh', 'الرياض'],
+    doha: ['Doha', 'الدوحة'],
+    الدوحة: ['Doha', 'الدوحة'],
+    'al wukair': ['Al Wukair', 'الوكير'],
+    wukair: ['Al Wukair', 'الوكير'],
+    الوكير: ['Al Wukair', 'الوكير'],
+    lusail: ['Lusail', 'لوسيل'],
+    لوسيل: ['Lusail', 'لوسيل'],
+    'al rayyan': ['Al Rayyan', 'الريان'],
+    rayyan: ['Al Rayyan', 'الريان'],
+    الريان: ['Al Rayyan', 'الريان'],
+  };
+  return aliases[normalized] ?? [city.trim()];
+}
+
+async function bestSellerProductIds(
+  storefrontSlug: string,
+  products: Product[],
+  limit: number,
+): Promise<string[]> {
+  const validIds = new Set(products.map((product) => product.id));
+  const rows = (await db()`
+    select oi.product_id, sum(oi.quantity)::int as units, count(distinct o.id)::int as orders
+    from checkout_order_items oi
+    join checkout_orders o on o.id = oi.order_id
+    where o.storefront_slug = ${storefrontSlug}
+      and o.created_at >= now() - interval '30 days'
+      and o.order_status <> 'cancelled'
+      and oi.product_id is not null
+    group by oi.product_id
+    order by units desc, orders desc
+    limit ${limit}
+  `) as unknown as Array<{ product_id: string | null }>;
+  const soldIds = rows
+    .map((row) => row.product_id)
+    .filter((id): id is string => Boolean(id && validIds.has(id)));
+  return uniqueStrings([...soldIds, ...readyProductIds(products, limit)]).slice(0, limit);
+}
+
+function readyProductIds(products: Product[], limit: number): string[] {
+  return products
+    .filter((product) => product.status === 'active')
+    .concat(products.filter((product) => product.status !== 'sold_out'))
+    .filter((product, index, all) => all.findIndex((item) => item.id === product.id) === index)
+    .slice(0, limit)
+    .map((product) => product.id);
+}
+
+function arabicDescriptionForProduct(product: Product, businessName: string): string {
+  const parts = [
+    `${product.title} من ${businessName}.`,
+    product.category ? `يناسب عملاء يبحثون عن ${product.category} بجودة واضحة وتجربة شراء سهلة.` : 'اختيار مناسب لعملاء المتجر مع تجربة شراء سهلة وواضحة.',
+    product.priceQar !== null ? `السعر ${product.priceQar} ر.ق.` : '',
+    'اطلبه من المتجر مباشرة وسيتم التواصل معك لتأكيد التفاصيل والتوصيل.',
+  ].filter(Boolean);
+  return clampAssistantText(parts.join(' '), 780);
+}
+
+function isPerfumeProduct(product: Product): boolean {
+  const text = [
+    product.title,
+    product.description,
+    product.category,
+    product.productType,
+    product.vendor,
+    ...product.tags,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return /\b(perfume|perfumes|oud|fragrance|fragrances|scent|scents|musk|attar)\b/u.test(text) ||
+    /عطر|عطور|عود|مسك|بخور/u.test(text);
+}
+
+function seoForPerfumeProduct(
+  product: Product,
+  businessName: string,
+): { seoTitle: string; seoDescription: string; mediaAltText: string } {
+  const category = product.category ?? 'perfume';
+  return {
+    seoTitle: clampAssistantText(`${product.title} | ${businessName} ${category}`, 155),
+    seoDescription: clampAssistantText(
+      `Shop ${product.title} from ${businessName}. Discover curated ${category} with clear pricing, simple checkout, and bilingual service.`,
+      215,
+    ),
+    mediaAltText: clampAssistantText(`${product.title} ${category} from ${businessName}`, 175),
+  };
 }
 
 function localPlanFallback(
@@ -1327,6 +1966,89 @@ async function resolveCategoryIds(
   });
   categoryIndex.set(key, category);
   return [category.id];
+}
+
+async function ensureCategoryForPlan(
+  storefrontSlug: string,
+  categoryName: string,
+  description: string | null,
+  categoryIndex: Map<string, Category>,
+): Promise<Category> {
+  const key = normalizeCategory(categoryName);
+  const existing = categoryIndex.get(key);
+  if (existing) return existing;
+  const category = await insertCategory(storefrontSlug, {
+    name: categoryName,
+    slug: await uniqueSlug(storefrontSlug, categoryName),
+    description,
+    imageUrl: null,
+  });
+  categoryIndex.set(key, category);
+  return category;
+}
+
+function productWriteInputFromCurrent(product: Product): ProductWriteInput {
+  return {
+    title: product.title,
+    subtitle: product.subtitle,
+    description: product.description,
+    priceQar: product.priceQar,
+    compareAtPriceQar: product.compareAtPriceQar,
+    costPerItemQar: product.costPerItemQar,
+    taxable: product.taxable,
+    discountEligible: product.discountEligible,
+    pricingMode: product.pricingMode,
+    monthlyPriceQar: product.monthlyPriceQar,
+    imageUrl: product.imageUrl,
+    mediaAltText: product.mediaAltText,
+    category: product.category,
+    productType: product.productType,
+    vendor: product.vendor,
+    tags: product.tags,
+    templateKey: product.templateKey,
+    badges: product.badges,
+    handle: product.handle,
+    seoTitle: product.seoTitle,
+    seoDescription: product.seoDescription,
+    eventAt: product.eventAt,
+    publishedAt: product.publishedAt,
+    saleStartsAt: product.saleStartsAt,
+    saleEndsAt: product.saleEndsAt,
+    status: product.status,
+    stock: product.stock,
+    sku: product.sku,
+    barcode: product.barcode,
+    trackInventory: product.trackInventory,
+    continueSellingWhenOutOfStock: product.continueSellingWhenOutOfStock,
+    lowStockThreshold: product.lowStockThreshold,
+    restockAt: product.restockAt,
+    supplierCostQar: product.supplierCostQar,
+    purchaseOrderRef: product.purchaseOrderRef,
+    stockStatusLabel: product.stockStatusLabel,
+    minOrderQuantity: product.minOrderQuantity,
+    maxOrderQuantity: product.maxOrderQuantity,
+    physicalProduct: product.physicalProduct,
+    weightGrams: product.weightGrams,
+    packageDimensions: product.packageDimensions,
+    requiresShipping: product.requiresShipping,
+    freeShippingEligible: product.freeShippingEligible,
+    countryOfOrigin: product.countryOfOrigin,
+    hsCode: product.hsCode,
+    customsDescription: product.customsDescription,
+    digitalDelivery: product.digitalDelivery,
+    metafields: product.metafields,
+    isCustomizable: product.isCustomizable,
+    customizationLabel: product.customizationLabel,
+    sizeOptions: product.sizeOptionPrices,
+    allowCustomSize: product.allowCustomSize,
+    variantOptions: product.variantOptionPrices,
+    requiresHeightInput: product.requiresHeightInput,
+    heightInputLabel: product.heightInputLabel,
+    heightOptions: product.heightOptions,
+    isDemo: product.isDemo,
+    source: product.source,
+    sourceUrl: product.sourceUrl ?? null,
+  };
 }
 
 function normalizeCategory(value: string): string {

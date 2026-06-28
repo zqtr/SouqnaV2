@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import type { CSSProperties } from 'react';
 import { notFound } from 'next/navigation';
 import { ShoppingBag } from 'lucide-react';
 import { getStorefront, type Storefront as StorefrontData } from '@/lib/brief';
@@ -23,6 +24,7 @@ import { AddToCartButton } from '@/components/storefront/cart/AddToCartButton';
 import { PriceText, formatMonthlyPrice, formatPrice } from '@/components/storefront/blocks/helpers';
 import { normaliseSettings as normaliseWhatsApp, whatsappDigits } from '@/lib/apps/whatsapp';
 import { getPlan, planUnlocksBrandingRemoval } from '@/lib/billing';
+import { isImageMediaUrl, isVideoMediaUrl } from '@/lib/media';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -61,6 +63,13 @@ function deriveLegalPolicies(
   }).map((key) => ({ key, title: localizedPolicyTitle(key, locale) }));
 }
 
+function isPublicProduct(product: Product): boolean {
+  return (
+    product.status !== 'draft' &&
+    (!product.publishedAt || product.publishedAt.getTime() <= Date.now())
+  );
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, productId } = await params;
   const [storefront, product] = await Promise.all([
@@ -68,14 +77,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     getProduct(slug, productId).catch(() => null),
   ]);
 
-  if (!storefront || !product || product.status === 'draft') {
+  if (!storefront || !product || !isPublicProduct(product)) {
     return { title: 'Product · Souqna', robots: { index: false, follow: false } };
   }
 
   return {
-    title: `${product.title} · ${storefront.businessName}`,
-    description: product.description ?? storefront.tagline ?? storefront.businessName,
-    ...(product.imageUrl ? { openGraph: { images: [product.imageUrl] } } : {}),
+    title: `${product.seoTitle || product.title} · ${storefront.businessName}`,
+    description:
+      product.seoDescription ??
+      product.subtitle ??
+      product.description ??
+      storefront.tagline ??
+      storefront.businessName,
+    ...(product.imageUrl && isImageMediaUrl(product.imageUrl)
+      ? { openGraph: { images: [product.imageUrl] } }
+      : {}),
     robots: { index: false, follow: false },
   };
 }
@@ -97,7 +113,7 @@ export default async function ProductPage({ params }: Props) {
       getPlan(storefront.clerkUserId),
     ]);
 
-  if (!product || product.status === 'draft') notFound();
+  if (!product || !isPublicProduct(product)) notFound();
 
   const installedAppIds = installed.filter((a) => a.enabled).map((a) => a.appId);
   const whatsapp = installed.find(
@@ -142,6 +158,8 @@ function ProductDetail({
   const displayPrice = isMonthly ? product.monthlyPriceQar : product.priceQar;
   const hasPrice = typeof displayPrice === 'number';
   const canCart = !isSoldOut && hasPrice;
+  const productMediaIsVideo = isVideoMediaUrl(product.imageUrl);
+  const cartImageUrl = productMediaIsVideo ? null : product.imageUrl;
   const priceText =
     hasPrice && isMonthly
       ? formatMonthlyPrice(displayPrice, isRtl)
@@ -193,11 +211,10 @@ function ProductDetail({
           }}
         >
           {product.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={product.imageUrl}
-              alt={product.title}
-              style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover', display: 'block' }}
+            <ProductMedia
+              url={product.imageUrl}
+              title={product.mediaAltText || product.title}
+              isVideo={productMediaIsVideo}
             />
           ) : (
             <div
@@ -233,6 +250,36 @@ function ProductDetail({
             </p>
           ) : null}
 
+          {product.badges.length > 0 ? (
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 8,
+                marginBottom: 16,
+              }}
+            >
+              {product.badges.slice(0, 4).map((badge) => (
+                <span
+                  key={badge}
+                  style={{
+                    borderRadius: 999,
+                    border: '1px solid color-mix(in srgb, var(--sf-accent) 34%, transparent)',
+                    background: 'color-mix(in srgb, var(--sf-accent) 12%, transparent)',
+                    color: 'var(--sf-accent)',
+                    padding: '6px 10px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {badge}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
           <h1
             style={{
               margin: 0,
@@ -248,6 +295,21 @@ function ProductDetail({
           >
             {product.title}
           </h1>
+
+          {product.subtitle ? (
+            <p
+              style={{
+                margin: 'clamp(14px, 2.2vw, 22px) 0 0',
+                color: 'color-mix(in srgb, var(--sf-ink) 78%, transparent)',
+                fontFamily: isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)',
+                fontSize: 'clamp(18px, 2vw, 24px)',
+                lineHeight: 1.45,
+                fontWeight: 600,
+              }}
+            >
+              {product.subtitle}
+            </p>
+          ) : null}
 
           {product.description ? (
             <p
@@ -306,9 +368,12 @@ function ProductDetail({
                 productId={product.id}
                 title={product.title}
                 priceQar={displayPrice}
-                imageUrl={product.imageUrl}
+                imageUrl={cartImageUrl}
                 sizeOptions={product.sizeOptions}
+                sizeOptionPrices={product.sizeOptionPrices}
                 allowCustomSize={product.allowCustomSize}
+                variantOptions={product.variantOptions}
+                variantOptionPrices={product.variantOptionPrices}
                 requiresHeightInput={product.requiresHeightInput}
                 heightInputLabel={product.heightInputLabel}
                 heightOptions={product.heightOptions}
@@ -343,4 +408,39 @@ function ProductDetail({
       </section>
     </main>
   );
+}
+
+function ProductMedia({
+  url,
+  title,
+  isVideo,
+}: {
+  url: string;
+  title: string;
+  isVideo: boolean;
+}) {
+  const style: CSSProperties = {
+    width: '100%',
+    aspectRatio: '4 / 5',
+    objectFit: 'contain',
+    objectPosition: 'center',
+    display: 'block',
+    background: 'color-mix(in srgb, var(--sf-ground) 70%, transparent)',
+  };
+
+  if (isVideo) {
+    return (
+      <video
+        src={url}
+        aria-label={title}
+        style={style}
+        controls
+        playsInline
+        preload="metadata"
+      />
+    );
+  }
+
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={title} style={style} />;
 }

@@ -1,5 +1,6 @@
 import type { BlockRenderProps } from './BlockContext';
 import type { ProductCardStackProps } from '@/lib/blocks/types';
+import { productPathSegment } from './helpers';
 import { UnifiedProductCard } from './UnifiedProductCard';
 
 export function ProductCardStackBlock({
@@ -61,12 +62,15 @@ export function ProductCardStackBlock({
             imageUrl: product.imageUrl,
             priceQar: product.priceQar,
             status: product.status,
-            href: `${storefrontBaseHref}/p/${product.id}`,
+            href: `${storefrontBaseHref}/p/${productPathSegment(product)}`,
             createdAt: product.createdAt.toISOString(),
             isCustomizable: product.isCustomizable,
             customizationLabel: product.customizationLabel,
             sizeOptions: product.sizeOptions,
+            sizeOptionPrices: product.sizeOptionPrices,
             allowCustomSize: product.allowCustomSize,
+            variantOptions: product.variantOptions,
+            variantOptionPrices: product.variantOptionPrices,
             requiresHeightInput: product.requiresHeightInput,
             heightInputLabel: product.heightInputLabel,
             heightOptions: product.heightOptions,

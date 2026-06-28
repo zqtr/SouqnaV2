@@ -1,4 +1,5 @@
 ﻿'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useRef, useState } from 'react';
 import { upload } from '@vercel/blob/client';

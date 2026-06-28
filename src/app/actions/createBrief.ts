@@ -25,7 +25,6 @@ import {
   getPlan,
   patchPlanMeta,
   PLAN_LIMITS,
-  planUnlocksOnlinePayments,
   storefrontCapForPlan,
 } from '@/lib/billing';
 import { logEvent } from '@/lib/events';
@@ -166,11 +165,19 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
   const fawranMobile = normalizeFawranMobile(data.fawranNumber);
   const fawranCrNumber = normalizeFawranCrNumber(data.crNumber);
   const fawranCrLabel = fawranCrNumber ? `${data.fawranCrType} ${fawranCrNumber}` : '';
-  const hasPartialFawran = Boolean(data.fawranNumber.trim() || data.crNumber.trim());
-  const fawranCredential =
-    fawranMobile && fawranCrLabel ? `Mobile ${fawranMobile} · ${fawranCrLabel}` : '';
+  const wantsFawranByPhone = data.fawranMode === 'fawran_number';
+  const hasSelectedFawranValue = wantsFawranByPhone
+    ? Boolean(data.fawranNumber.trim())
+    : Boolean(data.crNumber.trim());
+  const fawranCredential = wantsFawranByPhone
+    ? fawranMobile
+      ? `Mobile ${fawranMobile}`
+      : ''
+    : fawranCrLabel
+      ? `Registration ${fawranCrLabel}`
+      : '';
 
-  if (hasPartialFawran && !fawranMobile) {
+  if (hasSelectedFawranValue && wantsFawranByPhone && !fawranMobile) {
     return {
       status: 'error',
       message: 'Fawran requires an 8-digit Qatar mobile number with +974.',
@@ -178,7 +185,7 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
     };
   }
 
-  if (hasPartialFawran && !fawranCrLabel) {
+  if (hasSelectedFawranValue && !wantsFawranByPhone && !fawranCrLabel) {
     return {
       status: 'error',
       message: 'Fawran requires a CL, ER, or IB registration number.',
@@ -203,7 +210,6 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
   // Plan-tier gates. Both run before any DB write so a founder hitting
   // their cap never gets a half-provisioned storefront.
   const callerPlan = await getPlan(userId);
-  const canAcceptOnlinePayments = planUnlocksOnlinePayments(callerPlan);
   let existingStorefrontCount: number | null = null;
 
   // 1. Template tier — block, with an upsell CTA, if the caller picked
@@ -312,9 +318,9 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
       design: 'atrium',
       palette: preset.palette,
       templateId: data.templateId as TemplateId,
-      crNumber: fawranCrLabel || null,
+      crNumber: wantsFawranByPhone ? null : fawranCrLabel || null,
       tagline: null,
-      phone: null,
+      phone: wantsFawranByPhone ? fawranMobile || null : null,
       area: null,
       hours: null,
       instagram: null,
@@ -328,7 +334,7 @@ export async function createBrief(input: CreateBriefInput): Promise<CreateBriefS
   }
 
   try {
-    const enableFawran = canAcceptOnlinePayments && fawranCredential.length > 0;
+    const enableFawran = fawranCredential.length > 0;
     await writeStorefrontCheckoutSettings(finalSlug, {
       ...DEFAULT_CHECKOUT_SETTINGS,
       paymentMethods: enableFawran ? ['fawran'] : ['cod'],

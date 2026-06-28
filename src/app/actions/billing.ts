@@ -15,14 +15,16 @@ import {
   PLANS,
   type Plan,
 } from '@/lib/billing';
-import { priceFor, type BillingCycle } from '@/lib/plans';
+import { planLabel, priceFor, type BillingCycle } from '@/lib/plans';
 import { logEvent } from '@/lib/events';
 import { env } from '@/lib/env';
 import {
+  cancelSkipCashRecurringPayment,
   createSkipCashPayment,
   getSkipCashPayment,
   hasSkipCash,
   newSkipCashTransactionId,
+  normalizeSkipCashRecurringSubscriptionId,
   normalizeSkipCashStatusId,
 } from '@/lib/skipcash';
 
@@ -52,9 +54,7 @@ export type BillingActionState =
   | { status: 'success'; plan: Plan }
   | { status: 'error'; message: string };
 
-export async function grantPlan(
-  input: z.input<typeof GrantSchema>,
-): Promise<BillingActionState> {
+export async function grantPlan(input: z.input<typeof GrantSchema>): Promise<BillingActionState> {
   const parsed = GrantSchema.safeParse(input);
   if (!parsed.success) return { status: 'error', message: 'Invalid request' };
   if (!hasDb()) return { status: 'error', message: 'Database unavailable' };
@@ -68,9 +68,7 @@ export async function grantPlan(
   // mismatched buffers).
   const a = Buffer.from(parsed.data.token);
   const b = Buffer.from(expected);
-  const equal =
-    a.length === b.length &&
-    (await import('node:crypto')).timingSafeEqual(a, b);
+  const equal = a.length === b.length && (await import('node:crypto')).timingSafeEqual(a, b);
   if (!equal) return { status: 'error', message: 'Forbidden' };
 
   const targetPlan: Plan = parsed.data.plan ?? 'atelier';
@@ -186,15 +184,32 @@ async function startSkipCashCheckout(
       phone: env.SKIPCASH_DEFAULT_PHONE,
       transactionId,
       custom1: `${userId}:${plan}:${cycle}`,
+      returnUrl: siteUrl('/account/settings/plan?skipcash=success'),
+      webhookUrl: siteUrl('/api/billing/skipcash-webhook'),
+      recurring: buildRecurringPlanInput(plan, cycle, amountQar),
     });
+    const recurringSubscriptionId = normalizeSkipCashRecurringSubscriptionId(
+      payment.recurringSubscriptionId,
+    );
 
     if (hasDb()) {
       try {
         await patchPlanMeta(userId, {
+          provider: 'skipcash',
+          subscriptionStatus: 'pending',
+          subscriptionProvider: 'skipcash',
           skipcashPaymentId: payment.id,
+          skipcashCheckoutPaymentId: payment.id,
           skipcashTransactionId: transactionId,
           skipcashPendingPlan: plan,
           skipcashPendingCycle: cycle,
+          skipcashRecurringRequested: true,
+          ...(recurringSubscriptionId
+            ? {
+                subscriptionId: recurringSubscriptionId,
+                skipcashRecurringSubscriptionId: recurringSubscriptionId,
+              }
+            : {}),
           skipcashStatus: payment.status ?? 'new',
         });
       } catch (err) {
@@ -211,14 +226,52 @@ async function startSkipCashCheckout(
         plan,
         cycle,
         paymentId: payment.id,
+        recurringSubscriptionId,
         transactionId,
         amountQar,
+        billingMode: 'recurring',
       },
     });
     return { status: 'redirect', url: payment.payUrl ?? '' };
   } catch (err) {
     console.error('[startCheckout] skipcash payment create failed', err);
-    return { status: 'error', message: 'Could not start checkout' };
+    return { status: 'error', message: checkoutFailureMessage(err) };
+  }
+}
+
+function checkoutFailureMessage(err: unknown): string {
+  if (!(err instanceof Error)) return 'Could not start checkout';
+  if (err.message.includes('Signature does not match')) {
+    return 'SkipCash rejected the checkout signature. Please try again.';
+  }
+
+  const providerMessage = extractSkipCashProviderMessage(err.message);
+  if (providerMessage) return `SkipCash rejected checkout: ${providerMessage}`;
+
+  return 'Could not start checkout';
+}
+
+function extractSkipCashProviderMessage(message: string): string | null {
+  if (!message.includes('SkipCash create payment failed')) return null;
+
+  const jsonStart = message.indexOf('{');
+  if (jsonStart === -1) return null;
+
+  try {
+    const payload = JSON.parse(message.slice(jsonStart)) as {
+      errorMessage?: unknown;
+      validationErrors?: Array<{ errorMessage?: unknown }>;
+    };
+    const validationMessage = Array.isArray(payload.validationErrors)
+      ? payload.validationErrors
+          .map((item) => (typeof item.errorMessage === 'string' ? item.errorMessage : ''))
+          .find(Boolean)
+      : null;
+    const text =
+      validationMessage ?? (typeof payload.errorMessage === 'string' ? payload.errorMessage : '');
+    return text ? text.replace(/\s+/g, ' ').trim().slice(0, 180) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -255,6 +308,9 @@ export async function pollSubscriptionStatus(
     }
     const statusId = normalizeSkipCashStatusId(payment.statusId);
     if (statusId === 2) {
+      const recurringSubscriptionId = normalizeSkipCashRecurringSubscriptionId(
+        payment.recurringSubscriptionId,
+      );
       const plan =
         meta.skipcashPendingPlan === 'starter' ||
         meta.skipcashPendingPlan === 'pro' ||
@@ -267,13 +323,26 @@ export async function pollSubscriptionStatus(
           : null;
       const before = await getPlan(userId);
       if (plan !== 'free' && before !== plan) {
+        const currentPeriodEnd = periodEndFromCycle(cycle);
         await setPlan(userId, plan, {
           provider: 'skipcash',
           paymentId: payment.id,
+          subscriptionId: recurringSubscriptionId ?? payment.id,
+          skipcashPaymentId: payment.id,
+          skipcashCheckoutPaymentId:
+            typeof meta.skipcashCheckoutPaymentId === 'string'
+              ? meta.skipcashCheckoutPaymentId
+              : payment.id,
+          ...(recurringSubscriptionId
+            ? { skipcashRecurringSubscriptionId: recurringSubscriptionId }
+            : {}),
           transactionId: payment.transactionId ?? null,
           status: payment.status ?? 'paid',
+          skipcashStatus: payment.status ?? 'paid',
+          subscriptionStatus: 'active',
           cycle,
-          currentPeriodEnd: periodEndFromCycle(cycle),
+          currentPeriodEnd,
+          nextBillingTime: currentPeriodEnd,
         });
         await recordPlanHistory({
           clerkUserId: userId,
@@ -282,7 +351,11 @@ export async function pollSubscriptionStatus(
           cycle,
           source: 'skipcash_poll',
           providerEventId: payment.id,
-          meta: { paymentId: payment.id, transactionId: payment.transactionId ?? null },
+          meta: {
+            paymentId: payment.id,
+            transactionId: payment.transactionId ?? null,
+            recurringSubscriptionId,
+          },
         });
       }
       return { status: 'active', plan };
@@ -361,8 +434,21 @@ function mapSkipCashStatus(
     case 7:
       return 'suspended';
     default:
-      return 'failed';
+      return mapStoredSubscriptionStatus(raw);
   }
+}
+
+function mapStoredSubscriptionStatus(
+  raw: number | string | undefined,
+): 'active' | 'pending' | 'cancelled' | 'suspended' | 'expired' | 'failed' {
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (!value) return 'failed';
+  if (['active', 'paid', 'success', 'succeeded', 'approved'].includes(value)) return 'active';
+  if (['new', 'pending', 'approval_pending'].includes(value)) return 'pending';
+  if (['cancelled', 'canceled'].includes(value)) return 'cancelled';
+  if (['suspended', 'refunded', 'pending_refund'].includes(value)) return 'suspended';
+  if (['expired'].includes(value)) return 'expired';
+  return 'failed';
 }
 
 /**
@@ -370,11 +456,8 @@ function mapSkipCashStatus(
  * Cached per user for 30s to avoid hammering the SkipCash API on every
  * SSE/poll tick. Audit fires only on cache miss.
  */
-export async function getSubscriptionStatus(
-  clerkUserIdArg?: string,
-): Promise<SubscriptionStatus> {
-  const userId =
-    clerkUserIdArg ?? (await auth().then((a) => a.userId)) ?? '';
+export async function getSubscriptionStatus(clerkUserIdArg?: string): Promise<SubscriptionStatus> {
+  const userId = clerkUserIdArg ?? (await auth().then((a) => a.userId)) ?? '';
   if (!userId) return { status: 'none', plan: 'free' };
 
   const cached = SUB_STATUS_CACHE.get(userId);
@@ -389,22 +472,39 @@ export async function getSubscriptionStatus(
   }
 
   const meta = await getPlanMeta(userId);
-  const subscriptionId =
-    typeof meta.skipcashPaymentId === 'string' ? meta.skipcashPaymentId : null;
+  const paymentId = typeof meta.skipcashPaymentId === 'string' ? meta.skipcashPaymentId : null;
+  const recurringSubscriptionId = normalizeSkipCashRecurringSubscriptionId(
+    meta.skipcashRecurringSubscriptionId ?? meta.subscriptionId,
+  );
+  const subscriptionId = recurringSubscriptionId ?? paymentId;
   const cycle =
-    meta.skipcashPendingCycle === 'monthly' || meta.skipcashPendingCycle === 'annual'
-      ? meta.skipcashPendingCycle
-      : null;
-  const currentPeriodEnd =
-    typeof meta.currentPeriodEnd === 'string' ? meta.currentPeriodEnd : null;
+    meta.cycle === 'monthly' || meta.cycle === 'annual'
+      ? meta.cycle
+      : meta.skipcashPendingCycle === 'monthly' || meta.skipcashPendingCycle === 'annual'
+        ? meta.skipcashPendingCycle
+        : null;
+  const storedStatus =
+    typeof meta.subscriptionStatus === 'string'
+      ? meta.subscriptionStatus
+      : typeof meta.skipcashStatus === 'string'
+        ? meta.skipcashStatus
+        : typeof meta.status === 'string'
+          ? meta.status
+          : null;
+  const currentPeriodEnd = typeof meta.currentPeriodEnd === 'string' ? meta.currentPeriodEnd : null;
+  const storedNextBillingTime =
+    typeof meta.nextBillingTime === 'string' ? meta.nextBillingTime : null;
 
   let nextBillingTime: string | null = null;
-  let lastPaymentAt: string | null = null;
-  let liveStatus: SubscriptionStatus['status'] = 'pending';
+  let lastPaymentAt =
+    typeof meta.skipcashLastPaymentAt === 'string' ? meta.skipcashLastPaymentAt : null;
+  let liveStatus: SubscriptionStatus['status'] = storedStatus
+    ? mapSkipCashStatus(storedStatus)
+    : 'pending';
 
-  if (subscriptionId && hasSkipCash()) {
+  if (!storedStatus && paymentId && hasSkipCash()) {
     try {
-      const payment = await getSkipCashPayment(subscriptionId);
+      const payment = await getSkipCashPayment(paymentId);
       liveStatus = mapSkipCashStatus(payment.statusId);
       lastPaymentAt = liveStatus === 'active' ? (payment.created ?? null) : null;
       nextBillingTime = currentPeriodEnd;
@@ -413,8 +513,10 @@ export async function getSubscriptionStatus(
       liveStatus = 'failed';
     }
   } else {
-    liveStatus = subscriptionId ? 'pending' : 'failed';
+    if (subscriptionId && !storedStatus) liveStatus = 'pending';
+    if (!subscriptionId && !storedStatus) liveStatus = 'failed';
   }
+  nextBillingTime = storedNextBillingTime ?? currentPeriodEnd;
 
   const history = await listPlanHistory(userId, 20);
   const monthlyPriceQar = priceFor(plan, 'monthly');
@@ -453,6 +555,71 @@ function periodEndFromCycle(cycle: BillingCycle | null): string | null {
   if (cycle === 'annual') end.setFullYear(end.getFullYear() + 1);
   else end.setMonth(end.getMonth() + 1);
   return end.toISOString();
+}
+
+function buildRecurringPlanInput(
+  plan: Exclude<Plan, 'free'>,
+  cycle: 'monthly' | 'annual',
+  amountQar: number,
+): NonNullable<Parameters<typeof createSkipCashPayment>[0]['recurring']> {
+  const start = new Date();
+  const end = new Date(start);
+  // SkipCash rejects end dates at or beyond the 10-year boundary.
+  // Keep Souqna subscriptions comfortably inside that provider limit.
+  end.setFullYear(end.getFullYear() + 9);
+  return {
+    planName: `Souqna ${planLabel(plan)} ${cycle === 'annual' ? 'Annual' : 'Monthly'}`,
+    frequency: '1',
+    interval: cycle === 'annual' ? 'year' : 'month',
+    startDate: dateOnly(start),
+    endDate: dateOnly(end),
+    allowedFailedAttempts: '3',
+    firstPaymentAmountQar: amountQar,
+  };
+}
+
+function dateOnly(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function siteUrl(path: string): string {
+  const base = env.NEXT_PUBLIC_SITE_URL.replace(/\/+$/u, '');
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+export type CancelSubscriptionResult = { status: 'success' } | { status: 'error'; message: string };
+
+export async function cancelMySubscription(): Promise<CancelSubscriptionResult> {
+  const { userId } = await auth();
+  if (!userId) return { status: 'error', message: 'Sign in to manage billing' };
+
+  const meta = await getPlanMeta(userId);
+  const recurringSubscriptionId = normalizeSkipCashRecurringSubscriptionId(
+    meta.skipcashRecurringSubscriptionId ?? meta.subscriptionId,
+  );
+  if (!recurringSubscriptionId) {
+    return { status: 'error', message: 'No recurring subscription is active' };
+  }
+
+  try {
+    await cancelSkipCashRecurringPayment(recurringSubscriptionId);
+    await patchPlanMeta(userId, {
+      subscriptionStatus: 'cancelled',
+      skipcashStatus: 'cancelled',
+      skipcashCancelledAt: new Date().toISOString(),
+    });
+    await logEvent({
+      kind: 'billing.subscription.cancelled',
+      funnel: 'storefront',
+      userId,
+      props: { provider: 'skipcash', recurringSubscriptionId },
+    });
+    revalidatePath('/account/settings/plan');
+    return { status: 'success' };
+  } catch (err) {
+    console.error('[cancelMySubscription] failed', err);
+    return { status: 'error', message: 'Could not cancel subscription' };
+  }
 }
 
 export async function logPaywallHit(surface: 'begin' | 'dashboard'): Promise<void> {

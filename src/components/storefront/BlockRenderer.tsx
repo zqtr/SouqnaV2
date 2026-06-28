@@ -27,6 +27,7 @@ import { MawidBlock as RawMawidBlock } from './blocks/MawidBlock';
 import { TaqimBlock as RawTaqimBlock } from './blocks/TaqimBlock';
 import { DepthShowcaseBlock } from './blocks/DepthShowcaseBlock';
 import { AuroraRibbonBlock } from './blocks/AuroraRibbonBlock';
+import { CurvedLoopBlock } from './blocks/CurvedLoopBlock';
 import {
   Showcase1Block,
   Showcase2Block,
@@ -43,6 +44,20 @@ import {
   Ecommerce6Block,
   Ecommerce7Block,
 } from './blocks/EcommerceBlocks';
+import {
+  ShadcnCategoriesBlock,
+  ShadcnFooterBlock,
+  ShadcnHeroBlock,
+  ShadcnNavbarBlock,
+  ShadcnOfferModalBlock,
+  ShadcnOrderSummaryBlock,
+  ShadcnProductCardBlock,
+  ShadcnProductDetailBlock,
+  ShadcnProductListBlock,
+  ShadcnQuickViewBlock,
+  ShadcnReviewsBlock,
+  ShadcnTrustStripBlock,
+} from './blocks/ShadcnCommerceBlocks';
 import { BlockBackgroundFrame } from './blocks/BlockBackgroundFrame';
 
 // Async server component → `Promise<ReactNode>` return type isn't yet
@@ -280,6 +295,8 @@ function renderBlock(block: Block, ctx: BlockContext): React.ReactNode {
       return <DepthShowcaseBlock block={block as never} ctx={ctx} />;
     case 'auroraRibbon':
       return <AuroraRibbonBlock block={block as never} ctx={ctx} />;
+    case 'curvedLoop':
+      return <CurvedLoopBlock block={block as never} ctx={ctx} />;
     case 'showcase1':
       return <Showcase1Block block={block as never} ctx={ctx} />;
     case 'showcase2':
@@ -304,6 +321,30 @@ function renderBlock(block: Block, ctx: BlockContext): React.ReactNode {
       return <Ecommerce6Block block={block as never} ctx={ctx} />;
     case 'ecommerce7':
       return <Ecommerce7Block block={block as never} ctx={ctx} />;
+    case 'shadcnNavbar':
+      return <ShadcnNavbarBlock block={block as never} ctx={ctx} />;
+    case 'shadcnHero':
+      return <ShadcnHeroBlock block={block as never} ctx={ctx} />;
+    case 'shadcnTrustStrip':
+      return <ShadcnTrustStripBlock block={block as never} ctx={ctx} />;
+    case 'shadcnCategories':
+      return <ShadcnCategoriesBlock block={block as never} ctx={ctx} />;
+    case 'shadcnProductCard':
+      return <ShadcnProductCardBlock block={block as never} ctx={ctx} />;
+    case 'shadcnProductList':
+      return <ShadcnProductListBlock block={block as never} ctx={ctx} />;
+    case 'shadcnProductDetail':
+      return <ShadcnProductDetailBlock block={block as never} ctx={ctx} />;
+    case 'shadcnQuickView':
+      return <ShadcnQuickViewBlock block={block as never} ctx={ctx} />;
+    case 'shadcnReviews':
+      return <ShadcnReviewsBlock block={block as never} ctx={ctx} />;
+    case 'shadcnOrderSummary':
+      return <ShadcnOrderSummaryBlock block={block as never} ctx={ctx} />;
+    case 'shadcnOfferModal':
+      return <ShadcnOfferModalBlock block={block as never} ctx={ctx} />;
+    case 'shadcnFooter':
+      return <ShadcnFooterBlock block={block as never} ctx={ctx} />;
     default:
       return null;
   }

@@ -40,6 +40,11 @@ export function readThemeCookieFromHeader(cookieHeader: string | null | undefine
   return match && isTheme(match[1]) ? match[1] : null;
 }
 
+function themeInitScriptSource(forcedTheme?: Theme | null): string {
+  const forced = forcedTheme ? `'${forcedTheme}'` : 'null';
+  return `(function(){try{var k='souqna-theme';var d=document.documentElement;var forced=${forced};if(forced){d.setAttribute('data-theme',forced);d.style.colorScheme=forced;return;}var c=document.cookie.match(/(?:^|;\\s*)souqna-theme=(light|dark)/);var t=c?c[1]:null;if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.cookie=k+'='+t+';path=/;max-age=31536000;SameSite=Lax';}d.setAttribute('data-theme',t);d.style.colorScheme=t;window.addEventListener('storage',function(e){if(e.key==='souqna-theme-bcast'&&(e.newValue==='light'||e.newValue==='dark')){d.setAttribute('data-theme',e.newValue);d.style.colorScheme=e.newValue;}});}catch(_){}})();`;
+}
+
 /**
  * Inline `<head>` script. Runs before paint. Keeps the document's
  * `data-theme` attribute synced with the cookie / system preference.
@@ -47,4 +52,8 @@ export function readThemeCookieFromHeader(cookieHeader: string | null | undefine
  * Also listens for `storage` events so toggling theme in one tab
  * propagates instantly to the other tabs of the same origin.
  */
-export const THEME_INIT_SCRIPT = `(function(){try{var k='souqna-theme';var d=document.documentElement;var c=document.cookie.match(/(?:^|;\\s*)souqna-theme=(light|dark)/);var t=c?c[1]:null;if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.cookie=k+'='+t+';path=/;max-age=31536000;SameSite=Lax';}d.setAttribute('data-theme',t);d.style.colorScheme=t;window.addEventListener('storage',function(e){if(e.key==='souqna-theme-bcast'&&(e.newValue==='light'||e.newValue==='dark')){d.setAttribute('data-theme',e.newValue);d.style.colorScheme=e.newValue;}});}catch(_){}})();`;
+export const THEME_INIT_SCRIPT = themeInitScriptSource();
+
+export function getThemeInitScript(forcedTheme?: Theme | null): string {
+  return forcedTheme ? themeInitScriptSource(forcedTheme) : THEME_INIT_SCRIPT;
+}

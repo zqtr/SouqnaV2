@@ -1,4 +1,6 @@
 import type { PaletteId } from '@/lib/palettes';
+import type { CommerceFilterGroup, CommerceProductSource, CommerceTab } from './commerce';
+import type { StorefrontChromeConfig } from '@/lib/storefrontChrome';
 
 /**
  * The full block taxonomy V1. Each enum member maps 1:1 to:
@@ -53,34 +55,60 @@ export const BLOCK_TYPES = [
   // republishing the page (same model as `drop`).
   'mawid',
   'taqim',
-  /** Parallax depth-card (React Bits) — use at most one per page. */
+  /** Parallax depth-card — use at most one per page. */
   'depthShowcase',
-  /** Narrow aurora gradient ribbon (React Bits WebGL) — use sparingly. */
+  /** Narrow aurora gradient ribbon — use sparingly. */
   'auroraRibbon',
-  /** React Bits Pro compact active-image showcase switcher. */
+  /** Curved loop marquee text. */
+  'curvedLoop',
+  /** Premium compact active-image showcase switcher. */
   'showcase1',
-  /** React Bits Pro draggable horizontal showcase carousel. */
+  /** Premium draggable horizontal showcase carousel. */
   'showcase2',
-  /** React Bits Pro 3D triangular showcase carousel. */
+  /** Premium 3D triangular showcase carousel. */
   'showcase3',
-  /** React Bits Pro filterable project showcase grid. */
+  /** Premium filterable project showcase grid. */
   'showcase4',
-  /** React Bits Pro tabbed creator/team showcase. */
+  /** Premium tabbed creator/team showcase. */
   'showcase5',
-  /** React Bits Pro ecommerce product gallery. */
+  /** Premium ecommerce product gallery. */
   'ecommerce1',
-  /** React Bits Pro ecommerce filterable product grid. */
+  /** Premium ecommerce filterable product grid. */
   'ecommerce2',
-  /** React Bits Pro ecommerce product color detail. */
+  /** Premium ecommerce product color detail. */
   'ecommerce3',
-  /** React Bits Pro ecommerce limited drop product. */
+  /** Premium ecommerce limited drop product. */
   'ecommerce4',
-  /** React Bits Pro ecommerce editorial shelf. */
+  /** Premium ecommerce editorial shelf. */
   'ecommerce5',
-  /** React Bits Pro ecommerce category shop. */
+  /** Premium ecommerce category shop. */
   'ecommerce6',
-  /** React Bits Pro ecommerce category tile grid. */
+  /** Premium ecommerce category tile grid. */
   'ecommerce7',
+  /** Souqna Pro+/Max+ storefront navbar treatment. */
+  'shadcnNavbar',
+  /** Souqna Pro+/Max+ ecommerce hero family. */
+  'shadcnHero',
+  /** Souqna Pro+/Max+ trust strip family. */
+  'shadcnTrustStrip',
+  /** Souqna Pro+/Max+ category browsing family. */
+  'shadcnCategories',
+  /** Souqna Pro+/Max+ product card family. */
+  'shadcnProductCard',
+  /** Souqna Pro+/Max+ product list family. */
+  'shadcnProductList',
+  /** Souqna Pro+/Max+ product detail family. */
+  'shadcnProductDetail',
+  /** Souqna Pro+/Max+ quick-view family. */
+  'shadcnQuickView',
+  /** Souqna Pro+/Max+ reviews family. */
+  'shadcnReviews',
+  /** Souqna Pro+/Max+ order-summary family. */
+  'shadcnOrderSummary',
+  /** Souqna Pro+/Max+ offer modal family. */
+  'shadcnOfferModal',
+  /** Souqna Pro+/Max+ ecommerce footer family. */
+  'shadcnFooter',
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
@@ -104,11 +132,11 @@ export type BlockStyle = {
   backgroundCssSize?: string;
   /** Animated/premium background surface. Free in Souqna; never plan-gated. */
   backgroundEffect?: BackgroundEffect;
-  /** React Bits text motion treatment, kept editable as Souqna JSON. */
+  /** Text motion treatment, kept editable as Souqna JSON. */
   textEffect?: TextEffect;
-  /** React Bits card/depth treatment for commerce and editorial cards. */
+  /** Card/depth treatment for commerce and editorial cards. */
   cardEffect?: CardEffect;
-  /** React Bits gallery/layout treatment for image collections. */
+  /** Gallery/layout treatment for image collections. */
   galleryEffect?: GalleryEffect;
   align?: 'start' | 'center' | 'end';
   /**
@@ -320,6 +348,12 @@ export type ThemeOverrides = {
    * Only affects the public site; the dashboard always honours the owner's pick.
    */
   themeBehaviour?: 'auto' | 'light' | 'dark';
+  /**
+   * Storefront-wide buyer chrome selected from Site settings. This controls
+   * the public nav/footer/sidebar/cart treatments without needing per-page
+   * blocks or a schema migration.
+   */
+  commerceChrome?: StorefrontChromeConfig;
   seo?: {
     title?: string;
     description?: string;
@@ -706,6 +740,9 @@ export type EcommerceProduct = {
   isCustomizable?: boolean;
   customizationLabel?: string | null;
   allowCustomSize?: boolean;
+  variantOptions?: string[];
+  sizeOptionPrices?: Array<{ label: string; priceDeltaQar: number }>;
+  variantOptionPrices?: Array<{ label: string; priceDeltaQar: number }>;
   requiresHeightInput?: boolean;
   heightInputLabel?: string | null;
   heightOptions?: string[];
@@ -719,6 +756,81 @@ export type EcommerceCategory = {
   href?: string;
 };
 
+export type CommerceCardConfig = {
+  showCategory?: boolean;
+  showBrand?: boolean;
+  showDescription?: boolean;
+  showWishlist?: boolean;
+  showOptions?: boolean;
+  showSalePrice?: boolean;
+  ctaMode?: 'direct_add' | 'quick_view' | 'product_page';
+  ctaStyle?: 'solid' | 'outline' | 'ghost';
+};
+
+export type FilterableShopConfig = {
+  productSource?: CommerceProductSource;
+  filters?: {
+    enabled?: boolean;
+    layout?: 'sidebar' | 'topbar';
+    groups?: CommerceFilterGroup[];
+    autoGenerate?: boolean;
+    hideEmptyOptions?: boolean;
+    showSidebar?: boolean;
+    showMobileDrawer?: boolean;
+  };
+  card?: CommerceCardConfig;
+};
+
+export type TabbedProductsConfig = {
+  tabs?: CommerceTab[];
+  allTab?: {
+    enabled?: boolean;
+    mode?: 'combined_tabs' | 'all_products' | 'manual';
+    productIds?: string[];
+  };
+  emptyTabBehavior?: 'hide' | 'empty_state' | 'fallback_all';
+  card?: CommerceCardConfig;
+};
+
+export type VisualCategoryTile = {
+  id: string;
+  labelEn?: string;
+  labelAr?: string;
+  eyebrowEn?: string;
+  eyebrowAr?: string;
+  imageUrl?: string;
+  badge?: {
+    labelEn?: string;
+    labelAr?: string;
+    tone?: 'maroon' | 'gold' | 'black' | 'green' | 'red';
+    position?: 'top-left' | 'top-right' | 'floating' | 'inline';
+  };
+  destination?: {
+    type?: 'category' | 'tag' | 'manual_products' | 'page' | 'external';
+    category?: string | null;
+    tag?: string | null;
+    productIds?: string[];
+    pageSlug?: string | null;
+    url?: string | null;
+  };
+};
+
+export type VisualCategoryTilesConfig = {
+  tabs?: Array<{
+    id: string;
+    labelEn?: string;
+    labelAr?: string;
+    tileIds?: string[];
+  }>;
+  tiles?: VisualCategoryTile[];
+  behavior?: {
+    showTabs?: boolean;
+    clickAction?: 'navigate' | 'filter_products' | 'scroll_to_products' | 'open_collection_drawer';
+    overlayStyle?: 'dark_gradient' | 'light_overlay' | 'minimal' | 'framed';
+    allTab?: 'show_all' | 'combined_tabs' | 'hidden';
+  };
+};
+
 export type EcommerceBlockProps = {
   eyebrow?: string;
   title?: string;
@@ -728,6 +840,10 @@ export type EcommerceBlockProps = {
   products?: EcommerceProduct[];
   categories?: EcommerceCategory[];
   tabs?: string[];
+  productSource?: CommerceProductSource;
+  filterable?: FilterableShopConfig;
+  tabbed?: TabbedProductsConfig;
+  tilesConfig?: VisualCategoryTilesConfig;
 };
 
 export type Ecommerce1Props = EcommerceBlockProps;
@@ -737,6 +853,110 @@ export type Ecommerce4Props = EcommerceBlockProps;
 export type Ecommerce5Props = EcommerceBlockProps;
 export type Ecommerce6Props = EcommerceBlockProps;
 export type Ecommerce7Props = EcommerceBlockProps;
+
+export const SHADCN_NAVBAR_VARIANTS = ['ecommerce-navbar2'] as const;
+export const SHADCN_HERO_VARIANTS = ['ecommerce-hero1', 'ecommerce-hero3', 'ecommerce-hero6'] as const;
+export const SHADCN_TRUST_STRIP_VARIANTS = ['trust-strip1', 'trust-strip3'] as const;
+export const SHADCN_CATEGORY_VARIANTS = [
+  'product-categories2',
+  'product-categories4',
+  'product-categories5',
+] as const;
+export const SHADCN_PRODUCT_CARD_VARIANTS = ['product-card10', 'product-card24'] as const;
+export const SHADCN_PRODUCT_LIST_VARIANTS = [
+  'product-list2',
+  'product-list3',
+  'product-list4',
+  'product-list5',
+  'product-list6',
+  'product-list7',
+] as const;
+export const SHADCN_PRODUCT_DETAIL_VARIANTS = [
+  'product-detail2',
+  'product-detail3',
+  'product-detail4',
+  'product-detail6',
+  'product-detail9',
+] as const;
+export const SHADCN_QUICK_VIEW_VARIANTS = ['product-quick-view7', 'product-quick-view8'] as const;
+export const SHADCN_REVIEWS_VARIANTS = ['reviews2', 'reviews9', 'reviews23'] as const;
+export const SHADCN_ORDER_SUMMARY_VARIANTS = ['order-summary1', 'order-summary2'] as const;
+export const SHADCN_OFFER_MODAL_VARIANTS = ['offer-modal1', 'offer-modal5'] as const;
+export const SHADCN_FOOTER_VARIANTS = [
+  'ecommerce-footer1',
+  'ecommerce-footer2',
+  'ecommerce-footer18',
+] as const;
+
+export type ShadcnNavbarVariant = (typeof SHADCN_NAVBAR_VARIANTS)[number];
+export type ShadcnHeroVariant = (typeof SHADCN_HERO_VARIANTS)[number];
+export type ShadcnTrustStripVariant = (typeof SHADCN_TRUST_STRIP_VARIANTS)[number];
+export type ShadcnCategoryVariant = (typeof SHADCN_CATEGORY_VARIANTS)[number];
+export type ShadcnProductCardVariant = (typeof SHADCN_PRODUCT_CARD_VARIANTS)[number];
+export type ShadcnProductListVariant = (typeof SHADCN_PRODUCT_LIST_VARIANTS)[number];
+export type ShadcnProductDetailVariant = (typeof SHADCN_PRODUCT_DETAIL_VARIANTS)[number];
+export type ShadcnQuickViewVariant = (typeof SHADCN_QUICK_VIEW_VARIANTS)[number];
+export type ShadcnReviewsVariant = (typeof SHADCN_REVIEWS_VARIANTS)[number];
+export type ShadcnOrderSummaryVariant = (typeof SHADCN_ORDER_SUMMARY_VARIANTS)[number];
+export type ShadcnOfferModalVariant = (typeof SHADCN_OFFER_MODAL_VARIANTS)[number];
+export type ShadcnFooterVariant = (typeof SHADCN_FOOTER_VARIANTS)[number];
+
+export type ShadcnCommerceBaseProps = EcommerceBlockProps & {
+  kicker?: string;
+  note?: string;
+  density?: 'compact' | 'balanced' | 'editorial';
+  tone?: 'sand' | 'maroon' | 'charcoal' | 'gold';
+};
+
+export type ShadcnNavbarProps = ShadcnCommerceBaseProps & {
+  variant: ShadcnNavbarVariant;
+  sticky?: boolean;
+  announcement?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+  showSearch?: boolean;
+  showPolicyLinks?: boolean;
+  cartLabel?: string;
+};
+export type ShadcnHeroProps = ShadcnCommerceBaseProps & { variant: ShadcnHeroVariant };
+export type ShadcnTrustStripProps = ShadcnCommerceBaseProps & {
+  variant: ShadcnTrustStripVariant;
+  metrics?: Array<{ labelEn?: string; labelAr?: string; value?: string; icon?: string }>;
+};
+export type ShadcnCategoriesProps = ShadcnCommerceBaseProps & { variant: ShadcnCategoryVariant };
+export type ShadcnProductCardProps = ShadcnCommerceBaseProps & { variant: ShadcnProductCardVariant };
+export type ShadcnProductListProps = ShadcnCommerceBaseProps & { variant: ShadcnProductListVariant };
+export type ShadcnProductDetailProps = ShadcnCommerceBaseProps & {
+  variant: ShadcnProductDetailVariant;
+  productId?: string;
+};
+export type ShadcnQuickViewProps = ShadcnCommerceBaseProps & {
+  variant: ShadcnQuickViewVariant;
+  productId?: string;
+};
+export type ShadcnReviewsProps = ShadcnCommerceBaseProps & {
+  variant: ShadcnReviewsVariant;
+  reviews?: Array<{
+    nameEn?: string;
+    nameAr?: string;
+    quoteEn?: string;
+    quoteAr?: string;
+    rating?: number;
+    productId?: string;
+  }>;
+};
+export type ShadcnOrderSummaryProps = ShadcnCommerceBaseProps & {
+  variant: ShadcnOrderSummaryVariant;
+};
+export type ShadcnOfferModalProps = ShadcnCommerceBaseProps & {
+  variant: ShadcnOfferModalVariant;
+  discountLabel?: string;
+  delayMs?: number;
+};
+export type ShadcnFooterProps = ShadcnCommerceBaseProps & {
+  variant: ShadcnFooterVariant;
+  showNewsletter?: boolean;
+};
 
 /**
  * Limited-edition / timed-drop block, owned by the `drop-manager`
@@ -946,6 +1166,22 @@ export type AuroraRibbonProps = {
   brightness?: number;
 };
 
+export type CurvedLoopProps = {
+  /** Text rendered repeatedly along the animated curve. */
+  marqueeText: string;
+  /** Animation speed in px per frame. */
+  speed?: number;
+  /** Curve depth. The renderer scales this down on tablet/mobile. */
+  curveAmount?: number;
+  direction?: 'left' | 'right';
+  /** When true, visitors can drag the loop and reverse direction. */
+  interactive?: boolean;
+  /** Visual scale for the text band. */
+  size?: 'compact' | 'standard' | 'hero';
+  /** Souqna palette tone for the text. */
+  tone?: 'ink' | 'accent' | 'gold' | 'muted';
+};
+
 /** Parallax marketing card — requires a real image URL for depth layers. */
 export type DepthShowcaseProps = {
   imageUrl: string;
@@ -987,6 +1223,7 @@ export type BlockPropsByType = {
   taqim: TaqimBlockProps;
   depthShowcase: DepthShowcaseProps;
   auroraRibbon: AuroraRibbonProps;
+  curvedLoop: CurvedLoopProps;
   showcase1: Showcase1Props;
   showcase2: Showcase2Props;
   showcase3: Showcase3Props;
@@ -999,6 +1236,18 @@ export type BlockPropsByType = {
   ecommerce5: Ecommerce5Props;
   ecommerce6: Ecommerce6Props;
   ecommerce7: Ecommerce7Props;
+  shadcnNavbar: ShadcnNavbarProps;
+  shadcnHero: ShadcnHeroProps;
+  shadcnTrustStrip: ShadcnTrustStripProps;
+  shadcnCategories: ShadcnCategoriesProps;
+  shadcnProductCard: ShadcnProductCardProps;
+  shadcnProductList: ShadcnProductListProps;
+  shadcnProductDetail: ShadcnProductDetailProps;
+  shadcnQuickView: ShadcnQuickViewProps;
+  shadcnReviews: ShadcnReviewsProps;
+  shadcnOrderSummary: ShadcnOrderSummaryProps;
+  shadcnOfferModal: ShadcnOfferModalProps;
+  shadcnFooter: ShadcnFooterProps;
 };
 
 /**
@@ -1047,4 +1296,41 @@ export type TaqimBlockProps = {
   /** Optional in-block override of the headline; falls back to the
    *  bundle's own bilingual title. */
   heading?: string;
+  /** Builder-authored bundle with real product IDs and existing cart actions. */
+  bundle?: {
+    titleEn?: string;
+    titleAr?: string;
+    badge?: {
+      labelEn?: string;
+      labelAr?: string;
+      tone?: 'maroon' | 'gold' | 'black' | 'green' | 'red';
+      position?: 'top-left' | 'top-right' | 'floating' | 'inline';
+    };
+    items?: Array<{
+      productId: string;
+      required?: boolean;
+      defaultOptionValue?: string | null;
+      buyerCanChooseOption?: boolean;
+      badgeEn?: string;
+      badgeAr?: string;
+    }>;
+    pricing?: {
+      mode?:
+        | 'auto_total'
+        | 'percent_discount'
+        | 'fixed_discount'
+        | 'fixed_bundle_price'
+        | 'display_only';
+      percentOff?: number | null;
+      fixedDiscountQar?: number | null;
+      fixedBundlePriceQar?: number | null;
+      showSavings?: boolean;
+    };
+    cta?: {
+      mode?: 'add_all' | 'add_selected';
+      labelEn?: string;
+      labelAr?: string;
+      showPerProductButtons?: boolean;
+    };
+  };
 };

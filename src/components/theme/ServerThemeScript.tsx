@@ -1,5 +1,5 @@
 import { cookies, headers } from 'next/headers';
-import { THEME_COOKIE, THEME_INIT_SCRIPT, type Theme, isTheme } from '@/lib/theme';
+import { THEME_COOKIE, getThemeInitScript, type Theme, isTheme } from '@/lib/theme';
 
 /**
  * Server-only helper that reads the theme cookie. Falls back to `'light'`
@@ -36,11 +36,11 @@ export async function getServerTheme(): Promise<Theme> {
  * `<head>` (or just inside `<body>` before any UI) in every document
  * shell so first paint is correct.
  */
-export function ThemeInitScript() {
+export function ThemeInitScript({ forcedTheme = null }: { forcedTheme?: Theme | null }) {
   return (
     <script
       // eslint-disable-next-line react/no-danger
-      dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+      dangerouslySetInnerHTML={{ __html: getThemeInitScript(forcedTheme) }}
     />
   );
 }
