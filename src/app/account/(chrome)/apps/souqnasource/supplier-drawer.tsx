@@ -1,7 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
 import { getSupplierForBrowse } from '@/app/actions/souqnasource';
 import type { Supplier } from '@/lib/apps/souqnasource/types';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 export function SupplierDrawer({
   supplierId,
@@ -54,24 +57,16 @@ export function SupplierDrawer({
             marginBottom: 12,
           }}
         >
-          <button
+          <Button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 999,
-              background: 'transparent',
-              color: 'var(--ink-muted)',
-              border: '1px solid var(--surface-rule)',
-              cursor: 'pointer',
-              fontSize: 14,
-              lineHeight: 1,
-            }}
+            variant="outline"
+            size="icon-sm"
+            className="rounded-md border-[color:var(--surface-rule)] bg-[color:var(--surface-bg)] text-[color:var(--ink-muted)] hover:bg-[color:var(--surface-elevated)] hover:text-[color:var(--ink-strong)]"
           >
-            ✕
-          </button>
+            <X aria-hidden="true" />
+          </Button>
         </header>
 
         {s ? (
@@ -136,19 +131,12 @@ export function SupplierDrawer({
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        padding: '3px 10px',
-        borderRadius: 999,
-        background: 'color-mix(in srgb, var(--ink-strong) 8%, transparent)',
-        color: 'var(--ink-strong)',
-        textTransform: 'lowercase',
-      }}
+    <Badge
+      variant="outline"
+      className="rounded-md border-[color:var(--surface-rule)] bg-[color:color-mix(in_srgb,var(--ink-strong)_6%,transparent)] px-2 py-1 text-[11px] font-medium lowercase text-[color:var(--ink-strong)]"
     >
       {children}
-    </span>
+    </Badge>
   );
 }
 

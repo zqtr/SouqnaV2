@@ -2,8 +2,11 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { Trash2 } from 'lucide-react';
 import { Modal } from '@/components/admin/Modal';
 import { deleteCategory } from '@/app/actions/categories';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * Two-step delete affordance for a category. Opens a small confirm
@@ -45,24 +48,16 @@ export function CategoryDeleteButton({
 
   return (
     <>
-      <button
+      <Button
         type="button"
         onClick={() => setOpen(true)}
-        style={{
-          fontSize: 12,
-          fontFamily: 'var(--font-mono)',
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          padding: '6px 12px',
-          border: '1px solid var(--surface-rule-strong)',
-          borderRadius: 999,
-          color: 'var(--ink-muted)',
-          background: 'transparent',
-          cursor: 'pointer',
-        }}
+        variant="outline"
+        size="sm"
+        className="h-8 rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] px-3 text-[color:var(--color-maroon,#8b3a3a)] hover:bg-[color:color-mix(in_srgb,var(--color-maroon,#8b3a3a)_8%,transparent)] hover:text-[color:var(--color-maroon,#8b3a3a)]"
       >
-        Delete
-      </button>
+        <Trash2 data-icon="inline-start" />
+        Remove
+      </Button>
       <Modal
         open={open}
         onClose={() => setOpen(false)}
@@ -76,25 +71,23 @@ export function CategoryDeleteButton({
         dismissOnBackdrop={false}
         footer={
           <>
-            <button
+            <Button
               type="button"
               onClick={() => setOpen(false)}
-              style={ghostButton}
+              variant="outline"
+              className="rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-elevated)]"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={handleDelete}
               disabled={pending}
-              style={{
-                ...dangerButton,
-                opacity: pending ? 0.55 : 1,
-                cursor: pending ? 'default' : 'pointer',
-              }}
+              className="rounded-md bg-[color:var(--color-maroon,#8b3a3a)] text-white hover:bg-[color:color-mix(in_srgb,var(--color-maroon,#8b3a3a)_88%,black)]"
             >
-              {pending ? 'Deleting…' : 'Delete category'}
-            </button>
+              {pending ? <Spinner data-icon="inline-start" /> : <Trash2 data-icon="inline-start" />}
+              {pending ? 'Removing...' : 'Remove category'}
+            </Button>
           </>
         }
       >
@@ -127,27 +120,3 @@ export function CategoryDeleteButton({
     </>
   );
 }
-
-const ghostButton: React.CSSProperties = {
-  padding: '10px 16px',
-  borderRadius: 999,
-  border: '1px solid var(--surface-rule-strong)',
-  background: 'transparent',
-  color: 'var(--ink-strong)',
-  fontFamily: 'var(--font-mono)',
-  fontSize: 12,
-  letterSpacing: '0.04em',
-  cursor: 'pointer',
-};
-
-const dangerButton: React.CSSProperties = {
-  padding: '10px 18px',
-  borderRadius: 999,
-  border: 'none',
-  background: 'var(--accent)',
-  color: 'var(--ink-on-accent)',
-  fontFamily: 'var(--font-mono)',
-  fontSize: 12,
-  letterSpacing: '0.04em',
-  cursor: 'pointer',
-};

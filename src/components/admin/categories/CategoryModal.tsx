@@ -1,7 +1,8 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { Check, LoaderCircle } from 'lucide-react';
 import { Modal } from '@/components/admin/Modal';
 import { AdminUploadField } from '@/components/admin/AdminUploadField';
 import {
@@ -11,6 +12,7 @@ import {
 } from '@/app/actions/categories';
 import type { Category } from '@/lib/categories';
 import { slugify } from '@/lib/categories';
+import { Button } from '@/components/ui/button';
 
 /**
  * Centered-modal editor for categories. Reused for both create and edit
@@ -55,7 +57,6 @@ function defaultsFrom(initial?: Category): FormState {
     imageUrl: initial.imageUrl ?? '',
   };
 }
-
 export function CategoryModal({
   open,
   mode,
@@ -120,30 +121,31 @@ export function CategoryModal({
       size="md"
       footer={
         <>
-          <button
+          <Button
             type="button"
             onClick={close}
-            style={ghostButton}
+            variant="outline"
+            className="rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-elevated)]"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
             form="category-form"
             disabled={pending || form.name.trim() === ''}
-            style={{
-              ...primaryButton,
-              opacity: pending || form.name.trim() === '' ? 0.55 : 1,
-              cursor:
-                pending || form.name.trim() === '' ? 'default' : 'pointer',
-            }}
+            className="rounded-md bg-[color:var(--ink-strong)] text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]"
           >
+            {pending ? (
+              <LoaderCircle data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <Check data-icon="inline-start" />
+            )}
             {pending
-              ? 'Saving…'
+              ? 'Saving...'
               : mode === 'create'
                 ? 'Create category'
                 : 'Save changes'}
-          </button>
+          </Button>
         </>
       }
     >
@@ -209,7 +211,6 @@ export function CategoryModal({
     </Modal>
   );
 }
-
 function FormLabel({ children }: { children: React.ReactNode }) {
   return (
     <label
@@ -279,7 +280,6 @@ function Field({
     </div>
   );
 }
-
 function TextArea({
   label,
   value,
@@ -317,27 +317,3 @@ function TextArea({
     </div>
   );
 }
-
-const ghostButton: React.CSSProperties = {
-  padding: '10px 16px',
-  borderRadius: 999,
-  border: '1px solid var(--surface-rule-strong)',
-  background: 'transparent',
-  color: 'var(--ink-strong)',
-  fontFamily: 'var(--font-mono)',
-  fontSize: 12,
-  letterSpacing: '0.04em',
-  cursor: 'pointer',
-};
-
-const primaryButton: React.CSSProperties = {
-  padding: '10px 18px',
-  borderRadius: 999,
-  border: 'none',
-  background: 'var(--admin-accent)',
-  color: 'var(--ink-on-gold)',
-  fontFamily: 'var(--font-mono)',
-  fontSize: 12,
-  letterSpacing: '0.04em',
-  cursor: 'pointer',
-};

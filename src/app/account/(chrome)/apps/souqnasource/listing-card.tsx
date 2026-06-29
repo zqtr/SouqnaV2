@@ -2,10 +2,12 @@
 /* eslint-disable @next/next/no-img-element */
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { FileText, Info, ShoppingBag } from 'lucide-react';
 import type { Listing } from '@/lib/apps/souqnasource/types';
 import { ImportModal } from './import-modal';
 import { QuoteModal } from './quote-modal';
 import { SupplierDrawer } from './supplier-drawer';
+import { Button } from '@/components/ui/button';
 
 export function ListingCard({
   listing,
@@ -101,43 +103,39 @@ export function ListingCard({
           ) : null}
         </div>
 
-        <button
+        <Button
           type="button"
           onClick={() => setOpenSupplier(true)}
-          style={{
-            alignSelf: 'flex-start',
-            padding: 0,
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--ink-muted)',
-            fontSize: 12,
-            fontFamily: 'var(--font-mono)',
-            letterSpacing: '0.04em',
-            textDecoration: 'underline',
-            textUnderlineOffset: 3,
-            cursor: 'pointer',
-          }}
+          variant="ghost"
+          size="xs"
+          className="h-6 self-start rounded-md px-1.5 text-[12px] text-[color:var(--ink-muted)] hover:bg-[color:var(--surface-bg)] hover:text-[color:var(--ink-strong)]"
         >
+          <Info data-icon="inline-start" />
           {t('trust')}: —
-        </button>
+        </Button>
 
         <div style={{ marginTop: 8 }}>
           {isPriced ? (
-            <button
+            <Button
               type="button"
               onClick={() => setOpenImport(true)}
-              style={primaryBtn}
+              size="sm"
+              className="h-8 rounded-md bg-[color:var(--ink-strong)] px-3 text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]"
             >
+              <ShoppingBag data-icon="inline-start" />
               {t('addToStore')}
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               type="button"
               onClick={() => setOpenQuote(true)}
-              style={secondaryBtn}
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] px-3 text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-elevated)]"
             >
+              <FileText data-icon="inline-start" />
               {t('getQuote')}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -169,29 +167,3 @@ export function ListingCard({
     </article>
   );
 }
-
-const primaryBtn: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '7px 14px',
-  borderRadius: 8,
-  background: 'var(--ink-strong)',
-  color: 'var(--surface-bg)',
-  fontSize: 13,
-  fontWeight: 500,
-  border: 'none',
-  cursor: 'pointer',
-};
-
-const secondaryBtn: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '7px 14px',
-  borderRadius: 8,
-  background: 'transparent',
-  color: 'var(--ink-strong)',
-  fontSize: 13,
-  fontWeight: 500,
-  border: '1px solid var(--surface-rule)',
-  cursor: 'pointer',
-};

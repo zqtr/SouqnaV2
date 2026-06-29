@@ -360,7 +360,7 @@ function ProductCard({ product: p, locale }: { product: ProductWithStorefront; l
             >
               {p.title}
             </a>
-            <ProductStatusBadge status={p.status} locale={locale} />
+            <ProductInventoryBadge product={p} locale={locale} />
           </div>
           <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground">
             {p.pricingMode === 'monthly_payment' && p.monthlyPriceQar !== null ? (
@@ -401,14 +401,6 @@ function ProductCard({ product: p, locale }: { product: ProductWithStorefront; l
               <>
                 <Sep />
                 <span>{t('Custom options')}</span>
-              </>
-            ) : null}
-            {p.stock > 0 ? (
-              <>
-                <Sep />
-                <span>
-                  {p.stock.toLocaleString(locale === 'ar' ? 'ar-QA' : 'en-US')} {t('in stock')}
-                </span>
               </>
             ) : null}
           </div>
@@ -606,41 +598,47 @@ function Chip({
 // Status badge + small bits
 // ---------------------------------------------------------------------------
 
-function ProductStatusBadge({
-  status,
+function ProductInventoryBadge({
+  product,
   locale,
 }: {
-  status: 'active' | 'draft' | 'sold_out';
+  product: ProductWithStorefront;
   locale?: string;
 }) {
-  const map: Record<typeof status, { label: string; className: string; dotClassName: string }> = {
-    active: {
-      label: 'Live',
-      className:
-        'border-[#c8a45d]/35 bg-[#f4ead2]/70 text-[#5f4a1f] dark:border-[#c8a45d]/40 dark:bg-[#c8a45d]/10 dark:text-[#f3db9d]',
-      dotClassName: 'bg-[#c8a45d]',
-    },
-    draft: {
-      label: 'Draft',
-      className: 'border-border bg-muted/40 text-muted-foreground',
-      dotClassName: 'bg-muted-foreground/55',
-    },
-    sold_out: {
-      label: 'Sold out',
-      className: 'border-red-600/30 bg-red-500/10 text-red-700 dark:text-red-400',
-      dotClassName: 'bg-red-500',
-    },
-  };
-  const m = map[status];
+  const numberLocale = locale === 'ar' ? 'ar-QA' : 'en-US';
+  const stock = product.status === 'sold_out' ? 0 : Math.max(0, Math.floor(product.stock));
+  const remainingLabel = locale === 'ar' ? 'متبقي' : 'remaining';
+  const total =
+    product.maxOrderQuantity !== null && product.maxOrderQuantity > stock
+      ? Math.floor(product.maxOrderQuantity)
+      : null;
+  const label =
+    product.status === 'draft'
+      ? adminPhrase(locale, 'Draft')
+      : `${stock.toLocaleString(numberLocale)}${total ? `/${total.toLocaleString(numberLocale)}` : ''} ${remainingLabel}`;
+  const isEmpty = product.status === 'sold_out' || stock <= 0;
+  const className =
+    product.status === 'draft'
+      ? 'border-border bg-muted/40 text-muted-foreground'
+      : isEmpty
+        ? 'border-red-600/30 bg-red-500/10 text-red-700 dark:text-red-400'
+        : 'border-[#c8a45d]/35 bg-[#f4ead2]/70 text-[#5f4a1f] dark:border-[#c8a45d]/40 dark:bg-[#c8a45d]/10 dark:text-[#f3db9d]';
+  const dotClassName =
+    product.status === 'draft'
+      ? 'bg-muted-foreground/55'
+      : isEmpty
+        ? 'bg-red-500'
+        : 'bg-[#c8a45d]';
+
   return (
     <span
       className={cn(
         'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium leading-none',
-        m.className,
+        className,
       )}
     >
-      <span aria-hidden className={cn('size-1.5 rounded-full', m.dotClassName)} />
-      {adminPhrase(locale, m.label)}
+      <span aria-hidden className={cn('size-1.5 rounded-full', dotClassName)} />
+      {label}
     </span>
   );
 }

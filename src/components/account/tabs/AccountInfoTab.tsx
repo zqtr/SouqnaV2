@@ -219,12 +219,12 @@ function Detail({ label, value }: { label: string; value: ReactNode }) {
     >
       <div
         style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 9,
-          letterSpacing: '0.16em',
-          textTransform: 'uppercase',
+          fontSize: 12,
+          letterSpacing: 0,
+          textTransform: 'none',
           color: 'var(--ink-faint)',
           marginBottom: 6,
+          fontWeight: 500,
         }}
       >
         {label}

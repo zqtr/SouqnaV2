@@ -1,9 +1,11 @@
 ﻿'use client';
 
 import Link from 'next/link';
+import { Pencil } from 'lucide-react';
 import type { Storefront } from '@/lib/brief';
 import type { CategoryWithStorefront } from '@/lib/categories';
 import { CategoryDeleteButton } from './CategoryDeleteButton';
+import { Button } from '@/components/ui/button';
 
 /**
  * Categories tab — sister surface to ProductsTab. Per-storefront filter
@@ -117,37 +119,30 @@ function Chip({
   href: string;
 }) {
   return (
-    <Link
-      href={href}
-      role="tab"
-      aria-selected={active}
-      style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: 11,
-        letterSpacing: '0.08em',
-        textTransform: 'uppercase',
-        padding: '6px 12px',
-        borderRadius: 999,
-        border: `1px solid ${active ? 'var(--accent)' : 'var(--surface-rule-strong)'}`,
-        background: active ? 'var(--accent)' : 'var(--surface-elevated)',
-        color: active ? 'var(--ink-on-accent)' : 'var(--ink-strong)',
-        textDecoration: 'none',
-        display: 'inline-flex',
-        alignItems: 'baseline',
-        gap: 6,
-      }}
+    <Button
+      asChild
+      variant={active ? 'default' : 'outline'}
+      size="sm"
+      className={
+        active
+          ? 'h-8 rounded-md border border-[color:var(--ink-strong)] bg-[color:var(--ink-strong)] px-3 text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]'
+          : 'h-8 rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-elevated)] px-3 text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-bg)]'
+      }
     >
-      <span>{label}</span>
-      <span
-        style={{
-          fontSize: 10,
-          color: active ? 'var(--ink-on-accent)' : 'var(--ink-faint)',
-          opacity: active ? 0.85 : 1,
-        }}
-      >
-        {count}
-      </span>
-    </Link>
+      <Link href={href} role="tab" aria-selected={active}>
+        <span>{label}</span>
+        <span
+          className={
+            active
+              ? 'text-[11px] text-[color:var(--surface-bg)]/80'
+              : 'text-[11px] text-[color:var(--ink-faint)]'
+          }
+          data-icon="inline-end"
+        >
+          {count}
+        </span>
+      </Link>
+    </Button>
   );
 }
 
@@ -270,22 +265,17 @@ function CategoryCard({ category }: { category: CategoryWithStorefront }) {
           justifyContent: 'flex-end',
         }}
       >
-        <Link
-          href={editHref}
-          style={{
-            fontSize: 12,
-            fontFamily: 'var(--font-mono)',
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            padding: '6px 12px',
-            border: '1px solid var(--surface-rule-strong)',
-            borderRadius: 999,
-            color: 'var(--ink-strong)',
-            textDecoration: 'none',
-          }}
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="h-8 rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] px-3 text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-elevated)]"
         >
-          Edit
-        </Link>
+          <Link href={editHref}>
+            <Pencil data-icon="inline-start" />
+            Manage
+          </Link>
+        </Button>
         <CategoryDeleteButton
           storefrontSlug={category.storefrontSlug}
           categoryId={category.id}

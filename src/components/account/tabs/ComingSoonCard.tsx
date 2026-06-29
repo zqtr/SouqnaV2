@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 type Bullet = {
   title: string;
@@ -54,32 +57,19 @@ export function ComingSoonCard({
           className="flex items-center"
           style={{ gap: 8, marginBottom: 10, flexWrap: 'wrap' }}
         >
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              color: 'var(--ink-on-gold)',
-              background: 'var(--color-gold)',
-              padding: '4px 10px',
-              borderRadius: 999,
-            }}
+          <Badge
+            variant="outline"
+            className="rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--ink-strong)]"
           >
             {eyebrow}
-          </span>
-          <span
+          </Badge>
+          <Badge
             aria-hidden
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              color: 'var(--ink-faint)',
-            }}
+            variant="ghost"
+            className="rounded-md px-2.5 py-1 text-[11px] font-medium text-[color:var(--ink-muted)]"
           >
             Coming soon
-          </span>
+          </Badge>
         </div>
         <h2
           style={{
@@ -167,20 +157,17 @@ export function ComingSoonCard({
 
       {cta ? (
         <div>
-          <Link
-            href={cta.href}
-            style={{
-              display: 'inline-block',
-              border: '1px solid var(--surface-rule-strong)',
-              padding: '10px 18px',
-              borderRadius: 999,
-              fontSize: 13,
-              color: 'var(--ink-strong)',
-              textDecoration: 'none',
-            }}
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-9 rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] px-3 text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-elevated)]"
           >
-            {cta.label}
-          </Link>
+            <Link href={cta.href}>
+              {cta.label}
+              <ArrowRight data-icon="inline-end" />
+            </Link>
+          </Button>
         </div>
       ) : null}
     </section>

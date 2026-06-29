@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { Check, LoaderCircle, Trash2 } from 'lucide-react';
 import {
   saveDiscount,
   removeDiscount,
@@ -9,6 +10,7 @@ import {
 } from '@/app/actions/discounts';
 import { Field, inputStyle } from '@/components/admin/SettingsForm';
 import { Surface } from '@/components/admin/primitives';
+import { Button } from '@/components/ui/button';
 
 type Initial = {
   id?: number;
@@ -315,43 +317,34 @@ export function DiscountForm({
           </div>
         ) : null}
 
-        <button
+        <Button
           type="submit"
           disabled={pending}
-          style={{
-            padding: '11px 18px',
-            borderRadius: 10,
-            background: pending
-              ? 'color-mix(in srgb, var(--ink-strong) 50%, transparent)'
-              : 'var(--ink-strong)',
-            color: 'var(--surface-bg)',
-            border: 'none',
-            fontSize: 14,
-            fontWeight: 500,
-            cursor: pending ? 'progress' : 'pointer',
-          }}
+          className="h-10 rounded-md bg-[color:var(--ink-strong)] text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]"
         >
+          {pending ? (
+            <LoaderCircle data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <Check data-icon="inline-start" />
+          )}
           {pending ? 'Saving…' : mode === 'create' ? 'Create discount' : 'Save changes'}
-        </button>
+        </Button>
 
         {mode === 'edit' && initial?.id ? (
-          <button
+          <Button
             type="button"
             onClick={handleDelete}
             disabled={removing}
-            style={{
-              padding: '9px 14px',
-              borderRadius: 8,
-              background: 'transparent',
-              color: 'var(--color-maroon, #8b3a3a)',
-              border: '1px solid color-mix(in srgb, var(--color-maroon, #8b3a3a) 30%, transparent)',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: removing ? 'progress' : 'pointer',
-            }}
+            variant="outline"
+            className="rounded-md border-[color:color-mix(in_srgb,var(--color-maroon,#8b3a3a)_30%,transparent)] bg-[color:var(--surface-bg)] text-[color:var(--color-maroon,#8b3a3a)] hover:bg-[color:color-mix(in_srgb,var(--color-maroon,#8b3a3a)_8%,transparent)] hover:text-[color:var(--color-maroon,#8b3a3a)]"
           >
-            {removing ? 'Deleting…' : 'Delete discount'}
-          </button>
+            {removing ? (
+              <LoaderCircle data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <Trash2 data-icon="inline-start" />
+            )}
+            {removing ? 'Removing...' : 'Remove discount'}
+          </Button>
         ) : null}
       </div>
 

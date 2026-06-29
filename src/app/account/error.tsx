@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { fontVariables } from '@/lib/fonts';
+import { Button } from '@/components/ui/button';
 
 /**
  * Outer account-tree error boundary. Catches anything the chrome
@@ -78,58 +79,27 @@ export default function AccountError({
           </p>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button
+            <Button
               type="button"
               onClick={() => reset()}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '10px 18px',
-                borderRadius: 8,
-                background: '#1a1814',
-                color: '#f1ead7',
-                fontSize: 13.5,
-                fontWeight: 500,
-                border: 'none',
-                cursor: 'pointer',
-              }}
+              className="rounded-md bg-[#1a1814] text-[#f1ead7] hover:bg-[#28231d]"
             >
               Try again
-            </button>
-            <a
-              href="/"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '10px 18px',
-                borderRadius: 8,
-                background: 'transparent',
-                border: '1px solid rgba(26,24,20,0.18)',
-                color: '#1a1814',
-                fontSize: 13.5,
-                fontWeight: 500,
-                textDecoration: 'none',
-              }}
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              className="rounded-md border-[rgba(26,24,20,0.18)] bg-transparent text-[#1a1814] hover:bg-[rgba(26,24,20,0.06)]"
             >
-              Souqna home
-            </a>
-            <a
-              href="/sign-in?redirect_url=/account"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '10px 18px',
-                borderRadius: 8,
-                background: 'transparent',
-                border: '1px solid rgba(26,24,20,0.18)',
-                color: '#1a1814',
-                fontSize: 13.5,
-                fontWeight: 500,
-                textDecoration: 'none',
-              }}
+              <a href="/">Souqna home</a>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              className="rounded-md border-[rgba(26,24,20,0.18)] bg-transparent text-[#1a1814] hover:bg-[rgba(26,24,20,0.06)]"
             >
-              Sign in again
-            </a>
+              <a href="/sign-in?redirect_url=/account">Sign in again</a>
+            </Button>
           </div>
 
           <pre

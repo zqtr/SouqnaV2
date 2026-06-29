@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/table';
 import { EmptyState, PageHeader, StatusBadge, Surface } from '@/components/admin/primitives';
 import { CommerceMetricCard, CommerceMetricGrid } from '@/components/admin/commerce-metrics';
+import { InteractiveDitheredTrendChart } from '@/components/admin/charts/InteractiveDitheredTrendChart';
 import { adminPhrase } from '@/components/admin/adminLocale';
 import { getAdminUserId } from '@/lib/adminAuth';
 import { getStorefrontsForUser } from '@/lib/brief';
@@ -509,8 +510,6 @@ function Dashboard5CommerceFlowCard({
   windowLabel: string;
   ariaLabel: string;
 }) {
-  const ordersTotal = ordersTrend.reduce((sum, value) => sum + value, 0);
-  const cartAddsTotal = cartAddTrend.reduce((sum, value) => sum + value, 0);
   return (
     <Card className="souqna-dashboard-card overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
       <CardHeader className="border-b border-border/80 px-5 py-4">
@@ -532,111 +531,17 @@ function Dashboard5CommerceFlowCard({
         </CardAction>
       </CardHeader>
       <CardContent className="grid gap-5 px-5 pb-5 pt-4">
-        <Dashboard5AreaChart
+        <InteractiveDitheredTrendChart
           primary={ordersTrend}
           secondary={cartAddTrend}
           primaryLabel={ordersLabel}
           secondaryLabel={cartAddsLabel}
+          thirtyDaysAgo={thirtyDaysAgo}
+          today={today}
           ariaLabel={ariaLabel}
         />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Signal label={ordersLabel} value={ordersTotal} />
-          <Signal label={cartAddsLabel} value={cartAddsTotal} />
-        </div>
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{thirtyDaysAgo}</span>
-          <span>{today}</span>
-        </div>
       </CardContent>
     </Card>
-  );
-}
-
-function Dashboard5AreaChart({
-  primary,
-  secondary,
-  primaryLabel,
-  secondaryLabel,
-  ariaLabel,
-}: {
-  primary: number[];
-  secondary: number[];
-  primaryLabel: string;
-  secondaryLabel: string;
-  ariaLabel: string;
-}) {
-  const width = 720;
-  const height = 260;
-  const padding = 22;
-  const maxValue = Math.max(...primary, ...secondary, 1);
-  const primaryPoints = getChartPoints(primary, width, height, padding, maxValue);
-  const secondaryPoints = getChartPoints(secondary, width, height, padding, maxValue);
-  const first = primaryPoints[0] ?? { x: padding, y: height - padding };
-  const last = primaryPoints[primaryPoints.length - 1] ?? first;
-  const baseline = height - padding;
-  const areaPoints = [
-    pointsToString(primaryPoints),
-    `${last.x.toFixed(1)},${baseline.toFixed(1)}`,
-    `${first.x.toFixed(1)},${baseline.toFixed(1)}`,
-  ].join(' ');
-
-  return (
-    <div className="souqna-dashboard-chart rounded-lg border border-border/80 bg-muted/40 p-3">
-      <svg
-        role="img"
-        aria-label={ariaLabel}
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-[240px] w-full overflow-visible"
-      >
-        <title>{ariaLabel}</title>
-        <defs>
-          <linearGradient id="souqna-dashboard5-flow-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="var(--chart-primary)" stopOpacity="0.34" />
-            <stop offset="100%" stopColor="var(--chart-primary)" stopOpacity="0.03" />
-          </linearGradient>
-        </defs>
-        {[0.25, 0.5, 0.75].map((line) => (
-          <line
-            key={line}
-            x1={padding}
-            x2={width - padding}
-            y1={padding + (height - padding * 2) * line}
-            y2={padding + (height - padding * 2) * line}
-            stroke="currentColor"
-            className="text-border/80"
-            strokeDasharray="5 7"
-          />
-        ))}
-        <polygon points={areaPoints} fill="url(#souqna-dashboard5-flow-fill)" />
-        <polyline
-          points={pointsToString(primaryPoints)}
-          fill="none"
-          stroke="var(--chart-primary)"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="4"
-        />
-        <polyline
-          points={pointsToString(secondaryPoints)}
-          fill="none"
-          stroke="var(--chart-secondary)"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="3"
-          strokeDasharray="7 7"
-        />
-      </svg>
-      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-[var(--chart-primary)]" />
-          {primaryLabel}
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-[var(--chart-secondary)]" />
-          {secondaryLabel}
-        </span>
-      </div>
-    </div>
   );
 }
 
@@ -1050,29 +955,6 @@ function Signal({ label, value }: { label: string; value: React.ReactNode }) {
       <dd className="mt-1 text-sm font-semibold text-foreground">{value}</dd>
     </div>
   );
-}
-
-function getChartPoints(
-  series: number[],
-  width: number,
-  height: number,
-  padding: number,
-  maxValue: number,
-): Array<{ x: number; y: number }> {
-  const values = series.length > 0 ? series : [0, 0];
-  const plotted = values.length === 1 ? [values[0] ?? 0, values[0] ?? 0] : values;
-  const usableWidth = width - padding * 2;
-  const usableHeight = height - padding * 2;
-  const scale = Math.max(maxValue, 1);
-
-  return plotted.map((rawValue, index) => ({
-    x: padding + (usableWidth * index) / Math.max(plotted.length - 1, 1),
-    y: height - padding - (Math.max(0, rawValue) / scale) * usableHeight,
-  }));
-}
-
-function pointsToString(points: Array<{ x: number; y: number }>): string {
-  return points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
 }
 
 function initialsFor(name: string): string {

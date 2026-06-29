@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 
 /**
  * Per-segment error boundary for the admin chrome. Catches anything a
@@ -71,42 +72,20 @@ export default function ChromeError({
       </p>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-        <button
+        <Button
           type="button"
           onClick={() => reset()}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            padding: '9px 16px',
-            borderRadius: 8,
-            background: 'var(--ink-strong)',
-            color: 'var(--surface-bg)',
-            fontSize: 13.5,
-            fontWeight: 500,
-            border: 'none',
-            cursor: 'pointer',
-          }}
+          className="rounded-md bg-[color:var(--ink-strong)] text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]"
         >
           Try again
-        </button>
-        <a
-          href="/account"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            padding: '9px 16px',
-            borderRadius: 8,
-            background: 'transparent',
-            border:
-              '1px solid color-mix(in srgb, var(--ink-strong) 14%, transparent)',
-            color: 'var(--ink-strong)',
-            fontSize: 13.5,
-            fontWeight: 500,
-            textDecoration: 'none',
-          }}
+        </Button>
+        <Button
+          asChild
+          variant="outline"
+          className="rounded-md border-[color:color-mix(in_srgb,var(--ink-strong)_14%,transparent)] bg-transparent text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-elevated)]"
         >
-          Go home
-        </a>
+          <a href="/account">Go home</a>
+        </Button>
       </div>
 
       <pre

@@ -16,8 +16,7 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Reveal } from '@/components/motion/Reveal';
-import { MiniBarChart } from '@/components/admin/charts/MiniBarChart';
-import { Sparkline } from '@/components/admin/charts/Sparkline';
+import { DitheredPixelGraph } from '@/components/admin/charts/DitheredPixelGraph';
 import type { TopProductByOrders } from '@/lib/products';
 
 type MetricTone = 'neutral' | 'success' | 'warning' | 'critical' | 'info';
@@ -147,23 +146,21 @@ export function CommerceMetricCard({
           </div>
           {trend && trend.length > 0 ? (
             <div className="h-12 w-28 shrink-0 opacity-90 transition-opacity group-hover:opacity-100">
-              {chart === 'bar' ? (
-                <MiniBarChart
-                  data={trend}
-                  width={112}
-                  height={48}
-                  accent={accent}
-                  ariaLabel={`${label} bar trend`}
-                />
-              ) : (
-                <Sparkline
-                  data={trend}
-                  width={112}
-                  height={48}
-                  accent={accent}
-                  ariaLabel={`${label} trend`}
-                />
-              )}
+              <DitheredPixelGraph
+                series={[
+                  {
+                    data: trend,
+                    color: accent,
+                    label,
+                    fill: true,
+                  },
+                ]}
+                width={112}
+                height={48}
+                padding={4}
+                density="compact"
+                ariaLabel={`${label} ${chart === 'bar' ? 'bar ' : ''}trend`}
+              />
             </div>
           ) : null}
         </div>

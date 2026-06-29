@@ -1,6 +1,7 @@
 'use client';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { Button } from '@/components/ui/button';
 
 export function BrowseFilters({
   current,
@@ -82,28 +83,18 @@ function ChipButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <Button
       type="button"
       onClick={onClick}
-      style={{
-        padding: '5px 10px',
-        borderRadius: 999,
-        fontSize: 12,
-        fontFamily: 'var(--font-mono)',
-        letterSpacing: '0.04em',
-        border: '1px solid',
-        borderColor: active
-          ? 'var(--ink-strong)'
-          : 'var(--surface-rule)',
-        background: active
-          ? 'var(--ink-strong)'
-          : 'transparent',
-        color: active ? 'var(--surface-bg)' : 'var(--ink-muted)',
-        cursor: 'pointer',
-        transition: 'all 120ms ease',
-      }}
+      variant={active ? 'default' : 'outline'}
+      size="xs"
+      className={
+        active
+          ? 'h-7 rounded-md border border-[color:var(--ink-strong)] bg-[color:var(--ink-strong)] px-2.5 text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]'
+          : 'h-7 rounded-md border-[color:var(--surface-rule)] bg-transparent px-2.5 text-[color:var(--ink-muted)] hover:bg-[color:var(--surface-bg)] hover:text-[color:var(--ink-strong)]'
+      }
     >
       {children}
-    </button>
+    </Button>
   );
 }

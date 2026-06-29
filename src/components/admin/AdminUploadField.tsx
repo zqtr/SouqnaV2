@@ -3,6 +3,8 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { upload } from '@vercel/blob/client';
+import { Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 type Props = {
   value: string;
@@ -167,27 +169,20 @@ export function AdminUploadField({
                 {value.replace(/^https?:\/\//, '')}
               </div>
             </div>
-            <button
+            <Button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onChange('');
                 setError(null);
               }}
-              style={{
-                background: 'transparent',
-                color: 'var(--ink-muted)',
-                border: '1px solid var(--surface-rule-strong)',
-                borderRadius: 6,
-                padding: '6px 12px',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                letterSpacing: '0.04em',
-                cursor: 'pointer',
-              }}
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] px-3 text-[color:var(--color-maroon,#8b3a3a)] hover:bg-[color:color-mix(in_srgb,var(--color-maroon,#8b3a3a)_8%,transparent)] hover:text-[color:var(--color-maroon,#8b3a3a)]"
             >
+              <Trash2 data-icon="inline-start" />
               Remove
-            </button>
+            </Button>
           </>
         ) : (
           <div

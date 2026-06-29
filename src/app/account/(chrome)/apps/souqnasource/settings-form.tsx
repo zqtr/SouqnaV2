@@ -1,8 +1,10 @@
 'use client';
 import { useState, useTransition } from 'react';
+import { Check, LoaderCircle } from 'lucide-react';
 import { saveSouqnasourceSettings } from '@/app/actions/souqnasource';
 import type { SouqnasourceSettings } from '@/lib/apps/souqnasource/settings';
 import { useTranslations } from 'next-intl';
+import { Button } from '@/components/ui/button';
 
 export function SettingsForm({
   slug,
@@ -73,23 +75,18 @@ export function SettingsForm({
       />
 
       <div>
-        <button
+        <Button
           type="submit"
           disabled={pending}
-          style={{
-            padding: '9px 16px',
-            borderRadius: 8,
-            background: 'var(--ink-strong)',
-            color: 'var(--surface-bg)',
-            fontSize: 13.5,
-            fontWeight: 500,
-            border: 'none',
-            cursor: 'pointer',
-            opacity: pending ? 0.6 : 1,
-          }}
+          className="rounded-md bg-[color:var(--ink-strong)] text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]"
         >
-          {pending ? 'Saving…' : 'Save'}
-        </button>
+          {pending ? (
+            <LoaderCircle data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <Check data-icon="inline-start" />
+          )}
+          {pending ? 'Saving...' : 'Save'}
+        </Button>
       </div>
     </form>
   );

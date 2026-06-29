@@ -1,9 +1,12 @@
 ﻿import type { CSSProperties, ReactNode } from 'react';
 import Link from 'next/link';
+import { ExternalLink, Package, Pencil } from 'lucide-react';
 import { env } from '@/lib/env';
 import type { Storefront } from '@/lib/brief';
 import { storefrontBaseUrl } from '@/lib/storefrontUrl';
 import { DeleteStorefrontButton } from '@/components/dashboard/DeleteStorefrontButton';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 type Props = {
   storefronts: Storefront[];
@@ -42,22 +45,15 @@ export function StorefrontRoster({ storefronts, currentSlug, emptyLiveHint }: Pr
         <p style={{ fontSize: 14, color: 'var(--ink-muted)', marginBottom: 18 }}>
           No storefronts yet.
         </p>
-        <Link
-          href="/en/begin"
-          style={{
-            display: 'inline-block',
-            background: 'var(--color-gold)',
-            color: 'var(--color-ink)',
-            border: '1px solid var(--color-gold)',
-            padding: '12px 22px',
-            borderRadius: 999,
-            fontSize: 13,
-            textDecoration: 'none',
-            letterSpacing: '0.01em',
-          }}
+        <Button
+          asChild
+          className="h-10 rounded-md border border-[color:var(--surface-rule-strong)] bg-[color:var(--ink-strong)] px-4 text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]"
         >
-          Open your first storefront →
-        </Link>
+          <Link href="/en/begin">
+            <Pencil data-icon="inline-start" />
+            Open your first storefront
+          </Link>
+        </Button>
       </div>
     );
   }
@@ -271,20 +267,12 @@ function Row({
               {s.businessName}
             </div>
             {isCurrent ? (
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 9,
-                  letterSpacing: '0.14em',
-                  textTransform: 'uppercase',
-                  color: 'var(--ink-on-accent)',
-                  background: 'var(--accent)',
-                  padding: '3px 8px',
-                  borderRadius: 999,
-                }}
+              <Badge
+                className="rounded-md border border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--ink-strong)]"
+                variant="outline"
               >
                 Editing
-              </span>
+              </Badge>
             ) : null}
           </div>
           <div
@@ -300,20 +288,9 @@ function Row({
           </div>
         </div>
         <div className="flex items-center" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 9,
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase',
-              color: live ? 'var(--admin-accent)' : 'var(--ink-faint)',
-              border: `1px solid ${live ? 'var(--admin-accent)' : 'var(--surface-rule-strong)'}`,
-              padding: '3px 8px',
-              borderRadius: 999,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
+          <Badge
+            variant="outline"
+            className="gap-1.5 rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] px-2 py-1 text-[11px] font-medium text-[color:var(--ink-muted)]"
           >
             <span
               aria-hidden
@@ -321,23 +298,18 @@ function Row({
                 width: 6,
                 height: 6,
                 borderRadius: 999,
-                background: live ? 'var(--admin-accent)' : 'var(--ink-faint)',
+                background: live ? 'var(--ink-strong)' : 'var(--ink-faint)',
                 display: 'inline-block',
               }}
             />
-            {live ? 'Live' : 'Offline'}
-          </span>
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              letterSpacing: '0.1em',
-              color: 'var(--admin-accent)',
-              textTransform: 'uppercase',
-            }}
+            {live ? 'Stock' : 'Offline'}
+          </Badge>
+          <Badge
+            variant="ghost"
+            className="rounded-md px-2 py-1 text-[11px] font-medium text-[color:var(--ink-muted)]"
           >
             {s.locale === 'ar' ? 'العربية' : 'English'}
-          </span>
+          </Badge>
         </div>
       </div>
       <div
@@ -346,48 +318,39 @@ function Row({
       >
         <div className="flex flex-wrap items-center" style={{ gap: 10 }}>
           {live ? (
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                fontSize: 13,
-                padding: '8px 14px',
-                border: '1px solid var(--surface-rule-strong)',
-                borderRadius: 999,
-                color: 'var(--ink-strong)',
-                textDecoration: 'none',
-              }}
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] px-3 text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-elevated)]"
             >
-              View live ↗
-            </a>
+              <a href={url} target="_blank" rel="noopener noreferrer">
+                <ExternalLink data-icon="inline-start" />
+                View live
+              </a>
+            </Button>
           ) : null}
-          <Link
-            href={`/account/builder?store=${encodeURIComponent(s.slug)}`}
-            style={{
-              fontSize: 13,
-              padding: '8px 14px',
-              background: 'var(--accent)',
-              color: 'var(--ink-on-accent)',
-              borderRadius: 999,
-              textDecoration: 'none',
-            }}
+          <Button
+            asChild
+            size="sm"
+            className="h-8 rounded-md bg-[color:var(--ink-strong)] px-3 text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]"
           >
-            {isCurrent ? 'Open builder' : 'Manage'}
-          </Link>
-          <Link
-            href={`/account?tab=products&store=${encodeURIComponent(s.slug)}`}
-            style={{
-              fontSize: 13,
-              padding: '8px 14px',
-              border: '1px solid var(--surface-rule-strong)',
-              borderRadius: 999,
-              color: 'var(--ink-strong)',
-              textDecoration: 'none',
-            }}
+            <Link href={`/account/builder?store=${encodeURIComponent(s.slug)}`}>
+              <Pencil data-icon="inline-start" />
+              {isCurrent ? 'Open builder' : 'Manage'}
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] px-3 text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-elevated)]"
           >
-            Products
-          </Link>
+            <Link href={`/account?tab=products&store=${encodeURIComponent(s.slug)}`}>
+              <Package data-icon="inline-start" />
+              Products
+            </Link>
+          </Button>
         </div>
         <DeleteStorefrontButton
           slug={s.slug}

@@ -1,11 +1,13 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
+import { Plus } from 'lucide-react';
 import { PageHeader } from '@/components/admin/primitives';
 import { getPlan } from '@/lib/billing';
 import { SubscriptionTracker } from '@/components/billing/SubscriptionTracker';
 import { PLAN_LIMITS, type Plan } from '@/lib/plans';
 import { getSouqyMonthlyCount } from '@/lib/souqy/db';
 import { PlanCompare } from './PlanCompare';
+import { Button } from '@/components/ui/button';
 
 /**
  * Plan page — 4-tier comparison strip with monthly / annual billing
@@ -100,26 +102,17 @@ function CreditsSummaryCard({
             AI credits
           </h2>
         </div>
-        <button
+        <Button
           type="button"
           aria-label="Add credits"
           title="Top-ups are not available yet"
           disabled
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 999,
-            border: '1px solid rgba(17, 17, 17, 0.14)',
-            background: '#f3efe7',
-            color: '#8a7a63',
-            cursor: 'not-allowed',
-            fontSize: 22,
-            lineHeight: '34px',
-            fontWeight: 600,
-          }}
+          variant="outline"
+          size="icon"
+          className="rounded-md border-[rgba(17,17,17,0.14)] bg-[#f3efe7] text-[#8a7a63]"
         >
-          +
-        </button>
+          <Plus aria-hidden="true" />
+        </Button>
       </div>
 
       <div

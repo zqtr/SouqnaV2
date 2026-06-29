@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { LoaderCircle, Trash2 } from 'lucide-react';
 import { deleteStorefrontAction } from '@/app/actions/builder';
+import { Button } from '@/components/ui/button';
 
 type Props = {
   slug: string;
@@ -57,25 +59,16 @@ export function DeleteStorefrontButton({ slug, businessName, briefRootDomain }: 
 
   return (
     <>
-      <button
+      <Button
         type="button"
         onClick={() => setOpen(true)}
-        style={{
-          fontSize: 12,
-          fontFamily: 'var(--font-mono)',
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          padding: '6px 10px',
-          borderRadius: 999,
-          border: '1px solid color-mix(in srgb, #b85c5c 35%, transparent)',
-          background: 'transparent',
-          color: '#b85c5c',
-          cursor: 'pointer',
-          lineHeight: 1,
-        }}
+        variant="outline"
+        size="sm"
+        className="h-8 rounded-md border-[color:color-mix(in_srgb,var(--color-maroon,#8b3a3a)_35%,transparent)] bg-[color:var(--surface-bg)] px-3 text-[color:var(--color-maroon,#8b3a3a)] hover:bg-[color:color-mix(in_srgb,var(--color-maroon,#8b3a3a)_8%,transparent)] hover:text-[color:var(--color-maroon,#8b3a3a)]"
       >
-        Delete
-      </button>
+        <Trash2 data-icon="inline-start" />
+        Remove
+      </Button>
 
       {open ? (
         <div
@@ -206,40 +199,28 @@ export function DeleteStorefrontButton({ slug, businessName, briefRootDomain }: 
                 gap: 10,
               }}
             >
-              <button
+              <Button
                 type="button"
                 onClick={close}
                 disabled={pending}
-                style={{
-                  fontSize: 13,
-                  padding: '8px 16px',
-                  borderRadius: 999,
-                  border: '1px solid var(--surface-rule-strong)',
-                  background: 'transparent',
-                  color: 'var(--ink-strong)',
-                  cursor: pending ? 'default' : 'pointer',
-                }}
+                variant="outline"
+                className="rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-elevated)]"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={onSubmit}
                 disabled={!canDelete}
-                style={{
-                  fontSize: 13,
-                  padding: '8px 16px',
-                  borderRadius: 999,
-                  border: '1px solid #8b3a3a',
-                  background: canDelete ? '#8b3a3a' : 'rgba(139,58,58,0.35)',
-                  color: '#fff',
-                  cursor: canDelete ? 'pointer' : 'not-allowed',
-                  fontFamily: 'var(--font-sans)',
-                  letterSpacing: '0.01em',
-                }}
+                className="rounded-md bg-[color:var(--color-maroon,#8b3a3a)] text-white hover:bg-[color:color-mix(in_srgb,var(--color-maroon,#8b3a3a)_88%,black)]"
               >
-                {pending ? 'Deleting…' : 'Delete forever'}
-              </button>
+                {pending ? (
+                  <LoaderCircle data-icon="inline-start" className="animate-spin" />
+                ) : (
+                  <Trash2 data-icon="inline-start" />
+                )}
+                {pending ? 'Removing...' : 'Remove forever'}
+              </Button>
             </div>
           </div>
         </div>

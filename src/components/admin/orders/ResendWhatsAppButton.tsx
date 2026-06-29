@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { LoaderCircle, MessageCircle, X } from 'lucide-react';
 import { resendOrderWhatsAppConfirmation, type ResendWhatsAppState } from '@/app/actions/orders';
+import { Button } from '@/components/ui/button';
 
 export function ResendWhatsAppButton({
   storefrontSlug,
@@ -27,7 +29,7 @@ export function ResendWhatsAppButton({
 
   return (
     <>
-      <button
+      <Button
         type="button"
         disabled={disabled || sending}
         onClick={async () => {
@@ -39,25 +41,14 @@ export function ResendWhatsAppButton({
             setSending(false);
           }
         }}
-        style={{
-          marginTop: 14,
-          width: '100%',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 8,
-          border: '1px solid color-mix(in srgb, var(--admin-accent, #7a3d2d) 38%, transparent)',
-          background:
-            'linear-gradient(135deg, color-mix(in srgb, var(--admin-accent, #7a3d2d) 14%, transparent), color-mix(in srgb, #d7b56d 18%, transparent))',
-          color: 'var(--ink-strong)',
-          borderRadius: 8,
-          padding: '10px 12px',
-          fontSize: 13,
-          fontWeight: 650,
-          cursor: disabled || sending ? 'not-allowed' : 'pointer',
-          opacity: disabled ? 0.52 : 1,
-        }}
+        variant="outline"
+        className="mt-3.5 h-10 w-full rounded-md border-[color:color-mix(in_srgb,var(--admin-accent,#7a3d2d)_38%,transparent)] bg-[color:color-mix(in_srgb,var(--admin-accent,#7a3d2d)_10%,var(--surface-bg))] text-[color:var(--ink-strong)] hover:bg-[color:color-mix(in_srgb,var(--admin-accent,#7a3d2d)_16%,var(--surface-bg))]"
       >
+        {sending ? (
+          <LoaderCircle data-icon="inline-start" className="animate-spin" />
+        ) : (
+          <MessageCircle data-icon="inline-start" />
+        )}
         <span>{sending ? 'Sending...' : 'Resend WhatsApp'}</span>
         <span aria-hidden style={{ opacity: 0.42 }}>
           ·
@@ -65,7 +56,7 @@ export function ResendWhatsAppButton({
         <span lang="ar" dir="rtl" style={{ fontFamily: 'var(--font-arabic, var(--font-sans))' }}>
           {sending ? 'جار الإرسال...' : 'إعادة إرسال واتساب'}
         </span>
-      </button>
+      </Button>
 
       {toast ? (
         <div
@@ -118,22 +109,16 @@ export function ResendWhatsAppButton({
                 {toast.arMessage}
               </p>
             </div>
-            <button
+            <Button
               type="button"
               aria-label="Dismiss notification"
               onClick={() => setToast(null)}
-              style={{
-                border: 0,
-                background: 'transparent',
-                color: 'var(--ink-muted)',
-                cursor: 'pointer',
-                fontSize: 18,
-                lineHeight: 1,
-                padding: 0,
-              }}
+              variant="ghost"
+              size="icon-sm"
+              className="rounded-md text-[color:var(--ink-muted)] hover:bg-[color:var(--surface-bg)] hover:text-[color:var(--ink-strong)]"
             >
-              ×
-            </button>
+              <X aria-hidden="true" />
+            </Button>
           </div>
         </div>
       ) : null}

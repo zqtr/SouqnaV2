@@ -23,6 +23,7 @@ import type {
   NotificationStreamEvent,
 } from '@/types/notification';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 
 const PANEL_WIDTH = 380;
 const MAX_ITEMS = 20;
@@ -449,27 +450,16 @@ function PanelHeader({
       >
         Notifications · <span lang="ar">التنبيهات</span>
       </span>
-      <button
+      <Button
         type="button"
         disabled={unread === 0}
         onClick={onMarkAll}
-        style={{
-          fontSize: 11,
-          padding: '4px 8px',
-          borderRadius: 6,
-          border: '1px solid transparent',
-          background: 'transparent',
-          color:
-            unread === 0
-              ? 'color-mix(in srgb, var(--ink-strong) 35%, transparent)'
-              : 'var(--ink-strong)',
-          cursor: unread === 0 ? 'default' : 'pointer',
-          fontFamily: 'var(--font-sans)',
-          whiteSpace: 'nowrap',
-        }}
+        variant="ghost"
+        size="xs"
+        className="h-7 rounded-md px-2 text-[11px] text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-elevated)] disabled:text-[color:color-mix(in_srgb,var(--ink-strong)_35%,transparent)]"
       >
         Mark all read · <span lang="ar">علّم الكل مقروءاً</span>
-      </button>
+      </Button>
     </div>
   );
 }

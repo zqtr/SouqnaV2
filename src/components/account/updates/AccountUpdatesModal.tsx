@@ -9,6 +9,7 @@ import { UpdateEmptyState } from './UpdateEmptyState';
 import { UpdateProgress } from './UpdateProgress';
 import { UpdateStack } from './UpdateStack';
 import type { AccountUpdateView } from './types';
+import { Button } from '@/components/ui/button';
 
 type AccountUpdatesModalProps = {
   initialUpdates: AccountUpdateView[];
@@ -217,14 +218,16 @@ export function AccountUpdatesModal({
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
           >
-            <button
+            <Button
               type="button"
               onClick={closeIfAllowed}
-              className="absolute end-4 top-4 z-10 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#e8d6b8]/15 bg-[#0d0c0e]/75 text-[#e8d6b8] backdrop-blur transition hover:border-[#d8b56b]/45 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8b56b]"
+              variant="outline"
+              size="icon"
+              className="absolute end-4 top-4 z-10 rounded-md border-[#e8d6b8]/15 bg-[#0d0c0e]/75 text-[#e8d6b8] backdrop-blur hover:border-[#d8b56b]/45 hover:bg-[#151214] hover:text-white"
               aria-label={copy.close}
             >
               <X className="h-4 w-4" aria-hidden="true" />
-            </button>
+            </Button>
 
             <span id={subtitleId} className="sr-only">
               {copy.subtitle}
@@ -279,23 +282,26 @@ export function AccountUpdatesModal({
                       <PreviousIcon className="h-4 w-4" aria-hidden="true" />
                     </CarouselArrow>
                     {detailsHref ? (
-                      <button
+                      <Button
                         type="button"
                         onClick={viewDetails}
-                        className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[#d8b56b]/35 bg-[#191619] px-4 text-sm font-semibold text-[#e8d6b8] transition hover:border-[#d8b56b] hover:bg-[#21181a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8b56b]"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 rounded-md border-[#d8b56b]/35 bg-[#191619] px-3 text-[#e8d6b8] hover:border-[#d8b56b] hover:bg-[#21181a] hover:text-[#f8efdf]"
                       >
                         {copy.details}
                         <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                      </button>
+                      </Button>
                     ) : null}
-                    <button
+                    <Button
                       type="button"
                       onClick={goNext}
-                      className="inline-flex min-h-9 items-center gap-2 rounded-full bg-[#5f7cff] px-5 text-sm font-semibold text-white shadow-[0_14px_35px_rgba(95,124,255,0.26)] transition hover:bg-[#718cff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8b56b]"
+                      size="sm"
+                      className="h-9 rounded-md bg-[#5f7cff] px-4 text-white shadow-[0_14px_35px_rgba(95,124,255,0.26)] hover:bg-[#718cff]"
                     >
                       {isLast ? copy.gotIt : copy.next}
                       <NextIcon className="h-4 w-4" aria-hidden="true" />
-                    </button>
+                    </Button>
                   </div>
                 </footer>
               </>
@@ -323,15 +329,17 @@ function CarouselArrow({
   className?: string;
 }) {
   return (
-    <button
+    <Button
       type="button"
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
       title={label}
-      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#d8b56b]/25 bg-[#171417] text-[#e8d6b8] transition hover:border-[#d8b56b]/55 hover:bg-[#21181a] disabled:pointer-events-none disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8b56b] ${className}`}
+      variant="outline"
+      size="icon"
+      className={`rounded-md border-[#d8b56b]/25 bg-[#171417] text-[#e8d6b8] hover:border-[#d8b56b]/55 hover:bg-[#21181a] hover:text-[#f8efdf] disabled:pointer-events-none disabled:opacity-35 ${className}`}
     >
       {children}
-    </button>
+    </Button>
   );
 }

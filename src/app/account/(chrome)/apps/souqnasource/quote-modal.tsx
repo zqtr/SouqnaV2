@@ -1,8 +1,10 @@
 'use client';
 import { useTransition } from 'react';
 import { useTranslations } from 'next-intl';
+import { ExternalLink, LoaderCircle } from 'lucide-react';
 import { requestQuote } from '@/app/actions/souqnasource';
 import type { Listing } from '@/lib/apps/souqnasource/types';
+import { Button } from '@/components/ui/button';
 
 export function QuoteModal({
   listing,
@@ -90,41 +92,29 @@ export function QuoteModal({
           {t('afterNote')}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button type="button" onClick={onClose} style={ghostBtn}>
+          <Button
+            type="button"
+            onClick={onClose}
+            variant="outline"
+            className="rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-bg)] text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-elevated)]"
+          >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={onOpen}
             disabled={pending}
-            style={{ ...primaryBtn, opacity: pending ? 0.6 : 1 }}
+            className="rounded-md bg-[color:var(--ink-strong)] text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]"
           >
-            {pending ? '…' : t('open')}
-          </button>
+            {pending ? (
+              <LoaderCircle data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <ExternalLink data-icon="inline-start" />
+            )}
+            {pending ? 'Opening...' : t('open')}
+          </Button>
         </div>
       </div>
     </div>
   );
 }
-
-const ghostBtn: React.CSSProperties = {
-  padding: '9px 16px',
-  borderRadius: 8,
-  background: 'transparent',
-  color: 'var(--ink-muted)',
-  fontSize: 13.5,
-  fontWeight: 500,
-  border: '1px solid transparent',
-  cursor: 'pointer',
-};
-
-const primaryBtn: React.CSSProperties = {
-  padding: '9px 16px',
-  borderRadius: 8,
-  background: 'var(--ink-strong)',
-  color: 'var(--surface-bg)',
-  fontSize: 13.5,
-  fontWeight: 500,
-  border: 'none',
-  cursor: 'pointer',
-};

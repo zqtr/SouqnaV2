@@ -1,6 +1,8 @@
 ﻿import Link from 'next/link';
+import { ArrowRight, Store } from 'lucide-react';
 import type { Storefront } from '@/lib/brief';
 import { env } from '@/lib/env';
+import { Button } from '@/components/ui/button';
 
 type Props = {
   /** All storefronts owned by the user. */
@@ -41,16 +43,16 @@ export function StorefrontJumpTab({
         <EmptyCard>
           No storefronts yet — open your first one and the {ctaLabel.toLowerCase()}{' '}
           editor unlocks.{' '}
-          <Link
-            href="/en/begin"
-            style={{
-              color: 'var(--admin-accent)',
-              fontWeight: 500,
-              textDecoration: 'none',
-            }}
+          <Button
+            asChild
+            size="sm"
+            className="ms-1 h-8 rounded-md bg-[color:var(--ink-strong)] px-3 text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]"
           >
-            Open your first storefront →
-          </Link>
+            <Link href="/en/begin">
+              <Store data-icon="inline-start" />
+              Open your first storefront
+            </Link>
+          </Button>
         </EmptyCard>
       </section>
     );
@@ -138,26 +140,25 @@ function ChipStrip({
       {storefronts.map((s) => {
         const active = s.slug === activeSlug;
         return (
-          <Link
+          <Button
+            asChild
             key={s.slug}
-            href={`?tab=${tabId}&store=${encodeURIComponent(s.slug)}`}
-            role="tab"
-            aria-selected={active}
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              padding: '6px 12px',
-              borderRadius: 999,
-              border: `1px solid ${active ? 'var(--accent)' : 'var(--surface-rule-strong)'}`,
-              background: active ? 'var(--accent)' : 'var(--surface-elevated)',
-              color: active ? 'var(--ink-on-accent)' : 'var(--ink-strong)',
-              textDecoration: 'none',
-            }}
+            variant={active ? 'default' : 'outline'}
+            size="sm"
+            className={
+              active
+                ? 'h-8 rounded-md border border-[color:var(--ink-strong)] bg-[color:var(--ink-strong)] px-3 text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]'
+                : 'h-8 rounded-md border-[color:var(--surface-rule-strong)] bg-[color:var(--surface-elevated)] px-3 text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-bg)]'
+            }
           >
-            {s.businessName}
-          </Link>
+            <Link
+              href={`?tab=${tabId}&store=${encodeURIComponent(s.slug)}`}
+              role="tab"
+              aria-selected={active}
+            >
+              {s.businessName}
+            </Link>
+          </Button>
         );
       })}
     </div>
@@ -215,23 +216,15 @@ function JumpCard({
         className="flex items-center"
         style={{ gap: 14, flexWrap: 'wrap' }}
       >
-        <Link
-          href={href}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            background: 'var(--accent)',
-            color: 'var(--ink-on-accent)',
-            padding: '12px 22px',
-            borderRadius: 999,
-            fontSize: 14,
-            fontWeight: 500,
-            textDecoration: 'none',
-          }}
+        <Button
+          asChild
+          className="h-10 rounded-md bg-[color:var(--ink-strong)] px-4 text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]"
         >
-          {ctaLabel} →
-        </Link>
+          <Link href={href}>
+            {ctaLabel}
+            <ArrowRight data-icon="inline-end" />
+          </Link>
+        </Button>
       </div>
     </article>
   );

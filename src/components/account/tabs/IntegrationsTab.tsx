@@ -1,4 +1,5 @@
 import { ComingSoonCard } from './ComingSoonCard';
+import { Badge } from '@/components/ui/badge';
 
 type Integration = {
   name: string;
@@ -131,21 +132,13 @@ export function IntegrationsTab() {
                   {it.blurb}
                 </div>
               </div>
-              <span
+              <Badge
                 aria-disabled
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  color: 'var(--ink-faint)',
-                  border: '1px solid var(--surface-rule)',
-                  padding: '4px 8px',
-                  borderRadius: 999,
-                }}
+                variant="outline"
+                className="rounded-md border-[color:var(--surface-rule)] bg-[color:var(--surface-elevated)] px-2 py-1 text-[11px] font-medium text-[color:var(--ink-muted)]"
               >
                 Soon
-              </span>
+              </Badge>
             </li>
           ))}
         </ul>

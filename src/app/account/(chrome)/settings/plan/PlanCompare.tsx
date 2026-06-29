@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { pollSubscriptionStatus } from '@/app/actions/billing';
 import { PLAN_LIMITS, PLAN_RANK, PLANS, priceFor, type Plan } from '@/lib/plans';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 const FEATURES: Record<Plan, string[]> = {
   free: [
@@ -235,46 +237,36 @@ function PlanCard({
       data-last={isLast}
     >
       {featured ? (
-        <span
+        <Badge
+          variant="outline"
+          className="rounded-md px-2 py-1 text-[11px] font-medium"
           style={{
             position: 'absolute',
             top: 16,
             insetInlineEnd: 16,
-            padding: '4px 10px',
-            borderRadius: 999,
             border: `1px solid color-mix(in srgb, ${
               inverted ? 'var(--surface-bg)' : 'var(--ink-strong)'
             } 32%, transparent)`,
             color: cardInk,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 9.5,
-            letterSpacing: '0.16em',
-            textTransform: 'uppercase',
-            fontWeight: 600,
+            background: 'transparent',
           }}
         >
           Most chosen
-        </span>
+        </Badge>
       ) : null}
       {isCurrent && !featured ? (
-        <span
+        <Badge
+          className="rounded-md px-2 py-1 text-[11px] font-medium"
           style={{
             position: 'absolute',
             top: 16,
             insetInlineEnd: 16,
-            padding: '3px 8px',
-            borderRadius: 4,
             background: 'var(--color-maroon, #8b3a3a)',
             color: '#fff',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 9,
-            letterSpacing: '0.16em',
-            textTransform: 'uppercase',
-            fontWeight: 600,
           }}
         >
           Your plan
-        </span>
+        </Badge>
       ) : null}
 
       <div style={{ marginBottom: 24, paddingInlineEnd: 80 }}>
@@ -321,23 +313,19 @@ function PlanCard({
         >
           {monthly === 0 ? 'Free' : `QR ${monthly}`}
         </span>
-        <span
+        <Badge
+          variant="outline"
+          className="rounded-md px-2 py-1 text-[11px] font-medium"
           style={{
-            padding: '3px 8px',
-            borderRadius: 4,
             background: inverted
               ? 'color-mix(in srgb, var(--surface-bg) 12%, transparent)'
               : 'color-mix(in srgb, var(--ink-strong) 8%, transparent)',
             color: cardMuted,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 9.5,
-            letterSpacing: '0.14em',
-            textTransform: 'uppercase',
-            fontWeight: 600,
+            borderColor: 'transparent',
           }}
         >
           {monthly === 0 ? 'start' : '/ mo'}
-        </span>
+        </Badge>
       </div>
 
       <ul
@@ -389,75 +377,51 @@ function PlanCta({
 }) {
   if (isCurrent) {
     return (
-      <span
+      <Badge
+        variant="outline"
+        className="min-h-11 w-full rounded-md px-4 text-sm font-medium"
         style={{
-          display: 'inline-flex',
-          minHeight: 44,
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '0 20px',
-          borderRadius: 999,
           border: `1px solid color-mix(in srgb, ${
             inverted ? 'var(--surface-bg)' : 'var(--ink-strong)'
           } 22%, transparent)`,
           color: cardMuted,
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          letterSpacing: '0.14em',
-          textTransform: 'uppercase',
-          fontWeight: 600,
         }}
       >
-        Active
-      </span>
+        Current plan
+      </Badge>
     );
   }
 
   if (!isUpgrade) {
     return (
-      <a
-        href="/#plans"
+      <Button
+        asChild
+        variant="outline"
+        className="h-11 w-full rounded-md"
         style={{
-          display: 'inline-flex',
-          minHeight: 44,
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '0 20px',
-          borderRadius: 999,
           border: `1px solid color-mix(in srgb, ${
             inverted ? 'var(--surface-bg)' : 'var(--ink-strong)'
           } 20%, transparent)`,
           color: cardInk,
-          fontSize: 13,
-          fontWeight: 600,
-          textDecoration: 'none',
+          background: 'transparent',
         }}
       >
-        View plans
-      </a>
+        <a href="/#plans">View plans</a>
+      </Button>
     );
   }
 
   return (
-    <a
-      href="/#plans"
+    <Button
+      asChild
+      className="h-11 w-full rounded-md"
       style={{
-        display: 'inline-flex',
-        minHeight: 44,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '0 20px',
-        borderRadius: 999,
         background: inverted ? 'var(--surface-bg)' : 'var(--ink-strong)',
         color: inverted ? 'var(--ink-strong)' : 'var(--surface-bg)',
-        fontSize: 13,
-        fontWeight: 600,
-        border: 'none',
-        textDecoration: 'none',
       }}
     >
-      Choose {label}
-    </a>
+      <a href="/#plans">Choose {label}</a>
+    </Button>
   );
 }
 
@@ -537,28 +501,15 @@ function SkipCashReturnBanner({
             : 'Checkout cancelled. You can try again from the public plans section.'}
         </span>
         {success ? (
-          <button
+          <Button
             type="button"
             onClick={onExplore}
-            style={{
-              justifySelf: 'start',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              minHeight: 38,
-              padding: '0 14px',
-              borderRadius: 999,
-              border: '1px solid var(--surface-rule-strong)',
-              background: 'var(--ink-strong)',
-              color: 'var(--surface-bg)',
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
+            size="sm"
+            className="h-9 justify-self-start rounded-md bg-[color:var(--ink-strong)] text-[color:var(--surface-bg)] hover:bg-[color:color-mix(in_srgb,var(--ink-strong)_88%,transparent)]"
           >
             Explore {label}
             <ArrowRight size={15} aria-hidden="true" />
-          </button>
+          </Button>
         ) : null}
       </div>
     </div>
@@ -617,25 +568,16 @@ function ReturnBenefitsPanel({ plan, onClose }: { plan: Plan; onClose: () => voi
             {copy.body}
           </p>
         </div>
-        <button
+        <Button
           type="button"
           onClick={onClose}
           aria-label="Close plan benefits"
-          style={{
-            display: 'inline-grid',
-            placeItems: 'center',
-            width: 36,
-            height: 36,
-            borderRadius: 999,
-            border: '1px solid var(--surface-rule)',
-            background: 'var(--surface-bg)',
-            color: 'var(--ink-strong)',
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
+          variant="outline"
+          size="icon"
+          className="shrink-0 rounded-md border-[color:var(--surface-rule)] bg-[color:var(--surface-bg)] text-[color:var(--ink-strong)] hover:bg-[color:var(--surface-elevated)]"
         >
           <X size={16} aria-hidden="true" />
-        </button>
+        </Button>
       </div>
       <ul
         style={{

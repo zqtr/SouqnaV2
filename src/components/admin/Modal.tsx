@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 /**
  * Centered modal dialog used by the admin product/category editors.
@@ -183,30 +185,16 @@ export function Modal({
               {subtitle}
             </p>
           ) : null}
-          <button
+          <Button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            style={{
-              position: 'absolute',
-              top: 14,
-              right: 14,
-              width: 32,
-              height: 32,
-              borderRadius: 999,
-              border: '1px solid var(--surface-rule)',
-              background: 'var(--surface-bg)',
-              color: 'var(--ink-muted)',
-              fontSize: 16,
-              lineHeight: 1,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            variant="ghost"
+            size="icon-sm"
+            className="absolute right-3 top-3 rounded-md text-[color:var(--ink-muted)] hover:bg-[color:var(--surface-bg)] hover:text-[color:var(--ink-strong)]"
           >
-            ×
-          </button>
+            <X aria-hidden="true" />
+          </Button>
         </header>
 
         <div
