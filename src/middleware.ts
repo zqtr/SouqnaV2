@@ -421,8 +421,12 @@ function hasClerkSessionCookie(req: NextRequest): boolean {
   return Boolean(req.cookies.get('__session') || req.cookies.get('__client_uat'));
 }
 
+function hasClerkHandshakeParam(req: NextRequest): boolean {
+  return req.nextUrl.searchParams.has('__clerk_handshake');
+}
+
 function isRecoverableClerkSessionError(error: unknown, req: NextRequest): boolean {
-  if (!hasClerkSessionCookie(req)) return false;
+  if (!hasClerkSessionCookie(req) && !hasClerkHandshakeParam(req)) return false;
 
   const message = error instanceof Error ? error.message : String(error);
   return (
@@ -433,16 +437,23 @@ function isRecoverableClerkSessionError(error: unknown, req: NextRequest): boole
 }
 
 function staleClerkSessionRedirect(req: NextRequest): NextResponse {
-  const url = req.nextUrl.clone();
-  url.pathname = '/sign-in';
-  url.searchParams.set('redirect_url', req.url);
+  const cleanUrl = req.nextUrl.clone();
+  const hadHandshake = cleanUrl.searchParams.has('__clerk_handshake');
+  cleanUrl.searchParams.delete('__clerk_handshake');
+
+  const url = cleanUrl.clone();
+  if (!hadHandshake || isProtectedApexRoute(req)) {
+    url.pathname = '/sign-in';
+    url.search = '';
+    url.searchParams.set('redirect_url', cleanUrl.toString());
+  }
 
   const response = NextResponse.redirect(url);
   const cookieHost = req.nextUrl.hostname.toLowerCase();
   const rootCookieDomain =
     cookieHost.split('.').length > 2 ? `.${cookieHost.split('.').slice(-2).join('.')}` : null;
 
-  for (const name of ['__session', '__client_uat']) {
+  for (const name of ['__session', '__client_uat', '__clerk_db_jwt']) {
     response.cookies.delete(name);
     response.cookies.set(name, '', { maxAge: 0, path: '/' });
     response.cookies.set(name, '', { domain: `.${cookieHost}`, maxAge: 0, path: '/' });
