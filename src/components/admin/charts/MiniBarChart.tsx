@@ -24,7 +24,8 @@ export function MiniBarChart({
   const innerH = height - pad * 2;
   const len = data.length || 1;
   const max = Math.max(...(data.length ? data : [0]));
-  const barGap = 1;
+  const hasActivity = max > 0;
+  const barGap = 1.6;
   const barW = Math.max(1, (innerW - barGap * (len - 1)) / len);
 
   return (
@@ -36,9 +37,19 @@ export function MiniBarChart({
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
     >
+      <line
+        x1={pad}
+        x2={width - pad}
+        y1={height - pad - 0.5}
+        y2={height - pad - 0.5}
+        stroke={accent}
+        strokeOpacity={0.18}
+        strokeWidth={1}
+        vectorEffect="non-scaling-stroke"
+      />
       {data.map((v, i) => {
         const norm = max > 0 ? v / max : 0;
-        const h = Math.max(1, norm * innerH);
+        const h = v > 0 ? Math.max(3, norm * innerH * 0.72) : 1;
         const x = pad + i * (barW + barGap);
         const y = pad + innerH - h;
         return (
@@ -49,8 +60,8 @@ export function MiniBarChart({
             width={barW.toFixed(2)}
             height={h.toFixed(2)}
             fill={accent}
-            fillOpacity={v > 0 ? 0.85 : 0.18}
-            rx={0.5}
+            fillOpacity={v > 0 ? 0.46 : hasActivity ? 0.08 : 0.14}
+            rx={1}
           />
         );
       })}

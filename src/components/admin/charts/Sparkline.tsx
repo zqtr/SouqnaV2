@@ -2,7 +2,7 @@
  * Lightweight inline SVG sparkline. Hand-rolled so the dashboard home
  * page can show 30-day trends without pulling in a chart library.
  *
- * Renders a 1.5 px polyline with a faint area fill underneath. Empty
+ * Renders a smooth 1.5 px curve with a faint area fill underneath. Empty
  * data and all-zero data both render a flat baseline (no crash, no
  * misleading curve). Padding leaves a few px on every edge so the line
  * never clips against the container border.
@@ -34,13 +34,13 @@ export function Sparkline({
 
   const points = safeData.map((v, i) => {
     const x = pad + (len <= 1 ? innerW / 2 : (i / (len - 1)) * innerW);
-    const y = pad + innerH - ((v - min) / range) * innerH;
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
+    const y = pad + innerH - ((v - min) / range) * (innerH * 0.72);
+    return { x, y };
   });
-  const linePath = points.join(' ');
+  const linePath = smoothPath(points);
   const areaPath =
     safeData.length > 0
-      ? `M ${points[0]} L ${points.join(' L ')} L ${(pad + innerW).toFixed(2)},${baselineY.toFixed(2)} L ${pad.toFixed(2)},${baselineY.toFixed(2)} Z`
+      ? `${linePath} L ${(pad + innerW).toFixed(2)},${baselineY.toFixed(2)} L ${pad.toFixed(2)},${baselineY.toFixed(2)} Z`
       : '';
 
   return (
@@ -53,16 +53,44 @@ export function Sparkline({
       preserveAspectRatio="none"
     >
       {areaPath ? (
-        <path d={areaPath} fill={accent} fillOpacity={0.08} stroke="none" />
+        <path d={areaPath} fill={accent} fillOpacity={0.07} stroke="none" />
       ) : null}
-      <polyline
-        points={linePath}
+      <path
+        d={linePath}
         fill="none"
         stroke={accent}
-        strokeWidth={1.5}
+        strokeOpacity={0.68}
+        strokeWidth={1.75}
         strokeLinejoin="round"
         strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );
+}
+
+function smoothPath(points: Array<{ x: number; y: number }>): string {
+  if (points.length === 0) return '';
+  if (points.length === 1) {
+    const point = points[0]!;
+    return `M ${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+  }
+
+  const commands = [`M ${points[0]!.x.toFixed(2)},${points[0]!.y.toFixed(2)}`];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index]!;
+    const next = points[index + 1]!;
+    const previous = points[index - 1] ?? current;
+    const following = points[index + 2] ?? next;
+    const controlScale = 0.18;
+    const cp1x = current.x + (next.x - previous.x) * controlScale;
+    const cp1y = current.y + (next.y - previous.y) * controlScale;
+    const cp2x = next.x - (following.x - current.x) * controlScale;
+    const cp2y = next.y - (following.y - current.y) * controlScale;
+    commands.push(
+      `C ${cp1x.toFixed(2)},${cp1y.toFixed(2)} ${cp2x.toFixed(2)},${cp2y.toFixed(2)} ${next.x.toFixed(2)},${next.y.toFixed(2)}`,
+    );
+  }
+
+  return commands.join(' ');
 }

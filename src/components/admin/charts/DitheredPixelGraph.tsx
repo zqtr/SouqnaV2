@@ -7,6 +7,7 @@ export type DitheredPixelGraphSeries = {
   fill?: boolean;
   dashed?: boolean;
   opacity?: number;
+  pattern?: 'dots' | 'hatch' | 'ascii';
 };
 
 type Props = {
@@ -18,6 +19,8 @@ type Props = {
   className?: string;
   showGrid?: boolean;
   density?: 'compact' | 'normal' | 'rich';
+  stacked?: boolean;
+  showPoints?: boolean;
 };
 
 type Point = { x: number; y: number };
@@ -37,15 +40,23 @@ export function DitheredPixelGraph({
   className,
   showGrid = false,
   density = 'normal',
+  stacked = false,
+  showPoints = false,
 }: Props) {
   const visibleSeries = series.filter((item) => item.data.length > 0);
   const safeSeries = visibleSeries.length > 0 ? visibleSeries : [{ data: [0, 0], color: 'currentColor' }];
-  const maxValue = Math.max(...safeSeries.flatMap((item) => item.data), 1);
+  const maxValue = stacked
+    ? Math.max(
+        ...sumSeries(safeSeries).map((value) => value),
+        1,
+      )
+    : Math.max(...safeSeries.flatMap((item) => item.data), 1);
   const id = `dither-${hashString(
-    `${ariaLabel}:${width}:${height}:${safeSeries.map((item) => item.data.join('.')).join('|')}`,
+    `${ariaLabel}:${width}:${height}:${stacked}:${safeSeries.map((item) => item.data.join('.')).join('|')}`,
   )}`;
   const baseline = height - padding;
   const densityConfig = DENSITY[density];
+  const cumulativeData = getCumulativeSeries(safeSeries);
 
   return (
     <svg
@@ -57,20 +68,42 @@ export function DitheredPixelGraph({
     >
       <title>{ariaLabel}</title>
       <defs>
-        {safeSeries.map((item, index) => (
-          <linearGradient
-            key={`gradient-${index}`}
-            id={`${id}-fill-${index}`}
-            x1="0"
-            x2="0"
-            y1="0"
-            y2="1"
-          >
-            <stop offset="0%" stopColor={item.color} stopOpacity="0.5" />
-            <stop offset="56%" stopColor={item.color} stopOpacity="0.18" />
-            <stop offset="100%" stopColor={item.color} stopOpacity="0" />
-          </linearGradient>
-        ))}
+        {safeSeries.map((item, index) => {
+          const displayData = stacked ? (cumulativeData[index] ?? item.data) : item.data;
+          const points = getPoints(displayData, width, height, padding, maxValue);
+          const stepped = getSteppedPoints(points);
+          const lowerData = stacked && index > 0 ? (cumulativeData[index - 1] ?? []) : [];
+          const lowerPoints =
+            stacked && lowerData.length > 0
+              ? getSteppedPoints(getPoints(lowerData, width, height, padding, maxValue))
+              : undefined;
+          const clipPoints = lowerPoints
+            ? getBandPoints(stepped, lowerPoints)
+            : getAreaPoints(stepped, baseline);
+
+          return (
+            <g key={`defs-${index}`}>
+              <linearGradient id={`${id}-fill-${index}`} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor={item.color} stopOpacity="0.58" />
+                <stop offset="48%" stopColor={item.color} stopOpacity="0.24" />
+                <stop offset="100%" stopColor={item.color} stopOpacity="0.03" />
+              </linearGradient>
+              <pattern
+                id={`${id}-hatch-${index}`}
+                width="7"
+                height="7"
+                patternUnits="userSpaceOnUse"
+                patternTransform="rotate(45)"
+              >
+                <rect width="7" height="7" fill="transparent" />
+                <rect width="2.2" height="7" fill={item.color} opacity="0.58" />
+              </pattern>
+              <clipPath id={`${id}-clip-${index}`}>
+                <polygon points={clipPoints} />
+              </clipPath>
+            </g>
+          );
+        })}
       </defs>
 
       {showGrid ? (
@@ -92,11 +125,18 @@ export function DitheredPixelGraph({
       ) : null}
 
       {safeSeries.map((item, index) => {
-        const points = getPoints(item.data, width, height, padding, maxValue);
+        const displayData = stacked ? (cumulativeData[index] ?? item.data) : item.data;
+        const lowerData = stacked && index > 0 ? (cumulativeData[index - 1] ?? []) : [];
+        const points = getPoints(displayData, width, height, padding, maxValue);
+        const lowerPoints =
+          stacked && lowerData.length > 0
+            ? getSteppedPoints(getPoints(lowerData, width, height, padding, maxValue))
+            : undefined;
         const stepped = getSteppedPoints(points);
-        const areaPoints = getAreaPoints(stepped, baseline);
+        const areaPoints = lowerPoints ? getBandPoints(stepped, lowerPoints) : getAreaPoints(stepped, baseline);
         const ditherPixels = getDitherPixels({
-          points,
+          topPoints: points,
+          lowerPoints,
           width,
           height,
           padding,
@@ -106,7 +146,8 @@ export function DitheredPixelGraph({
         });
         const asciiPixels = densityConfig.ascii
           ? getAsciiPixels({
-              points,
+              topPoints: points,
+              lowerPoints,
               width,
               height,
               padding,
@@ -117,11 +158,27 @@ export function DitheredPixelGraph({
           : [];
         const shouldFill = item.fill !== false;
         const opacity = item.opacity ?? (index === 0 ? 1 : 0.72);
+        const pattern = item.pattern ?? (index === 0 ? 'dots' : 'hatch');
 
         return (
           <g key={`${item.label ?? 'series'}-${index}`} opacity={opacity} style={{ color: item.color }}>
             {shouldFill ? (
-              <polygon points={areaPoints} fill={`url(#${id}-fill-${index})`} />
+              <polygon
+                className="souqna-dither-fill"
+                points={areaPoints}
+                fill={`url(#${id}-fill-${index})`}
+              />
+            ) : null}
+            {shouldFill && pattern === 'hatch' ? (
+              <rect
+                className="souqna-dither-hatch"
+                x={padding}
+                y={padding}
+                width={width - padding * 2}
+                height={height - padding * 2}
+                fill={`url(#${id}-hatch-${index})`}
+                clipPath={`url(#${id}-clip-${index})`}
+              />
             ) : null}
             {shouldFill ? (
               <g className="souqna-dither-pixels" fill={item.color}>
@@ -176,6 +233,22 @@ export function DitheredPixelGraph({
               vectorEffect="non-scaling-stroke"
               pathLength={1}
             />
+            {showPoints ? (
+              <g className="souqna-dither-points" fill={item.color}>
+                {points.map((point, pointIndex) => (
+                  <rect
+                    key={`${pointIndex}-${point.x}`}
+                    x={point.x - 1.8}
+                    y={point.y - 1.8}
+                    width="3.6"
+                    height="3.6"
+                    rx="0.8"
+                    opacity={density === 'compact' ? 0.45 : 0.78}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+              </g>
+            ) : null}
           </g>
         );
       })}
@@ -223,12 +296,17 @@ function getAreaPoints(points: Point[], baseline: number): string {
   ].join(' ');
 }
 
+function getBandPoints(topPoints: Point[], lowerPoints: Point[]): string {
+  return [pointsToString(topPoints), pointsToString([...lowerPoints].reverse())].join(' ');
+}
+
 function pointsToString(points: Point[]): string {
   return points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
 }
 
 function getDitherPixels({
-  points,
+  topPoints,
+  lowerPoints,
   width,
   height,
   padding,
@@ -236,7 +314,8 @@ function getDitherPixels({
   columns,
   rows,
 }: {
-  points: Point[];
+  topPoints: Point[];
+  lowerPoints?: Point[];
   width: number;
   height: number;
   padding: number;
@@ -253,11 +332,12 @@ function getDitherPixels({
 
   for (let col = 0; col < columns; col += 1) {
     const x = padding + col * cellWidth;
-    const lineY = yAtX(points, x);
-    const depth = Math.max(1, baseline - lineY);
+    const lineY = yAtX(topPoints, x);
+    const lowerY = lowerPoints ? yAtX(lowerPoints, x) : baseline;
+    const depth = Math.max(1, lowerY - lineY);
     for (let row = 0; row < rows; row += 1) {
       const y = padding + row * cellHeight;
-      if (y < lineY || y > baseline) continue;
+      if (y < lineY || y > lowerY) continue;
       const ratio = (y - lineY) / depth;
       const skipLevel = ratio < 0.2 ? 0 : ratio < 0.46 ? 1 : ratio < 0.68 ? 2 : 3;
       if (((col * 17 + row * 29) % 5) < skipLevel) continue;
@@ -275,7 +355,8 @@ function getDitherPixels({
 }
 
 function getAsciiPixels({
-  points,
+  topPoints,
+  lowerPoints,
   width,
   height,
   padding,
@@ -283,7 +364,8 @@ function getAsciiPixels({
   columns,
   rows,
 }: {
-  points: Point[];
+  topPoints: Point[];
+  lowerPoints?: Point[];
   width: number;
   height: number;
   padding: number;
@@ -299,11 +381,12 @@ function getAsciiPixels({
 
   for (let col = 1; col < columns; col += 6) {
     const x = padding + col * cellWidth;
-    const lineY = yAtX(points, x);
-    const depth = Math.max(1, baseline - lineY);
+    const lineY = yAtX(topPoints, x);
+    const lowerY = lowerPoints ? yAtX(lowerPoints, x) : baseline;
+    const depth = Math.max(1, lowerY - lineY);
     for (let row = 1; row < rows; row += 4) {
       const y = padding + row * cellHeight;
-      if (y < lineY || y > baseline) continue;
+      if (y < lineY || y > lowerY) continue;
       if ((col * 11 + row * 7) % 4 !== 0) continue;
       const ratio = (y - lineY) / depth;
       const glyph = ratio < 0.26 ? '#' : ratio < 0.58 ? '+' : '.';
@@ -317,6 +400,26 @@ function getAsciiPixels({
   }
 
   return pixels;
+}
+
+function getCumulativeSeries(series: DitheredPixelGraphSeries[]): number[][] {
+  const length = Math.max(...series.map((item) => item.data.length), 0);
+  const totals = Array.from({ length }, () => 0);
+
+  return series.map((item) =>
+    Array.from({ length }, (_, index) => {
+      const nextTotal = (totals[index] ?? 0) + (item.data[index] ?? 0);
+      totals[index] = nextTotal;
+      return nextTotal;
+    }),
+  );
+}
+
+function sumSeries(series: DitheredPixelGraphSeries[]): number[] {
+  const length = Math.max(...series.map((item) => item.data.length), 0);
+  return Array.from({ length }, (_, index) =>
+    series.reduce((sum, item) => sum + Math.max(0, item.data[index] ?? 0), 0),
+  );
 }
 
 function yAtX(points: Point[], x: number): number {

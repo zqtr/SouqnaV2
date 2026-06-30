@@ -16,7 +16,7 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Reveal } from '@/components/motion/Reveal';
-import { DitheredPixelGraph } from '@/components/admin/charts/DitheredPixelGraph';
+import { Sparkline } from '@/components/admin/charts/Sparkline';
 import type { TopProductByOrders } from '@/lib/products';
 
 type MetricTone = 'neutral' | 'success' | 'warning' | 'critical' | 'info';
@@ -145,21 +145,13 @@ export function CommerceMetricCard({
             {hint ? <CardDescription className="mt-1 truncate">{hint}</CardDescription> : null}
           </div>
           {trend && trend.length > 0 ? (
-            <div className="h-12 w-28 shrink-0 opacity-90 transition-opacity group-hover:opacity-100">
-              <DitheredPixelGraph
-                series={[
-                  {
-                    data: trend,
-                    color: accent,
-                    label,
-                    fill: true,
-                  },
-                ]}
+            <div className="h-12 w-28 shrink-0 opacity-75 transition-opacity group-hover:opacity-95">
+              <Sparkline
+                data={trend}
                 width={112}
                 height={48}
-                padding={4}
-                density="compact"
-                ariaLabel={`${label} ${chart === 'bar' ? 'bar ' : ''}trend`}
+                accent={accent}
+                ariaLabel={`${label} ${chart === 'bar' ? 'smooth ' : ''}trend`}
               />
             </div>
           ) : null}
