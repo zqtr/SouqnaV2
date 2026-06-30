@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, type NextFetchEvent, type NextRequest } from 'next/server';
 import createMiddleware from 'next-intl/middleware';
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { routing } from '@/i18n/routing';
@@ -417,7 +417,37 @@ function rewriteForSubdomain(req: NextRequest): NextResponse | null {
   return null;
 }
 
-export default clerkMiddleware(async (auth, req) => {
+function isClerkHandshakeKeyMismatch(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes('Clerk: Handshake token verification failed') ||
+    message.includes('reason=jwk-kid-mismatch')
+  );
+}
+
+function staleClerkSessionRedirect(req: NextRequest): NextResponse {
+  const url = req.nextUrl.clone();
+  url.pathname = '/sign-in';
+  url.searchParams.set('redirect_url', req.url);
+
+  const response = NextResponse.redirect(url);
+  const cookieHost = req.nextUrl.hostname.toLowerCase();
+  const rootCookieDomain =
+    cookieHost.split('.').length > 2 ? `.${cookieHost.split('.').slice(-2).join('.')}` : null;
+
+  for (const name of ['__session', '__client_uat']) {
+    response.cookies.delete(name);
+    response.cookies.set(name, '', { maxAge: 0, path: '/' });
+    response.cookies.set(name, '', { domain: `.${cookieHost}`, maxAge: 0, path: '/' });
+    if (rootCookieDomain && rootCookieDomain !== `.${cookieHost}`) {
+      response.cookies.set(name, '', { domain: rootCookieDomain, maxAge: 0, path: '/' });
+    }
+  }
+
+  return response;
+}
+
+const handleMiddleware = clerkMiddleware(async (auth, req) => {
   const isMobileApi = req.nextUrl.pathname.startsWith(MOBILE_API_PREFIX);
   if (isMobileApi && req.method === 'OPTIONS') {
     return new NextResponse(null, {
@@ -514,6 +544,17 @@ export default clerkMiddleware(async (auth, req) => {
   // 5. next-intl handles locale routing for everything else on the apex.
   return intlMiddleware(req);
 });
+
+export default async function middleware(req: NextRequest, event: NextFetchEvent) {
+  try {
+    return await handleMiddleware(req, event);
+  } catch (error) {
+    if (isClerkHandshakeKeyMismatch(error)) {
+      return staleClerkSessionRedirect(req);
+    }
+    throw error;
+  }
+}
 
 export const config = {
   matcher: [
