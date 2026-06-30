@@ -417,11 +417,18 @@ function rewriteForSubdomain(req: NextRequest): NextResponse | null {
   return null;
 }
 
-function isClerkHandshakeKeyMismatch(error: unknown): boolean {
+function hasClerkSessionCookie(req: NextRequest): boolean {
+  return Boolean(req.cookies.get('__session') || req.cookies.get('__client_uat'));
+}
+
+function isRecoverableClerkSessionError(error: unknown, req: NextRequest): boolean {
+  if (!hasClerkSessionCookie(req)) return false;
+
   const message = error instanceof Error ? error.message : String(error);
   return (
     message.includes('Clerk: Handshake token verification failed') ||
-    message.includes('reason=jwk-kid-mismatch')
+    message.includes('reason=jwk-kid-mismatch') ||
+    message.includes('Unexpected end of data')
   );
 }
 
@@ -549,7 +556,7 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
   try {
     return await handleMiddleware(req, event);
   } catch (error) {
-    if (isClerkHandshakeKeyMismatch(error)) {
+    if (isRecoverableClerkSessionError(error, req)) {
       return staleClerkSessionRedirect(req);
     }
     throw error;
