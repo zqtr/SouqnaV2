@@ -3,15 +3,15 @@ import { auth } from '@clerk/nextjs/server';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import {
-  ArrowUpRight,
-  CheckCircle2,
-  Sparkles,
-  Zap,
+  CircleAlert,
+  PlugZap,
+  Search,
+  Settings2,
 } from 'lucide-react';
 import { getStorefrontsForUser } from '@/lib/brief';
 import { listInstalledApps } from '@/lib/apps/installed';
 import { APP_REGISTRY } from '@/lib/apps/registry';
-import type { AppDescriptor } from '@/lib/apps/types';
+import type { AppCategory, AppDescriptor } from '@/lib/apps/types';
 import { env } from '@/lib/env';
 import { EmptyState } from '@/components/admin/primitives';
 import { AppMark } from '@/components/admin/apps/AppMark';
@@ -27,15 +27,49 @@ type MarketplaceApp = {
   setupRequired: boolean;
 };
 
+type MarketplaceCategory = 'recommended' | 'installed' | AppCategory;
+
+type MarketplaceTab = {
+  id: MarketplaceCategory;
+  label: string;
+  count: number;
+  href: string;
+  active: boolean;
+};
+
+const CATEGORY_ORDER: AppCategory[] = [
+  'marketing',
+  'sales',
+  'finance',
+  'support',
+  'analytics',
+  'media',
+  'logistics',
+];
+
+const CATEGORY_LABELS: Record<AppCategory, string> = {
+  analytics: 'Analytics',
+  finance: 'Finance',
+  logistics: 'Logistics',
+  marketing: 'Marketing',
+  media: 'Media',
+  sales: 'Sales',
+  support: 'Support',
+};
+
 /**
  * Souqna Marketplace shell. The page is intentionally server-rendered:
- * app install/configure routing stays stable, while CSS handles the
- * animated AI signal layer.
+ * app install/configure routing stays stable while the UI behaves like a
+ * compact integrations directory.
  */
 export default async function AppsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ store?: string | string[] }>;
+  searchParams?: Promise<{
+    category?: string | string[];
+    q?: string | string[];
+    store?: string | string[];
+  }>;
 }) {
   const { userId } = await auth();
   if (!userId) redirect('/sign-in?redirect_url=/account/apps');
@@ -44,17 +78,18 @@ export default async function AppsPage({
 
   const sp = (await searchParams) ?? {};
   const requested = Array.isArray(sp.store) ? sp.store[0] : sp.store;
+  const requestedCategory = Array.isArray(sp.category) ? sp.category[0] : sp.category;
+  const requestedQuery = Array.isArray(sp.q) ? sp.q[0] : sp.q;
+  const query = requestedQuery?.trim() ?? '';
   const storefronts = await getStorefrontsForUser(userId);
   if (storefronts.length === 0) {
     return (
-      <>
-        <EmptyState
-          eyebrow={t('Marketplace')}
-          title={t('Souqna Marketplace')}
-          body={t('Marketplace tools are scoped per-storefront. Set up a store to unlock Souqna Marketplace.')}
-          action={{ label: t('Create your store'), href: '/begin' }}
-        />
-      </>
+      <EmptyState
+        eyebrow={t('Marketplace')}
+        title={t('Souqna Marketplace')}
+        body={t('Marketplace tools are scoped per-storefront. Set up a store to unlock Souqna Marketplace.')}
+        action={{ label: t('Create your store'), href: '/begin' }}
+      />
     );
   }
 
@@ -65,8 +100,7 @@ export default async function AppsPage({
   const slug = storefront.slug;
   const installed = await listInstalledApps(slug);
   const installedSet = new Set(installed.map((a) => a.appId));
-  const availableApps = APP_REGISTRY.filter((app) => app.available);
-  const marketplaceApps = availableApps.map((app) =>
+  const marketplaceApps = APP_REGISTRY.map((app) =>
     toMarketplaceApp({
       app,
       installed: installedSet.has(app.id),
@@ -74,62 +108,104 @@ export default async function AppsPage({
       t,
     }),
   );
+  const selectedCategory = isMarketplaceCategory(requestedCategory)
+    ? requestedCategory
+    : 'recommended';
+  const tabs = buildMarketplaceTabs({
+    apps: marketplaceApps,
+    query,
+    selectedCategory,
+    storeSlug: slug,
+    t,
+  });
+  const categoryApps = filterMarketplaceApps(marketplaceApps, selectedCategory);
+  const visibleApps = filterMarketplaceSearch(categoryApps, query);
+
   return (
     <div className="souqna-marketplace">
-      <MarketplaceHero t={t} />
+      <MarketplaceHeader t={t} />
 
-      <section className="marketplace-section" aria-labelledby="marketplace-apps-title">
-        <div className="marketplace-section__header">
-          <div>
-            <p className="marketplace-kicker">{t('Available in Souqna Marketplace')}</p>
-            <h2 id="marketplace-apps-title">{t('AI-ready tools for this store')}</h2>
+      <div className="marketplace-layout">
+        <section className="marketplace-directory" aria-labelledby="marketplace-apps-title">
+          <div className="marketplace-directory__head">
+            <div>
+              <p className="marketplace-kicker">{t('Available in Souqna Marketplace')}</p>
+              <h2 id="marketplace-apps-title">{t('Integration directory')}</h2>
+            </div>
+            <form className="marketplace-search" action="/account/apps">
+              <Search className="h-4 w-4" />
+              <input type="hidden" name="store" value={slug} />
+              {selectedCategory !== 'recommended' ? (
+                <input type="hidden" name="category" value={selectedCategory} />
+              ) : null}
+              <input
+                aria-label={t('Search marketplace')}
+                defaultValue={query}
+                name="q"
+                placeholder={t('Search apps, channels, and tools')}
+                type="search"
+              />
+              <button type="submit" aria-label={t('Search marketplace')}>
+                <Search className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </form>
           </div>
-        </div>
 
-        <div className="marketplace-grid">
-          {marketplaceApps.map((item, index) => (
-            <MarketplaceAppCard
-              key={item.app.id}
-              item={item}
-              index={index}
-              locale={locale}
-              t={t}
-            />
-          ))}
-        </div>
-      </section>
+          <nav className="marketplace-tabs" aria-label={t('Marketplace categories')}>
+            {tabs.map((tab) => (
+              <Link
+                key={tab.id}
+                href={tab.href}
+                aria-current={tab.active ? 'page' : undefined}
+                className={tab.active ? 'is-active' : undefined}
+              >
+                <span>{tab.label}</span>
+                <strong>{tab.count}</strong>
+              </Link>
+            ))}
+          </nav>
+
+          {visibleApps.length > 0 ? (
+            <div className="marketplace-grid">
+              {visibleApps.map((item, index) => (
+                <MarketplaceAppCard
+                  key={item.app.id}
+                  item={item}
+                  index={index}
+                  locale={locale}
+                  t={t}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="marketplace-empty">
+              <PlugZap className="h-5 w-5" aria-hidden="true" />
+              <h3>{query ? t('No apps match this search') : t('No apps in this category yet')}</h3>
+              <p>
+                {query
+                  ? t('Try another app name, category, or provider.')
+                  : t('Installed apps and new channels will appear here as Souqna Marketplace grows.')}
+              </p>
+            </div>
+          )}
+        </section>
+
+      </div>
 
       <style dangerouslySetInnerHTML={{ __html: marketplaceStyles }} />
     </div>
   );
 }
 
-function MarketplaceHero({
-  t,
-}: {
-  t: (text: string) => string;
-}) {
+function MarketplaceHeader({ t }: { t: (text: string) => string }) {
   return (
-    <section className="marketplace-hero" aria-labelledby="marketplace-title">
-      <div className="marketplace-hero__scan" aria-hidden="true" />
-      <div className="marketplace-hero__content">
-        <div className="marketplace-hero__copy">
-          <p className="marketplace-kicker">{t('Marketplace')}</p>
-          <h1 id="marketplace-title">{t('Souqna Marketplace')}</h1>
-          <p>
-            {t('An AI-tuned command center for connecting the tools that help this storefront sell, support, and grow.')}
-          </p>
-          <div className="marketplace-hero__chips" aria-label={t('Marketplace signals')}>
-            <span>
-              <Sparkles className="h-4 w-4" aria-hidden="true" />
-              {t('AI fit scan')}
-            </span>
-            <span>
-              <Zap className="h-4 w-4" aria-hidden="true" />
-              {t('Per-storefront install')}
-            </span>
-          </div>
-        </div>
+    <section className="marketplace-header" aria-labelledby="marketplace-title">
+      <div className="marketplace-header__copy">
+        <p className="marketplace-kicker">{t('Souqna Marketplace')}</p>
+        <h1 id="marketplace-title">{t('Connect the stack behind this store')}</h1>
+        <p>
+          {t('Pick the apps that move orders, customers, messages, and products without leaving the dashboard.')}
+        </p>
       </div>
     </section>
   );
@@ -147,27 +223,19 @@ function MarketplaceAppCard({
   t: (text: string) => string;
 }) {
   const { app, ctaHref, ctaLabel, installed, primaryCta, setupRequired } = item;
-  const actionIcon = installed ? CheckCircle2 : ArrowUpRight;
+  const unavailable = !app.available;
+  const actionIcon = installed ? Settings2 : unavailable ? CircleAlert : PlugZap;
   const ActionIcon = actionIcon;
 
   return (
-    <article className="marketplace-card" style={{ ['--delay' as string]: `${index * 80}ms` }}>
-      <div className="marketplace-card__glow" aria-hidden="true" />
+    <article className="marketplace-card" style={{ ['--delay' as string]: `${index * 70}ms` }}>
       <header className="marketplace-card__header">
-        <AppMark app={app} size={64} radius={18} />
+        <AppMark app={app} size={50} radius={14} />
         <div className="marketplace-card__title">
           <p>{locale === 'ar' ? `بواسطة ${app.vendor.replace(/^by\s+/i, '')}` : app.vendor}</p>
           <h3>{app.name}</h3>
         </div>
-        {installed ? (
-          <span className="marketplace-card__status marketplace-card__status--installed">
-            {t('installed')}
-          </span>
-        ) : setupRequired ? (
-          <span className="marketplace-card__status marketplace-card__status--setup">
-            {t('setup')}
-          </span>
-        ) : null}
+        <MarketplaceStatus item={item} t={t} />
       </header>
 
       <div className="marketplace-card__body">
@@ -175,25 +243,150 @@ function MarketplaceAppCard({
         <p>{t(app.description)}</p>
       </div>
 
-      {setupRequired ? (
-        <p className="marketplace-card__setup-note">
-          {t('Operator setup needed before activation')}
-        </p>
-      ) : null}
+      <div className="marketplace-card__meta">
+        <span>{t(CATEGORY_LABELS[app.category])}</span>
+        <span>{t(authLabel(app.authKind))}</span>
+      </div>
 
-      <Link
-        href={ctaHref}
-        className={[
-          'marketplace-card__cta',
-          primaryCta ? 'marketplace-card__cta--primary' : '',
-          setupRequired ? 'marketplace-card__cta--setup' : '',
-        ].filter(Boolean).join(' ')}
-      >
-        {ctaLabel}
-        <ActionIcon className="h-4 w-4" aria-hidden="true" />
-      </Link>
+      {unavailable ? (
+        <span className="marketplace-card__cta is-disabled" aria-disabled="true">
+          {ctaLabel}
+          <ActionIcon className="h-4 w-4" aria-hidden="true" />
+        </span>
+      ) : (
+        <Link
+          href={ctaHref}
+          className={[
+            'marketplace-card__cta',
+            primaryCta ? 'marketplace-card__cta--primary' : '',
+            setupRequired ? 'marketplace-card__cta--setup' : '',
+          ].filter(Boolean).join(' ')}
+        >
+          {ctaLabel}
+          <ActionIcon className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      )}
     </article>
   );
+}
+
+function MarketplaceStatus({
+  item,
+  t,
+}: {
+  item: MarketplaceApp;
+  t: (text: string) => string;
+}) {
+  if (item.installed) {
+    return (
+      <span className="marketplace-status marketplace-status--installed">
+        {t('installed')}
+      </span>
+    );
+  }
+  if (!item.app.available) {
+    return (
+      <span className="marketplace-status marketplace-status--soon">
+        {t('soon')}
+      </span>
+    );
+  }
+  if (item.setupRequired) {
+    return (
+      <span className="marketplace-status marketplace-status--setup">
+        {t('setup')}
+      </span>
+    );
+  }
+  return null;
+}
+
+function buildMarketplaceTabs({
+  apps,
+  query,
+  selectedCategory,
+  storeSlug,
+  t,
+}: {
+  apps: MarketplaceApp[];
+  query: string;
+  selectedCategory: MarketplaceCategory;
+  storeSlug: string;
+  t: (text: string) => string;
+}): MarketplaceTab[] {
+  const categoryCount = new Map<AppCategory, number>();
+  for (const item of apps) {
+    categoryCount.set(item.app.category, (categoryCount.get(item.app.category) ?? 0) + 1);
+  }
+
+  const tabs: MarketplaceTab[] = [
+    {
+      id: 'recommended',
+      label: t('Recommended'),
+      count: apps.filter((item) => item.app.available || item.installed).length,
+      href: marketplaceHref(storeSlug, 'recommended', query),
+      active: selectedCategory === 'recommended',
+    },
+    {
+      id: 'installed',
+      label: t('Installed'),
+      count: apps.filter((item) => item.installed).length,
+      href: marketplaceHref(storeSlug, 'installed', query),
+      active: selectedCategory === 'installed',
+    },
+  ];
+
+  for (const category of CATEGORY_ORDER) {
+    const count = categoryCount.get(category) ?? 0;
+    if (count === 0) continue;
+    tabs.push({
+      id: category,
+      label: t(CATEGORY_LABELS[category]),
+      count,
+      href: marketplaceHref(storeSlug, category, query),
+      active: selectedCategory === category,
+    });
+  }
+
+  return tabs;
+}
+
+function filterMarketplaceApps(
+  apps: MarketplaceApp[],
+  selectedCategory: MarketplaceCategory,
+): MarketplaceApp[] {
+  if (selectedCategory === 'installed') return apps.filter((item) => item.installed);
+  if (selectedCategory === 'recommended') {
+    return apps.filter((item) => item.app.available || item.installed);
+  }
+  return apps.filter((item) => item.app.category === selectedCategory);
+}
+
+function filterMarketplaceSearch(apps: MarketplaceApp[], query: string): MarketplaceApp[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return apps;
+  return apps.filter(({ app }) =>
+    [
+      app.name,
+      app.vendor,
+      app.tagline,
+      app.description,
+      CATEGORY_LABELS[app.category],
+      authLabel(app.authKind),
+    ].some((value) => value.toLowerCase().includes(needle)),
+  );
+}
+
+function marketplaceHref(storeSlug: string, category: MarketplaceCategory, query: string): string {
+  const params = new URLSearchParams({ store: storeSlug });
+  if (category !== 'recommended') params.set('category', category);
+  if (query) params.set('q', query);
+  return `/account/apps?${params.toString()}`;
+}
+
+function isMarketplaceCategory(value: string | undefined): value is MarketplaceCategory {
+  if (!value) return false;
+  return value === 'recommended' || value === 'installed' || CATEGORY_ORDER.includes(value as AppCategory);
 }
 
 function toMarketplaceApp({
@@ -209,19 +402,17 @@ function toMarketplaceApp({
 }): MarketplaceApp {
   const configured = isConfigured(app);
   const setupRequired = app.available && !configured && !installed;
-  const primaryCta = app.available && !setupRequired && !installed;
+  const primaryCta = app.available && !installed;
   const ctaHref = installed
     ? `/account/apps/${app.id}/configure?store=${storeSlug}`
     : app.available
       ? `/account/apps/${app.id}?store=${storeSlug}`
       : '#';
   const ctaLabel = installed
-    ? t('Configure')
-    : setupRequired
-      ? t('Setup required')
-      : app.available
-        ? t('View details')
-        : t('Coming soon');
+    ? t('Manage')
+    : app.available
+      ? t('Connect')
+      : t('Coming soon');
 
   return {
     app,
@@ -246,221 +437,251 @@ function isConfigured(app: AppDescriptor): boolean {
   return true;
 }
 
+function authLabel(authKind: AppDescriptor['authKind']): string {
+  if (authKind === 'oauth') return 'Account connection';
+  if (authKind === 'api_key') return 'API key';
+  return 'One-click install';
+}
+
 const marketplaceStyles = `
 .souqna-marketplace {
-  --market-bg: color-mix(in srgb, var(--surface-bg) 82%, #050507);
-  --market-panel: color-mix(in srgb, var(--surface-elevated) 88%, #0d0d11);
+  --market-panel: color-mix(in srgb, var(--surface-elevated) 88%, var(--surface-bg));
+  --market-panel-soft: color-mix(in srgb, var(--surface-elevated) 68%, transparent);
   --market-line: color-mix(in srgb, var(--ink-strong) 13%, transparent);
-  --market-line-strong: color-mix(in srgb, var(--ink-strong) 22%, transparent);
-  --market-gold: #d8b56b;
-  --market-maroon: #5a202a;
-  --market-blue: #6f83ff;
-  --market-mint: #7ce7c8;
+  --market-line-strong: color-mix(in srgb, var(--ink-strong) 23%, transparent);
+  --market-accent: var(--admin-accent, var(--color-gold, #b89a52));
+  --market-accent-ink: color-mix(in srgb, var(--market-accent) 78%, var(--ink-strong));
   color: var(--ink-strong);
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 .marketplace-kicker {
   margin: 0;
-  color: color-mix(in srgb, var(--market-gold) 78%, var(--ink-muted));
+  color: var(--market-accent-ink);
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
+  font-weight: 750;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
-.marketplace-hero {
-  position: relative;
-  overflow: hidden;
+.marketplace-header {
+  display: block;
+}
+
+.marketplace-header__copy,
+.marketplace-directory,
+.marketplace-card,
+.marketplace-empty {
   border: 1px solid var(--market-line);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--market-maroon) 18%, transparent), transparent 34%),
-    linear-gradient(180deg, color-mix(in srgb, var(--market-panel) 96%, transparent), var(--market-bg));
-  box-shadow: 0 28px 90px color-mix(in srgb, #000 32%, transparent);
+    linear-gradient(180deg, color-mix(in srgb, var(--market-panel) 96%, transparent), color-mix(in srgb, var(--surface-bg) 94%, transparent)),
+    var(--surface-elevated);
+  box-shadow: 0 18px 60px color-mix(in srgb, #000 12%, transparent);
 }
 
-.marketplace-hero::before {
+.marketplace-header__copy {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(20px, 3vw, 30px);
+}
+
+.marketplace-header__copy::before {
   content: "";
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(color-mix(in srgb, var(--market-gold) 8%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--market-blue) 9%, transparent) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
-  opacity: 0.42;
-  transform: translate3d(0, 0, 0);
-  animation: marketplace-grid 18s linear infinite;
+    linear-gradient(color-mix(in srgb, var(--market-accent) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ink-strong) 5%, transparent) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(90deg, #000, transparent 86%);
+  opacity: 0.46;
+  pointer-events: none;
 }
 
-.marketplace-hero__scan {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--market-blue) 16%, transparent) 46%, color-mix(in srgb, var(--market-gold) 20%, transparent) 50%, transparent 54%),
-    repeating-linear-gradient(0deg, transparent 0 16px, color-mix(in srgb, var(--ink-strong) 4%, transparent) 17px 18px);
-  opacity: 0.5;
-  transform: translateX(-85%);
-  animation: marketplace-scan 7s ease-in-out infinite;
-}
-
-.marketplace-hero__content {
+.marketplace-header__copy > * {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 26px;
-  padding: clamp(24px, 4vw, 42px);
+  z-index: 1;
 }
 
-.marketplace-hero__copy {
-  align-self: center;
+.marketplace-header h1 {
   max-width: 720px;
-}
-
-.marketplace-hero h1 {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   color: var(--ink-strong);
-  font-family: var(--font-sans);
-  font-size: clamp(34px, 6vw, 68px);
-  font-weight: 720;
+  font-size: clamp(28px, 4.5vw, 52px);
+  font-weight: 760;
   letter-spacing: 0;
-  line-height: 0.95;
+  line-height: 1.02;
 }
 
-.marketplace-hero__copy > p:not(.marketplace-kicker) {
-  margin: 16px 0 0;
-  max-width: 680px;
+.marketplace-header__copy > p:not(.marketplace-kicker) {
+  max-width: 690px;
+  margin: 14px 0 0;
   color: var(--ink-muted);
-  font-size: clamp(14px, 1.5vw, 17px);
+  font-size: 15px;
   line-height: 1.65;
 }
 
-.marketplace-hero__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 22px;
+.marketplace-layout {
+  display: block;
 }
 
-.marketplace-hero__chips span {
+.marketplace-directory {
+  padding: clamp(16px, 2vw, 20px);
+}
+
+.marketplace-directory__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--market-line);
+  padding-bottom: 14px;
+}
+
+.marketplace-directory__head h2 {
+  margin: 5px 0 0;
+  color: var(--ink-strong);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.marketplace-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(320px, 42%);
+  min-height: 38px;
+  border: 1px solid var(--market-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-bg) 52%, transparent);
+  color: var(--ink-muted);
+  font-size: 13px;
+  padding: 0 12px;
+}
+
+.marketplace-search:focus-within {
+  border-color: color-mix(in srgb, var(--market-accent) 44%, transparent);
+  background: color-mix(in srgb, var(--surface-bg) 62%, transparent);
+}
+
+.marketplace-search svg {
+  flex-shrink: 0;
+}
+
+.marketplace-search input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ink-strong);
+  font: inherit;
+  outline: none;
+}
+
+.marketplace-search input::placeholder {
+  color: var(--ink-muted);
+  opacity: 1;
+}
+
+.marketplace-search input::-webkit-search-cancel-button {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.marketplace-search button {
+  display: inline-grid;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--market-line);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-elevated) 68%, transparent);
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.marketplace-search button:hover,
+.marketplace-search button:focus-visible {
+  border-color: color-mix(in srgb, var(--market-accent) 46%, transparent);
+  background: color-mix(in srgb, var(--market-accent) 14%, var(--surface-elevated));
+  color: var(--ink-strong);
+  outline: none;
+}
+
+.marketplace-tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.marketplace-tabs a {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-height: 34px;
   border: 1px solid var(--market-line);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-elevated) 72%, transparent);
-  color: var(--ink-strong);
+  background: color-mix(in srgb, var(--surface-bg) 44%, transparent);
+  color: var(--ink-muted);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 680;
   padding: 0 12px;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
-.marketplace-hero__chips svg {
-  color: var(--market-gold);
-}
-
-.marketplace-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.marketplace-section__header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 14px;
-  border-bottom: 1px solid var(--market-line);
-  padding-bottom: 14px;
-}
-
-.marketplace-section__header h2 {
-  margin: 6px 0 0;
+.marketplace-tabs a strong {
   color: var(--ink-strong);
-  font-size: clamp(22px, 3vw, 32px);
-  font-weight: 720;
-  letter-spacing: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.marketplace-tabs a.is-active {
+  border-color: color-mix(in srgb, var(--market-accent) 46%, transparent);
+  background: color-mix(in srgb, var(--market-accent) 14%, var(--market-panel));
+  color: var(--ink-strong);
 }
 
 .marketplace-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
 }
 
 .marketplace-card {
-  position: relative;
-  overflow: hidden;
   display: flex;
-  min-height: 320px;
+  min-height: 268px;
   flex-direction: column;
-  border: 1px solid var(--market-line);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--surface-elevated) 90%, #111), color-mix(in srgb, var(--surface-bg) 72%, #08080a)),
-    var(--surface-elevated);
-  padding: 18px;
-  box-shadow: 0 20px 60px color-mix(in srgb, #000 18%, transparent);
+  padding: 14px;
   opacity: 0;
-  transform: translateY(12px);
-  animation: marketplace-card-in 520ms ease forwards;
+  transform: translateY(10px);
+  animation: marketplace-card-in 420ms ease forwards;
   animation-delay: var(--delay);
-  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
-}
-
-.marketplace-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--market-gold) 6%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--market-blue) 6%, transparent) 1px, transparent 1px);
-  background-size: 34px 34px;
-  opacity: 0;
-  transition: opacity 180ms ease;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .marketplace-card:hover,
 .marketplace-card:focus-within {
-  border-color: color-mix(in srgb, var(--market-gold) 42%, var(--market-blue));
-  box-shadow: 0 28px 80px color-mix(in srgb, #000 26%, transparent);
-  transform: translateY(-2px);
-}
-
-.marketplace-card:hover::before,
-.marketplace-card:focus-within::before {
-  opacity: 1;
-}
-
-.marketplace-card__glow {
-  position: absolute;
-  inset: auto 18px -1px 18px;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--market-blue), var(--market-gold), transparent);
-  opacity: 0.8;
-  transform: translateX(-110%);
-  transition: transform 260ms ease;
-}
-
-.marketplace-card:hover .marketplace-card__glow,
-.marketplace-card:focus-within .marketplace-card__glow {
-  transform: translateX(0);
-}
-
-.marketplace-card > *:not(.marketplace-card__glow) {
-  position: relative;
-  z-index: 1;
+  border-color: color-mix(in srgb, var(--market-accent) 42%, transparent);
+  box-shadow: 0 22px 72px color-mix(in srgb, #000 16%, transparent);
+  transform: translateY(-1px);
 }
 
 .marketplace-card__header {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 12px;
 }
 
 .marketplace-card__title {
@@ -477,73 +698,75 @@ const marketplaceStyles = `
 .marketplace-card__title h3 {
   margin: 3px 0 0;
   color: var(--ink-strong);
-  font-size: 20px;
-  font-weight: 720;
+  font-size: 18px;
+  font-weight: 740;
   line-height: 1.12;
 }
 
-.marketplace-card__status {
+.marketplace-status {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
+  min-height: 22px;
   border: 1px solid transparent;
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
   letter-spacing: 0.08em;
-  padding: 0 9px;
+  padding: 0 8px;
   text-transform: uppercase;
 }
 
-.marketplace-card__status--installed {
-  border-color: color-mix(in srgb, #8fd6a1 30%, transparent);
-  background: color-mix(in srgb, #8fd6a1 12%, transparent);
-  color: color-mix(in srgb, #bff2c8 88%, var(--ink-strong));
+.marketplace-status--installed {
+  border-color: color-mix(in srgb, var(--market-accent) 34%, transparent);
+  background: color-mix(in srgb, var(--market-accent) 12%, transparent);
+  color: var(--ink-strong);
 }
 
-.marketplace-card__status--setup {
-  border-color: color-mix(in srgb, var(--market-gold) 34%, transparent);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--market-gold) 20%, transparent), color-mix(in srgb, var(--market-maroon) 10%, transparent)),
-    color-mix(in srgb, var(--surface-elevated) 78%, transparent);
-  color: color-mix(in srgb, #f2dfb6 90%, var(--ink-strong));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
+.marketplace-status--setup,
+.marketplace-status--soon {
+  border-color: color-mix(in srgb, var(--market-line-strong) 88%, transparent);
+  background: color-mix(in srgb, var(--surface-bg) 45%, transparent);
+  color: var(--ink-muted);
 }
 
 .marketplace-card__body {
-  margin-top: 20px;
+  margin-top: 16px;
   margin-bottom: auto;
 }
 
 .marketplace-card__body h4 {
   margin: 0;
   color: var(--ink-strong);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 720;
   line-height: 1.35;
 }
 
 .marketplace-card__body p {
-  margin: 9px 0 0;
+  margin: 8px 0 0;
   color: var(--ink-muted);
-  font-size: 13.5px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
-.marketplace-card__setup-note {
-  margin: 18px 0 0;
-  border: 1px solid color-mix(in srgb, var(--market-gold) 34%, transparent);
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--market-gold) 16%, transparent), color-mix(in srgb, var(--market-maroon) 10%, transparent)),
-    color-mix(in srgb, var(--surface-elevated) 72%, transparent);
-  color: color-mix(in srgb, #f2dfb6 88%, var(--ink-strong));
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.45;
-  padding: 12px 14px;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
+.marketplace-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.marketplace-card__meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid var(--market-line);
+  border-radius: 999px;
+  color: var(--ink-muted);
+  font-size: 11.5px;
+  font-weight: 640;
+  padding: 0 9px;
 }
 
 .marketplace-card__cta {
@@ -551,52 +774,71 @@ const marketplaceStyles = `
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 42px;
-  margin-top: 16px;
+  min-height: 38px;
+  margin-top: 14px;
   border: 1px solid var(--market-line-strong);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-elevated) 62%, transparent);
+  background: color-mix(in srgb, var(--surface-bg) 42%, transparent);
   color: var(--ink-strong);
-  font-size: 13.5px;
-  font-weight: 750;
+  font-size: 13px;
+  font-weight: 740;
   text-decoration: none;
   transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 
 .marketplace-card__cta:hover,
 .marketplace-card__cta:focus-visible {
-  border-color: color-mix(in srgb, var(--market-gold) 50%, transparent);
-  background: color-mix(in srgb, var(--market-gold) 16%, var(--surface-elevated));
+  border-color: color-mix(in srgb, var(--market-accent) 52%, transparent);
+  background: color-mix(in srgb, var(--market-accent) 14%, var(--surface-elevated));
   outline: none;
 }
 
 .marketplace-card__cta--primary {
-  border-color: color-mix(in srgb, var(--market-blue) 60%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--market-blue) 80%, #fff), color-mix(in srgb, var(--market-gold) 72%, #fff));
-  color: #08080a;
+  border-color: color-mix(in srgb, var(--market-accent) 52%, transparent);
+  background: var(--ink-strong);
+  color: var(--surface-bg);
 }
 
 .marketplace-card__cta--setup {
-  border-color: color-mix(in srgb, var(--market-gold) 40%, transparent);
-  background: color-mix(in srgb, var(--market-gold) 13%, var(--surface-elevated));
-  color: color-mix(in srgb, #f5e4bd 90%, var(--ink-strong));
+  border-color: color-mix(in srgb, var(--market-accent) 36%, transparent);
+  background: color-mix(in srgb, var(--market-accent) 12%, var(--surface-elevated));
 }
 
-.marketplace-card__cta--setup:hover,
-.marketplace-card__cta--setup:focus-visible {
-  border-color: color-mix(in srgb, var(--market-gold) 62%, transparent);
-  background: color-mix(in srgb, var(--market-gold) 22%, var(--surface-elevated));
+.marketplace-card__cta.is-disabled {
+  color: var(--ink-muted);
+  cursor: not-allowed;
 }
 
-@keyframes marketplace-grid {
-  from { background-position: 0 0, 0 0; }
-  to { background-position: 44px 44px, 44px 44px; }
+.marketplace-empty {
+  border: 1px solid var(--market-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-bg) 42%, transparent);
 }
 
-@keyframes marketplace-scan {
-  0%, 18% { transform: translateX(-85%); }
-  48%, 58% { transform: translateX(85%); }
-  100% { transform: translateX(85%); }
+.marketplace-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 18px;
+}
+
+.marketplace-empty svg {
+  color: var(--market-accent-ink);
+}
+
+.marketplace-empty h3 {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: 16px;
+}
+
+.marketplace-empty p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 @keyframes marketplace-card-in {
@@ -606,39 +848,33 @@ const marketplaceStyles = `
   }
 }
 
-@media (max-width: 920px) {
-  .marketplace-hero__content {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 620px) {
-  .marketplace-hero__content {
-    padding: 22px;
+@media (max-width: 680px) {
+  .marketplace-directory__head {
+    align-items: stretch;
   }
 
-  .marketplace-section__header {
-    align-items: flex-start;
+  .marketplace-directory__head {
     flex-direction: column;
+  }
+
+  .marketplace-search {
+    width: 100%;
   }
 
   .marketplace-grid {
     grid-template-columns: 1fr;
   }
 
+  .marketplace-header__copy,
+  .marketplace-directory,
   .marketplace-card {
-    min-height: 0;
+    border-radius: 8px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marketplace-hero::before,
-  .marketplace-hero__scan,
   .marketplace-card {
     animation: none;
-  }
-
-  .marketplace-card {
     opacity: 1;
     transform: none;
   }

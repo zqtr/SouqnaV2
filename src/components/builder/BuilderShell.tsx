@@ -154,6 +154,7 @@ type LibraryItem = {
   variant?: string;
   labelAr?: string;
   hintAr?: string;
+  requiredAppId?: string;
 };
 type LibraryGroup = {
   id: LibraryGroupId;
@@ -768,12 +769,10 @@ function getLibraryItem(type: BlockType, variant?: string) {
   );
 }
 
-function libraryGroupsForInstalledApps(installedAppIds: string[]): LibraryGroup[] {
-  if (installedAppIds.includes('reviews')) return LIBRARY_GROUPS;
-  return LIBRARY_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => item.type !== 'shadcnReviews'),
-  }));
+function requiredAppForLibraryItem(item: LibraryItem): string | undefined {
+  if (item.requiredAppId) return item.requiredAppId;
+  if (item.type === 'shadcnReviews') return 'reviews';
+  return undefined;
 }
 
 function requiredPlanForLibraryItem(item: Pick<LibraryItem, 'type' | 'tier'>): Plan | undefined {
@@ -3124,10 +3123,7 @@ function BuilderShellInner({
   const blockLabels = copy.blockLabels as Record<BlockType, string>;
   const chromeDir = direction[locale];
   const giphyStorefrontSlug = installedAppIds.includes('giphy') ? slug : undefined;
-  const libraryGroups = useMemo(
-    () => libraryGroupsForInstalledApps(installedAppIds),
-    [installedAppIds],
-  );
+  const libraryGroups = LIBRARY_GROUPS;
   const router = useRouter();
   const activePage = useMemo(
     () => pages.find((p) => p.id === activePageId) ?? null,
@@ -4095,6 +4091,8 @@ function BuilderShellInner({
                     addBlock(item.type, undefined, { variant: item.variant, tier: item.tier })
                   }
                   currentPlan={currentPlan}
+                  installedAppIds={installedAppIds}
+                  onConnectApp={() => setTab('apps')}
                 />
               ) : tab === 'apps' ? (
                 <AppsPanel
@@ -5821,10 +5819,14 @@ function LibraryPanel({
   groups,
   onAdd,
   currentPlan,
+  installedAppIds,
+  onConnectApp,
 }: {
   groups: LibraryGroup[];
   onAdd: (item: LibraryItem) => void;
   currentPlan: Plan;
+  installedAppIds: string[];
+  onConnectApp: (appId: string) => void;
 }) {
   const { builder: copy, locale } = useBuilderCopy();
   const itemCopy = copy.library.items as Record<BlockType, { label: string; hint: string }>;
@@ -5847,7 +5849,10 @@ function LibraryPanel({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {group.items.map((item) => {
               const requiredPlan = requiredPlanForLibraryItem(item);
-              const locked = requiredPlan ? !planAtLeast(currentPlan, requiredPlan) : false;
+              const planLocked = requiredPlan ? !planAtLeast(currentPlan, requiredPlan) : false;
+              const requiredAppId = requiredAppForLibraryItem(item);
+              const appLocked = Boolean(requiredAppId && !installedAppIds.includes(requiredAppId));
+              const locked = planLocked || appLocked;
               const presetCopy = item.variant
                 ? getLibraryItemText(item, locale)
                 : (itemCopy[item.type] ?? item);
@@ -5858,14 +5863,22 @@ function LibraryPanel({
                   label={presetCopy.label}
                   hint={presetCopy.hint}
                   locked={locked}
+                  appLocked={appLocked}
                   badge={
-                    requiredPlan
+                    appLocked
+                      ? locale === 'ar'
+                        ? 'توصيل التطبيق'
+                        : 'Connect app'
+                      : requiredPlan
                       ? locale === 'ar'
                         ? PLAN_LIMITS[requiredPlan].labelAr
                         : PLAN_LIMITS[requiredPlan].label
                       : undefined
                   }
                   onAdd={() => onAdd(item)}
+                  onConnectApp={
+                    requiredAppId ? () => onConnectApp(requiredAppId) : undefined
+                  }
                 />
               );
             })}
@@ -5881,15 +5894,19 @@ function LibraryTile({
   label,
   hint,
   locked,
+  appLocked,
   badge,
   onAdd,
+  onConnectApp,
 }: {
   item: LibraryItem;
   label: string;
   hint: string;
   locked?: boolean;
+  appLocked?: boolean;
   badge?: string;
   onAdd: () => void;
+  onConnectApp?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: libraryDragId(item),
@@ -5905,18 +5922,24 @@ function LibraryTile({
       {...dragAttributes}
       {...dragListeners}
       role="button"
-      tabIndex={locked ? -1 : 0}
-      aria-disabled={locked || undefined}
+      tabIndex={locked && !appLocked ? -1 : 0}
+      aria-disabled={locked && !appLocked ? true : undefined}
       aria-label={accessibleLabel}
       title={accessibleLabel}
       onClick={(e) => {
-        if (locked) return;
+        if (locked) {
+          if (appLocked) onConnectApp?.();
+          return;
+        }
         if (e.detail === 1) onAdd();
       }}
       onKeyDown={(e) => {
-        if (locked) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
+          if (locked) {
+            if (appLocked) onConnectApp?.();
+            return;
+          }
           onAdd();
         }
       }}
@@ -5930,15 +5953,17 @@ function LibraryTile({
         padding: '8px 10px',
         background: isDragging
           ? 'var(--bld-accent-soft)'
-          : locked
+          : appLocked
+            ? 'color-mix(in srgb, var(--bld-accent-soft) 52%, var(--bld-tile-bg))'
+            : locked
             ? 'color-mix(in srgb, var(--bld-tile-bg) 72%, var(--bld-surface))'
             : 'var(--bld-tile-bg)',
         border: `1px solid ${isDragging ? 'var(--bld-accent-strong)' : 'var(--bld-divider)'}`,
         color: 'var(--bld-text)',
         borderRadius: 12,
-        cursor: locked ? 'not-allowed' : 'grab',
+        cursor: appLocked ? 'pointer' : locked ? 'not-allowed' : 'grab',
         fontFamily: 'var(--font-sans)',
-        opacity: isDragging ? 0.4 : locked ? 0.7 : 1,
+        opacity: isDragging ? 0.4 : locked && !appLocked ? 0.7 : 1,
         userSelect: 'none',
         transition:
           'transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease',

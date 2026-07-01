@@ -221,7 +221,6 @@ export type RealtimeAnalyticsSnapshot = {
   liveVisitors: number;
   activeCarts: number;
 };
-
 export async function topReferrersSince(
   storefrontSlug: string,
   sinceDays: number,

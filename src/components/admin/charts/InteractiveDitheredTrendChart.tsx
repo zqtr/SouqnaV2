@@ -156,15 +156,16 @@ export function InteractiveDitheredTrendChart({
             showGrid
             stacked={stacked}
             showPoints
+            highlightIndex={hoverIndex}
             ariaLabel={`${ariaLabel}: ${active.label}`}
           />
           {hoverIndex != null ? (
             <div
-              className="pointer-events-none absolute inset-y-0 w-px bg-foreground/28"
+              className="pointer-events-none absolute inset-y-0 w-px bg-foreground/36 shadow-[0_0_18px_color-mix(in_srgb,var(--chart-primary)_36%,transparent)]"
               style={{ insetInlineStart: `${hoverPct}%` }}
               aria-hidden
             >
-              <div className="absolute top-2 -translate-x-1/2 rounded-md border border-border/80 bg-popover px-2.5 py-2 text-xs text-popover-foreground shadow-[var(--shadow-popover)]">
+              <div className="absolute top-2 -translate-x-1/2 rounded-md border border-border/80 bg-popover px-2.5 py-2 text-xs text-popover-foreground shadow-[0_18px_42px_color-mix(in_srgb,var(--chart-primary)_18%,transparent),var(--shadow-popover)]">
                 <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                   Point {hoverIndex + 1}
                 </div>

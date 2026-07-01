@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useLocale } from 'next-intl';
-import { createPortal, flushSync } from 'react-dom';
+import { flushSync } from 'react-dom';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Sidebar,
@@ -24,7 +24,6 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { RouteSkeleton } from '@/components/system/RouteSkeleton';
 import { StoreSwitcher } from './StoreSwitcher';
 import { SETTINGS_NAV_SECTIONS } from './settingsNav';
 import {
@@ -107,12 +106,7 @@ export function AdminSidebar({
   const sidebarDir = locale === 'ar' ? 'rtl' : 'ltr';
   const searchParams = useSearchParams();
   const store = searchParams?.get('store');
-  const [mounted, setMounted] = useState(false);
   const [pendingTarget, setPendingTarget] = useState<string | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (!pendingTarget) return;
@@ -132,6 +126,7 @@ export function AdminSidebar({
 
   const hrefFor = (href: string) =>
     store && isStoreScopedNavHref(href) ? `${href}?store=${encodeURIComponent(store)}` : href;
+  const pendingFor = (href: string) => pendingTarget === navigationKeyForHref(href);
   const startNavLoading = (href: string) => {
     try {
       const url = new URL(href, window.location.href);
@@ -153,13 +148,9 @@ export function AdminSidebar({
   const settingsOpen =
     pathname === '/account/settings' || pathname.startsWith('/account/settings/');
 
-  const loadingOverlay =
-    mounted && pendingTarget
-      ? createPortal(<AdminNavLoadingOverlay target={pendingTarget} />, document.body)
-      : null;
-
   return (
     <>
+      <SidebarInlineLoaderStyle />
       <Sidebar
         side={side}
         dir={sidebarDir}
@@ -212,6 +203,7 @@ export function AdminSidebar({
                         item={item}
                         pathname={pathname}
                         href={hrefFor(item.href)}
+                        pending={pendingFor(hrefFor(item.href))}
                         onNavigate={startNavLoading}
                       />
                     ))}
@@ -227,6 +219,7 @@ export function AdminSidebar({
                 items={SALES_CHANNELS_ITEMS}
                 pathname={pathname}
                 hrefFor={hrefFor}
+                pendingFor={pendingFor}
                 onNavigate={startNavLoading}
               />
 
@@ -244,6 +237,7 @@ export function AdminSidebar({
                       }}
                       pathname={pathname}
                       href={hrefFor('/account/apps')}
+                      pending={pendingFor(hrefFor('/account/apps'))}
                       onNavigate={startNavLoading}
                     />
                     {installedApps.length > 0 ? (
@@ -251,6 +245,7 @@ export function AdminSidebar({
                         apps={installedApps}
                         pathname={pathname}
                         hrefFor={hrefFor}
+                        pendingFor={pendingFor}
                         onNavigate={startNavLoading}
                       />
                     ) : null}
@@ -274,6 +269,7 @@ export function AdminSidebar({
                     ]}
                     pathname={pathname}
                     hrefFor={hrefFor}
+                    pendingFor={pendingFor}
                     onNavigate={startNavLoading}
                   />
                 </>
@@ -292,6 +288,7 @@ export function AdminSidebar({
                   item={item}
                   pathname={pathname}
                   href={hrefFor(item.href)}
+                  pending={pendingFor(hrefFor(item.href))}
                   onNavigate={startNavLoading}
                 />
               ))}
@@ -300,7 +297,6 @@ export function AdminSidebar({
         )}
         <SidebarRail className="after:bg-sidebar-border hover:after:bg-sidebar-foreground/45" />
       </Sidebar>
-      {loadingOverlay}
     </>
   );
 }
@@ -311,6 +307,7 @@ function NavGroup({
   items,
   pathname,
   hrefFor,
+  pendingFor,
   onNavigate,
 }: {
   title: string;
@@ -318,6 +315,7 @@ function NavGroup({
   items: NavItem[];
   pathname: string;
   hrefFor: (href: string) => string;
+  pendingFor: (href: string) => boolean;
   onNavigate: (href: string) => void;
 }) {
   return (
@@ -351,6 +349,7 @@ function NavGroup({
                   item={item}
                   pathname={pathname}
                   href={hrefFor(item.href)}
+                  pending={pendingFor(hrefFor(item.href))}
                   onNavigate={onNavigate}
                 />
               ))}
@@ -490,11 +489,13 @@ function AdminNavItem({
   item,
   pathname,
   href,
+  pending,
   onNavigate,
 }: {
   item: NavItem;
   pathname: string;
   href: string;
+  pending: boolean;
   onNavigate: (href: string) => void;
 }) {
   const active = item.prefix
@@ -515,6 +516,7 @@ function AdminNavItem({
         <Link
           href={href}
           aria-current={active ? 'page' : undefined}
+          data-no-loader="true"
           onClick={(event) => {
             if (
               active ||
@@ -531,7 +533,7 @@ function AdminNavItem({
           }}
         >
           <span className="mt-0.5 shrink-0 opacity-80">
-            <Glyph size={17} />
+            {pending ? <InlineNavSpinner /> : <Glyph size={17} />}
           </span>
           <span className="min-w-0 truncate group-data-[collapsible=icon]:hidden">{label}</span>
         </Link>
@@ -544,11 +546,13 @@ function InstalledAppsList({
   apps,
   pathname,
   hrefFor,
+  pendingFor,
   onNavigate,
 }: {
   apps: InstalledAppNavItem[];
   pathname: string;
   hrefFor: (href: string) => string;
+  pendingFor: (href: string) => boolean;
   onNavigate: (href: string) => void;
 }) {
   return (
@@ -559,6 +563,8 @@ function InstalledAppsList({
           pathname === base ||
           pathname === `/account/apps/${app.id}` ||
           pathname.startsWith(`${base}/`);
+        const href = hrefFor(base);
+        const pending = pendingFor(href);
         return (
           <SidebarMenuSubItem key={app.id}>
             <SidebarMenuSubButton
@@ -568,8 +574,9 @@ function InstalledAppsList({
               title={app.enabled ? app.name : `${app.name} paused`}
             >
               <Link
-                href={hrefFor(base)}
+                href={href}
                 aria-current={active ? 'page' : undefined}
+                data-no-loader="true"
                 onClick={(event) => {
                   if (
                     active ||
@@ -582,10 +589,10 @@ function InstalledAppsList({
                   ) {
                     return;
                   }
-                  onNavigate(hrefFor(base));
+                  onNavigate(href);
                 }}
               >
-                <AppNavMark app={app} />
+                {pending ? <InlineNavSpinner size={16} /> : <AppNavMark app={app} />}
                 <span>{app.name}</span>
               </Link>
             </SidebarMenuSubButton>
@@ -596,37 +603,50 @@ function InstalledAppsList({
   );
 }
 
-function AdminNavLoadingOverlay({ target }: { target: string }) {
+function InlineNavSpinner({ size = 17 }: { size?: number }) {
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-      className="souqna-skel-overlay"
+    <span
+      aria-hidden="true"
+      className="souqna-sidebar-inline-spinner"
       style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 2147483600,
-        background: 'color-mix(in srgb, var(--surface-bg) 42%, transparent)',
-        backdropFilter: 'blur(10px) saturate(0.96)',
-        WebkitBackdropFilter: 'blur(10px) saturate(0.96)',
-        overflow: 'hidden',
-        animation: 'souqnaSkelVeilIn 260ms cubic-bezier(0.22, 1, 0.36, 1) both',
+        width: size,
+        height: size,
       }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          opacity: 0.58,
-          pointerEvents: 'none',
-          animation: 'souqnaSkelContentIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both',
-        }}
-      >
-        <RouteSkeleton pathname={target.split('?')[0] ?? '/account'} />
-      </div>
-    </div>
+    />
   );
+}
+
+function SidebarInlineLoaderStyle() {
+  return (
+    <style>{`
+      @keyframes souqnaSidebarInlineSpin {
+        to { transform: rotate(360deg); }
+      }
+      .souqna-sidebar-inline-spinner {
+        display: inline-block;
+        flex-shrink: 0;
+        border-radius: 999px;
+        border: 1.7px solid color-mix(in srgb, currentColor 22%, transparent);
+        border-top-color: currentColor;
+        animation: souqnaSidebarInlineSpin 0.72s linear infinite;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .souqna-sidebar-inline-spinner {
+          animation: none;
+          border-top-color: color-mix(in srgb, currentColor 58%, transparent);
+        }
+      }
+    `}</style>
+  );
+}
+
+function navigationKeyForHref(href: string): string {
+  try {
+    const url = new URL(href, 'https://souqna.local');
+    return url.pathname + url.search;
+  } catch {
+    return href;
+  }
 }
 
 function AppNavMark({ app }: { app: InstalledAppNavItem }) {

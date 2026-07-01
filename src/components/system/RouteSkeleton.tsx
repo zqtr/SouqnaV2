@@ -132,131 +132,130 @@ function Row({
 /* ─────────────────────── variants ─────────────────────── */
 
 function AdminSkeleton() {
+  const navRows = ['46%', '62%', '54%', '58%', '42%', '50%'];
+
   return (
     <div
+      className="souqna-dash-loader"
       style={{
-        display: 'flex',
-        alignItems: 'stretch',
+        display: 'grid',
+        placeItems: 'center',
         minHeight: '100dvh',
         width: '100%',
         background: 'var(--surface-bg)',
+        padding: 'clamp(18px, 4vw, 52px)',
       }}
     >
-      {/* Sidebar */}
-      <aside
-        style={{
-          width: 240,
-          flexShrink: 0,
-          padding: '20px 16px',
-          borderInlineEnd: '1px solid var(--surface-rule)',
-          background: 'var(--surface-elevated)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 18,
-        }}
-      >
-        <Row gap={10}>
-          <Bone width={28} height={28} radius={8} />
-          <Bone width={110} height={14} />
-        </Row>
-        <Stack gap={8} style={{ marginTop: 8 }}>
-          {Array.from({ length: 7 }).map((_, i) => (
-            <Row key={i} gap={10}>
-              <Bone width={18} height={18} radius={6} />
-              <Bone
-                width={`${60 + ((i * 13) % 35)}%`}
-                height={12}
-              />
-            </Row>
-          ))}
-        </Stack>
-        <Stack gap={8} style={{ marginTop: 'auto' }}>
-          <Bone width="55%" height={10} />
-          <Bone width={36} height={36} radius={999} />
-        </Stack>
-      </aside>
-
-      {/* Right column */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        {/* Topbar */}
-        <header
+      <div className="souqna-dash-loader-shell" aria-hidden="true">
+        <aside
+          className="souqna-dash-loader-rail"
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '14px 24px',
-            borderBlockEnd: '1px solid var(--surface-rule)',
-            background: 'var(--surface-bg)',
+            borderInlineEnd: '1px solid var(--surface-rule)',
           }}
         >
-          <Row gap={12}>
-            <Bone width={140} height={14} />
-            <Bone width={64} height={22} radius={999} />
-          </Row>
-          <Row gap={10}>
-            <Bone width={24} height={24} radius={999} />
-            <Bone width={24} height={24} radius={999} />
-            <Bone width={32} height={32} radius={999} />
-          </Row>
-        </header>
-
-        {/* Content */}
-        <main
-          style={{
-            flex: 1,
-            padding: 'clamp(20px, 3vw, 36px) clamp(20px, 4vw, 48px) 80px',
-            maxWidth: 1320,
-            width: '100%',
-            margin: '0 auto',
-          }}
-        >
-          <Stack gap={10} style={{ marginBlockEnd: 28 }}>
-            <Bone width={180} height={12} />
-            <Bone width="55%" height={28} radius={10} />
-            <Bone width="35%" height={14} />
-          </Stack>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-              gap: 18,
-            }}
-          >
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i} />
+          <div className="souqna-dash-loader-brand">
+            <span className="souqna-dash-loader-logo" />
+            <span className="souqna-dash-loader-wordmark" />
+          </div>
+          <div className="souqna-dash-loader-nav">
+            <span className="souqna-dash-loader-nav-focus" />
+            {navRows.map((width, index) => (
+              <span className="souqna-dash-loader-nav-row" key={index}>
+                <span className="souqna-dash-loader-nav-icon" />
+                <span className="souqna-dash-loader-nav-line" style={{ width }} />
+              </span>
             ))}
+          </div>
+          <div className="souqna-dash-loader-rail-foot">
+            <span />
+            <span />
+          </div>
+        </aside>
+
+        <main className="souqna-dash-loader-workspace">
+          <header className="souqna-dash-loader-topbar">
+            <span className="souqna-dash-loader-search" />
+            <span className="souqna-dash-loader-actions">
+              <span />
+              <span />
+              <span />
+            </span>
+          </header>
+
+          <div className="souqna-dash-loader-stage">
+            <section className="souqna-dash-loader-screen is-one">
+              <div className="souqna-dash-loader-heading">
+                <span />
+                <span />
+              </div>
+              <div className="souqna-dash-loader-card is-balance">
+                <span className="souqna-dash-loader-mini-label" />
+                <span className="souqna-dash-loader-value" />
+                <span className="souqna-dash-loader-button" />
+              </div>
+              <div className="souqna-dash-loader-card is-wide">
+                <span />
+                <span />
+                <span />
+              </div>
+            </section>
+
+            <section className="souqna-dash-loader-screen is-two">
+              <div className="souqna-dash-loader-heading">
+                <span />
+                <span />
+              </div>
+              <div className="souqna-dash-loader-table">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <span className="souqna-dash-loader-table-row" key={index}>
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                ))}
+              </div>
+            </section>
+
+            <section className="souqna-dash-loader-screen is-three">
+              <div className="souqna-dash-loader-heading">
+                <span />
+                <span />
+              </div>
+              <div className="souqna-dash-loader-metrics">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <span className="souqna-dash-loader-metric" key={index}>
+                    <span />
+                    <span />
+                  </span>
+                ))}
+              </div>
+              <div className="souqna-dash-loader-grid">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <span key={index} />
+                ))}
+              </div>
+            </section>
+
+            <span className="souqna-dash-loader-wash" />
+            <span className="souqna-dash-loader-cursor" />
           </div>
         </main>
       </div>
-    </div>
-  );
-}
-
-function Card() {
-  return (
-    <div
-      style={{
-        padding: 18,
-        borderRadius: 14,
-        border: '1px solid var(--surface-rule)',
-        background: 'var(--surface-elevated)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-      }}
-    >
-      <Row gap={10}>
-        <Bone width={32} height={32} radius={8} />
-        <Stack gap={6} style={{ flex: 1 }}>
-          <Bone width="70%" height={12} />
-          <Bone width="40%" height={10} />
-        </Stack>
-      </Row>
-      <Bone width="100%" height={120} radius={10} />
-      <Stack gap={6}>
-        <Bone width="90%" height={10} />
-        <Bone width="60%" height={10} />
-      </Stack>
+      <span
+        style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}
+      >
+        Loading dashboard
+      </span>
     </div>
   );
 }

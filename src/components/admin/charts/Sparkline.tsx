@@ -30,6 +30,7 @@ const BAYER_8 = [
 ];
 
 const FALLBACK_ACCENT: Rgb = { r: 184, g: 154, b: 82 };
+const EDGE_SPARK_DURATION_MS = 3400;
 
 export function Sparkline({
   data,
@@ -52,7 +53,36 @@ export function Sparkline({
       ? serializedData.split(',').map((value) => sanitizeMetric(Number(value)))
       : [];
     const accentColor = resolveColor(canvas, accent) ?? FALLBACK_ACCENT;
-    drawSparkline(canvas, values, width, height, accentColor);
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const canAnimate = values.filter((value) => value > 0).length >= 2;
+    let frameId = 0;
+
+    const render = (timestamp: number) => {
+      const phase =
+        canAnimate && !reducedMotion.matches
+          ? (timestamp % EDGE_SPARK_DURATION_MS) / EDGE_SPARK_DURATION_MS
+          : null;
+      drawSparkline(canvas, values, width, height, accentColor, phase);
+
+      if (canAnimate && !reducedMotion.matches) {
+        frameId = window.requestAnimationFrame(render);
+      }
+    };
+
+    render(0);
+    const handleMotionChange = () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+        frameId = 0;
+      }
+      render(0);
+    };
+    reducedMotion.addEventListener('change', handleMotionChange);
+
+    return () => {
+      if (frameId) window.cancelAnimationFrame(frameId);
+      reducedMotion.removeEventListener('change', handleMotionChange);
+    };
   }, [accent, height, serializedData, width]);
 
   return (
@@ -73,6 +103,7 @@ function drawSparkline(
   width: number,
   height: number,
   accent: Rgb,
+  edgeSparkPhase: number | null = null,
 ) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   canvas.width = Math.max(1, Math.round(width * dpr));
@@ -136,6 +167,16 @@ function drawSparkline(
       sparsePoints.filter((point) => point.value > 0),
       accent,
     );
+    if (edgeSparkPhase !== null) {
+      drawMovingEdgeSpark(
+        ctx,
+        lineAtX,
+        sparsePoints[0]!.x,
+        sparsePoints[sparsePoints.length - 1]!.x,
+        accent,
+        edgeSparkPhase,
+      );
+    }
     return;
   }
 
@@ -152,6 +193,9 @@ function drawSparkline(
     toX: width - padX,
   });
   drawSampledLine(ctx, lineAtX, padX, width - padX, accent);
+  if (edgeSparkPhase !== null) {
+    drawMovingEdgeSpark(ctx, lineAtX, padX, width - padX, accent, edgeSparkPhase);
+  }
 }
 
 function drawBaseline(
@@ -263,6 +307,68 @@ function drawSampledLine(
   ctx.lineCap = 'round';
   ctx.stroke();
   ctx.restore();
+}
+
+function drawMovingEdgeSpark(
+  ctx: CanvasRenderingContext2D,
+  lineAtX: (x: number) => number,
+  fromX: number,
+  toX: number,
+  accent: Rgb,
+  phase: number,
+) {
+  const range = Math.max(0, toX - fromX);
+  if (range < 6) return;
+
+  const easedPhase = easeInOutSine(phase);
+  const headX = fromX + range * easedPhase;
+  const tailLength = Math.min(32, Math.max(14, range * 0.28));
+  const tailX = Math.max(fromX, headX - tailLength);
+  const fade = Math.sin(Math.PI * phase);
+  const highlight = mixRgb(accent, { r: 245, g: 239, b: 227 }, 0.46);
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = rgba(highlight, 0.58 * fade);
+  ctx.shadowBlur = 7;
+  ctx.lineWidth = 3.2;
+  ctx.strokeStyle = rgba(highlight, 0.18 * fade);
+  drawSampledPath(ctx, lineAtX, tailX, headX, Math.max(5, Math.ceil(headX - tailX)));
+  ctx.stroke();
+
+  ctx.shadowBlur = 2;
+  ctx.lineWidth = 1.45;
+  ctx.strokeStyle = rgba(highlight, 0.68 * fade);
+  drawSampledPath(ctx, lineAtX, Math.max(tailX, headX - tailLength * 0.52), headX, 12);
+  ctx.stroke();
+
+  const headY = lineAtX(headX);
+  ctx.beginPath();
+  ctx.arc(headX, headY, 2.1 + fade * 0.75, 0, Math.PI * 2);
+  ctx.fillStyle = rgba(highlight, 0.92 * fade);
+  ctx.shadowBlur = 9;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawSampledPath(
+  ctx: CanvasRenderingContext2D,
+  lineAtX: (x: number) => number,
+  fromX: number,
+  toX: number,
+  steps: number,
+) {
+  ctx.beginPath();
+  for (let step = 0; step <= steps; step += 1) {
+    const x = fromX + ((toX - fromX) * step) / Math.max(1, steps);
+    const y = lineAtX(x);
+    if (step === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  }
 }
 
 function drawDots(ctx: CanvasRenderingContext2D, points: SparkPoint[], accent: Rgb) {
@@ -443,6 +549,10 @@ function rgba(color: Rgb, alpha: number) {
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
+}
+
+function easeInOutSine(t: number) {
+  return -(Math.cos(Math.PI * clamp01(t)) - 1) / 2;
 }
 
 function clamp(value: number, min: number, max: number) {

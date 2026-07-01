@@ -2,16 +2,21 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import {
+  Activity,
   AlertCircle,
   ArrowUpRight,
   Bell,
   CheckCircle2,
   Clock3,
   CreditCard,
+  Eye,
   Gauge,
+  MousePointerClick,
   ReceiptText,
   ShoppingBag,
   ShoppingCart,
+  type LucideIcon,
+  Users,
 } from 'lucide-react';
 import { defaultLocale, isLocale, type Locale } from '@/i18n/locales';
 import { Badge } from '@/components/ui/badge';
@@ -45,6 +50,8 @@ import {
   dailyOrdersSince,
   dailyEventSeriesSince,
   eventCountSince,
+  realtimeAnalyticsSnapshot,
+  topReferrersSince,
   uniqueVisitorsSince,
 } from '@/lib/analytics';
 import { recentActivity } from '@/lib/audit';
@@ -60,6 +67,21 @@ type HomeLabels = (typeof HOME_STRINGS)[Locale];
 type HomeOrderStats = Awaited<ReturnType<typeof getOrderStatsForStorefront>>;
 type HomeTopProducts = Awaited<ReturnType<typeof topProductsByOrders>>;
 type HomeActivity = Awaited<ReturnType<typeof recentActivity>>;
+type HomeTopReferrers = Awaited<ReturnType<typeof topReferrersSince>>;
+type HomeRealtime = Awaited<ReturnType<typeof realtimeAnalyticsSnapshot>>;
+type DashboardMetricSnapshot = {
+  orderStats: HomeOrderStats;
+  visitors30: number;
+  pageViews30: number;
+  carts30: number;
+  productViews30: number;
+  ordersTrend: number[];
+  cartAddTrend: number[];
+  pageViewTrend: number[];
+  productViewTrend: number[];
+  topReferrers: HomeTopReferrers;
+  realtime: HomeRealtime;
+};
 
 export default async function AccountHomePage({
   searchParams,
@@ -118,6 +140,11 @@ export default async function AccountHomePage({
     carts30,
     ordersTrend,
     cartAddTrend,
+    pageViewTrend,
+    productViewTrend,
+    productViews30,
+    topReferrers,
+    realtime,
     topProductsRows,
   ] = await Promise.all([
     getAllProducts(storefront.slug),
@@ -131,6 +158,11 @@ export default async function AccountHomePage({
     eventCountSince(storefront.slug, 'cart_add', 30),
     dailyOrdersSince(storefront.slug, 30).catch(() => [] as number[]),
     dailyEventSeriesSince(storefront.slug, 'cart_add', 30).catch(() => [] as number[]),
+    dailyEventSeriesSince(storefront.slug, 'page_view', 30).catch(() => [] as number[]),
+    dailyEventSeriesSince(storefront.slug, 'product_view', 30).catch(() => [] as number[]),
+    eventCountSince(storefront.slug, 'product_view', 30),
+    topReferrersSince(storefront.slug, 30, 5).catch(() => []),
+    realtimeAnalyticsSnapshot(storefront.slug).catch(() => ({ liveVisitors: 0, activeCarts: 0 })),
     topProductsByOrders(storefront.slug, 30, 5).catch(() => []),
   ]);
   const setupItems = [
@@ -158,70 +190,88 @@ export default async function AccountHomePage({
   const setupProgress = Math.round(
     (setupItems.filter((item) => item.done).length / setupItems.length) * 100,
   );
+  const dashboardMetrics = getDashboardMetricSnapshot({
+    storefrontSlug: storefront.slug,
+    orderStats,
+    visitors30,
+    pageViews30,
+    carts30,
+    productViews30,
+    ordersTrend,
+    cartAddTrend,
+    pageViewTrend,
+    productViewTrend,
+    topReferrers,
+    realtime,
+  });
+  const dashboardStats = dashboardMetrics.orderStats;
   const souqyPortalHref = locale === 'ar' ? '/ar/begin/souqy' : '/begin/souqy';
-  const conversionRate = visitors30 > 0 ? (orderStats.totalOrders / visitors30) * 100 : 0;
+  const conversionRate =
+    dashboardMetrics.visitors30 > 0
+      ? (dashboardStats.totalOrders / dashboardMetrics.visitors30) * 100
+      : 0;
   const paidOrderShare =
-    orderStats.totalOrders > 0 ? (orderStats.paidOrders / orderStats.totalOrders) * 100 : 0;
+    dashboardStats.totalOrders > 0 ? (dashboardStats.paidOrders / dashboardStats.totalOrders) * 100 : 0;
 
-  const revenueDisplay = formatCurrency(orderStats.revenueQar, storefront.checkout.currency);
+  const revenueDisplay = formatCurrency(dashboardStats.revenueQar, storefront.checkout.currency);
   const metricsSlot = (
     <CommerceMetricGrid>
       <CommerceMetricCard
         label={t.revenue}
         value={revenueDisplay}
-        hint={t.paidOrdersHint(orderStats.paidOrders)}
+        hint={t.paidOrdersHint(dashboardStats.paidOrders)}
         badge={t.lastThirtyDays}
         tone="success"
-        trend={ordersTrend}
+        trend={dashboardMetrics.ordersTrend}
         chart="bar"
         icon={ReceiptText}
-        tooltip={`${pageViews30} ${t.pageViewsHint}`}
+        tooltip={`${formatNumber(dashboardMetrics.pageViews30, locale)} ${t.pageViewsHint}`}
       />
       <CommerceMetricCard
         label={t.conversionRate}
         value={formatPercent(conversionRate, locale)}
-        hint={t.ordersFromVisitors(orderStats.totalOrders, visitors30)}
+        hint={t.ordersFromVisitors(dashboardStats.totalOrders, dashboardMetrics.visitors30)}
         badge={t.checkoutSignal}
         tone="info"
-        trend={ordersTrend}
+        trend={dashboardMetrics.ordersTrend}
         icon={Gauge}
         tooltip={t.conversionTooltip}
       />
       <CommerceMetricCard
         label={t.aov}
-        value={formatCurrency(orderStats.averageOrderQar, storefront.checkout.currency)}
+        value={formatCurrency(dashboardStats.averageOrderQar, storefront.checkout.currency)}
         hint={t.aovHint}
         badge={t.average}
         tone="success"
-        trend={ordersTrend}
+        trend={dashboardMetrics.ordersTrend}
         chart="bar"
         icon={ShoppingBag}
       />
       <CommerceMetricCard
         label={t.paidOrders}
-        value={orderStats.paidOrders}
+        value={formatNumber(dashboardStats.paidOrders, locale)}
         hint={`${formatPercent(paidOrderShare, locale)} ${t.ofOrdersPaid}`}
         badge={t.settled}
-        tone={orderStats.paidOrders > 0 ? 'success' : 'neutral'}
-        trend={ordersTrend}
+        tone={dashboardStats.paidOrders > 0 ? 'success' : 'neutral'}
+        trend={dashboardMetrics.ordersTrend}
         chart="bar"
         icon={CreditCard}
       />
       <CommerceMetricCard
         label={t.unpaid}
-        value={orderStats.unpaidOrders}
+        value={formatNumber(dashboardStats.unpaidOrders, locale)}
         hint={t.unpaidHint}
-        badge={orderStats.unpaidOrders > 0 ? t.needsAction : t.clear}
-        tone={orderStats.unpaidOrders > 0 ? 'critical' : 'neutral'}
+        badge={dashboardStats.unpaidOrders > 0 ? t.needsAction : t.clear}
+        tone={dashboardStats.unpaidOrders > 0 ? 'critical' : 'neutral'}
         icon={AlertCircle}
       />
       <CommerceMetricCard
         label={t.cartAdds}
-        value={carts30}
+        value={formatNumber(dashboardMetrics.carts30, locale)}
         hint={t.cartAddsHint}
         badge={t.intent}
-        tone={carts30 > 0 ? 'info' : 'neutral'}
-        trend={cartAddTrend}
+        tone={dashboardMetrics.carts30 > 0 ? 'info' : 'neutral'}
+        trend={dashboardMetrics.cartAddTrend}
         chart="bar"
         icon={ShoppingCart}
       />
@@ -235,7 +285,7 @@ export default async function AccountHomePage({
         setupProgress={setupProgress}
         productsCount={products.length}
         customersTotal={customersTotal}
-        ordersTotal={ordersPage.total}
+        ordersTotal={dashboardStats.totalOrders}
         revenue={revenueDisplay}
         builderHref={`/account/builder${storeParam}`}
         souqyPortalHref={souqyPortalHref}
@@ -247,9 +297,12 @@ export default async function AccountHomePage({
         <div className="souqna-dashboard5-primary-grid">
           <Dashboard5CommerceFlowCard
             title={t.ordersTrendTitle}
-            subtitle={`${ordersTrend.reduce((a, b) => a + b, 0)} ${t.ordersTrendSuffix}`}
-            ordersTrend={ordersTrend}
-            cartAddTrend={cartAddTrend}
+            subtitle={`${formatNumber(
+              dashboardMetrics.ordersTrend.reduce((a, b) => a + b, 0),
+              locale,
+            )} ${t.ordersTrendSuffix}`}
+            ordersTrend={dashboardMetrics.ordersTrend}
+            cartAddTrend={dashboardMetrics.cartAddTrend}
             ordersLabel={t.orders}
             cartAddsLabel={t.cartAdds}
             thirtyDaysAgo={t.thirtyDaysAgo}
@@ -258,17 +311,29 @@ export default async function AccountHomePage({
             ariaLabel={t.ordersBarAria}
           />
           <div className="souqna-dashboard5-side-stack">
-            <Dashboard5OrderMixCard stats={orderStats} labels={t} locale={locale} />
+            <Dashboard5OrderMixCard stats={dashboardStats} labels={t} locale={locale} />
             <Dashboard5SetupCard
               setupProgress={setupProgress}
               setupItems={setupItems}
-              orderStats={orderStats}
-              carts30={carts30}
+              orderStats={dashboardStats}
+              carts30={dashboardMetrics.carts30}
               currency={storefront.checkout.currency}
               labels={t}
             />
           </div>
         </div>
+        <Dashboard5WebsiteAnalyticsCard
+          pageViews={dashboardMetrics.pageViews30}
+          uniqueVisitors={dashboardMetrics.visitors30}
+          productViews={dashboardMetrics.productViews30}
+          realtime={dashboardMetrics.realtime}
+          pageViewTrend={dashboardMetrics.pageViewTrend}
+          productViewTrend={dashboardMetrics.productViewTrend}
+          referrers={dashboardMetrics.topReferrers}
+          href={`/account/analytics${storeParam}`}
+          labels={t}
+          locale={locale}
+        />
         <div className="souqna-dashboard5-secondary-grid">
           <Dashboard5TopProductsCard
             rows={topProductsRows}
@@ -308,6 +373,13 @@ export default async function AccountHomePage({
           gap: 18px;
         }
 
+        .souqna-dashboard5-website-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.72fr);
+          gap: 18px;
+          align-items: stretch;
+        }
+
         .souqna-dashboard5-secondary-grid {
           display: grid;
           grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.25fr) minmax(280px, 0.8fr);
@@ -317,6 +389,7 @@ export default async function AccountHomePage({
 
         @media (max-width: 1180px) {
           .souqna-dashboard5-primary-grid,
+          .souqna-dashboard5-website-grid,
           .souqna-dashboard5-secondary-grid {
             grid-template-columns: 1fr !important;
           }
@@ -537,6 +610,168 @@ function Dashboard5CommerceFlowCard({
           today={today}
           ariaLabel={ariaLabel}
         />
+      </CardContent>
+    </Card>
+  );
+}
+
+function Dashboard5WebsiteAnalyticsCard({
+  pageViews,
+  uniqueVisitors,
+  productViews,
+  realtime,
+  pageViewTrend,
+  productViewTrend,
+  referrers,
+  href,
+  labels,
+  locale,
+}: {
+  pageViews: number;
+  uniqueVisitors: number;
+  productViews: number;
+  realtime: HomeRealtime;
+  pageViewTrend: number[];
+  productViewTrend: number[];
+  referrers: HomeTopReferrers;
+  href: string;
+  labels: HomeLabels;
+  locale: Locale;
+}) {
+  const productDepth = pageViews > 0 ? (productViews / pageViews) * 100 : 0;
+  const maxReferrerCount = Math.max(...referrers.map((referrer) => referrer.count), 1);
+  const signals: Array<{
+    label: string;
+    value: string;
+    hint: string;
+    icon: LucideIcon;
+  }> = [
+    {
+      label: labels.pageViews,
+      value: formatNumber(pageViews, locale),
+      hint: labels.totalTraffic,
+      icon: Eye,
+    },
+    {
+      label: labels.uniqueVisitors,
+      value: formatNumber(uniqueVisitors, locale),
+      hint: labels.audienceSignal,
+      icon: Users,
+    },
+    {
+      label: labels.productViews,
+      value: formatNumber(productViews, locale),
+      hint: labels.browsingIntent,
+      icon: MousePointerClick,
+    },
+    {
+      label: labels.liveVisitors,
+      value: formatNumber(realtime.liveVisitors, locale),
+      hint: `${formatNumber(realtime.activeCarts, locale)} ${labels.activeCarts}`,
+      icon: Activity,
+    },
+  ];
+
+  return (
+    <Card className="souqna-dashboard-card overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+      <CardHeader className="border-b border-border/80 px-5 py-4">
+        <div>
+          <CardTitle className="text-base">{labels.websiteAnalyticsTitle}</CardTitle>
+          <CardDescription className="mt-1">{labels.websiteAnalyticsDescription}</CardDescription>
+        </div>
+        <CardAction>
+          <Button asChild variant="ghost" size="sm">
+            <Link href={href}>
+              {labels.openAnalytics}
+              <ArrowUpRight className="size-4" aria-hidden />
+            </Link>
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid gap-5 px-5 pb-5 pt-4">
+        <div className="souqna-dashboard5-website-grid">
+          <div className="grid min-w-0 gap-4">
+            <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {signals.map((signal) => {
+                const Icon = signal.icon;
+                return (
+                  <div
+                    key={signal.label}
+                    className="rounded-lg border border-border/70 bg-muted/30 p-3"
+                  >
+                    <dt className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                      <span className="grid size-7 shrink-0 place-items-center rounded-md border border-border bg-card text-foreground">
+                        <Icon className="size-3.5" aria-hidden />
+                      </span>
+                      <span className="min-w-0 truncate">{signal.label}</span>
+                    </dt>
+                    <dd className="mt-3 text-2xl font-semibold tabular-nums text-foreground">
+                      {signal.value}
+                    </dd>
+                    <p className="m-0 mt-1 line-clamp-2 text-xs text-muted-foreground">
+                      {signal.hint}
+                    </p>
+                  </div>
+                );
+              })}
+            </dl>
+            <InteractiveDitheredTrendChart
+              primary={pageViewTrend}
+              secondary={productViewTrend}
+              primaryLabel={labels.pageViews}
+              secondaryLabel={labels.productViews}
+              thirtyDaysAgo={labels.thirtyDaysAgo}
+              today={labels.today}
+              ariaLabel={labels.websiteTrendAria}
+            />
+          </div>
+          <div className="grid gap-4 rounded-lg border border-border/70 bg-muted/30 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="m-0 text-sm font-semibold text-foreground">{labels.topSources}</h3>
+              <Badge variant="outline">{labels.lastThirtyDays}</Badge>
+            </div>
+            {referrers.length > 0 ? (
+              <ol className="grid gap-3">
+                {referrers.map((referrer) => {
+                  const pct = Math.max(4, Math.round((referrer.count / maxReferrerCount) * 100));
+                  const host =
+                    referrer.host === 'direct' ? labels.directTraffic : referrer.host;
+                  return (
+                    <li key={referrer.host} className="grid gap-2">
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <span className="min-w-0 truncate text-foreground">{host}</span>
+                        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                          {formatNumber(referrer.count, locale)}
+                        </span>
+                      </div>
+                      <Progress
+                        value={pct}
+                        className="h-1.5 bg-background/80 [&>[data-slot=progress-indicator]]:bg-[var(--chart-primary)]"
+                      />
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="m-0 rounded-md border border-dashed border-border/80 px-3 py-6 text-sm text-muted-foreground">
+                {labels.noSourcesYet}
+              </p>
+            )}
+            <div className="grid gap-2 border-t border-border/70 pt-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-foreground">{labels.productDepth}</span>
+                <span className="font-mono text-sm font-semibold tabular-nums">
+                  {formatPercent(productDepth, locale)}
+                </span>
+              </div>
+              <Progress
+                value={Math.min(100, productDepth)}
+                className="h-2 bg-background/80 [&>[data-slot=progress-indicator]]:bg-[var(--chart-primary)]"
+              />
+              <p className="m-0 text-xs text-muted-foreground">{labels.productDepthHint}</p>
+            </div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -960,8 +1195,84 @@ function initialsFor(name: string): string {
   return letters.toUpperCase();
 }
 
+function getDashboardMetricSnapshot(metrics: DashboardMetricSnapshot & { storefrontSlug: string }): DashboardMetricSnapshot {
+  if (process.env.NODE_ENV !== 'development' || metrics.storefrontSlug !== 'components') {
+    return metrics;
+  }
+
+  return {
+    orderStats: {
+      totalOrders: 2468,
+      paidOrders: 2396,
+      revenueQar: 842500,
+      pendingOrders: 31,
+      unpaidOrders: 72,
+      averageOrderQar: 425,
+    },
+    visitors30: 38640,
+    pageViews30: 184920,
+    carts30: 12880,
+    productViews30: 76240,
+    ordersTrend: spreadSeries(2468, [
+      0.78, 0.82, 0.74, 0.9, 0.88, 0.95, 0.84, 0.92, 1.02, 0.98,
+      1.08, 1.04, 0.96, 1.12, 1.18, 1.06, 1.14, 1.22, 1.09, 1.2,
+      1.28, 1.16, 1.24, 1.32, 1.18, 1.36, 1.3, 1.42, 1.34, 1.48,
+    ]),
+    cartAddTrend: spreadSeries(12880, [
+      0.68, 0.74, 0.72, 0.82, 0.8, 0.86, 0.9, 0.94, 0.88, 1.02,
+      0.96, 1.04, 1.08, 1, 1.12, 1.16, 1.1, 1.18, 1.2, 1.15,
+      1.24, 1.28, 1.22, 1.32, 1.36, 1.3, 1.42, 1.38, 1.48, 1.54,
+    ]),
+    pageViewTrend: spreadSeries(184920, [
+      0.62, 0.7, 0.66, 0.78, 0.74, 0.82, 0.86, 0.84, 0.9, 0.96,
+      0.92, 1.02, 1.06, 1, 1.08, 1.12, 1.1, 1.2, 1.16, 1.24,
+      1.28, 1.22, 1.32, 1.36, 1.3, 1.42, 1.38, 1.5, 1.46, 1.58,
+    ]),
+    productViewTrend: spreadSeries(76240, [
+      0.58, 0.64, 0.62, 0.72, 0.76, 0.8, 0.78, 0.86, 0.9, 0.88,
+      0.96, 1.02, 1, 1.08, 1.12, 1.06, 1.18, 1.14, 1.22, 1.26,
+      1.2, 1.3, 1.34, 1.28, 1.38, 1.42, 1.36, 1.48, 1.52, 1.6,
+    ]),
+    topReferrers: [
+      { host: 'direct', count: 102500 },
+      { host: 'instagram.com', count: 32800 },
+      { host: 'google.com', count: 25120 },
+      { host: 'tiktok.com', count: 18100 },
+      { host: 'wa.me', count: 6420 },
+    ],
+    realtime: {
+      liveVisitors: 183,
+      activeCarts: 42,
+    },
+  };
+}
+
+function spreadSeries(total: number, weights: number[]): number[] {
+  const weightTotal = weights.reduce((sum, weight) => sum + Math.max(0, weight), 0);
+  if (total <= 0 || weightTotal <= 0) return weights.map(() => 0);
+
+  const raw = weights.map((weight) => (Math.max(0, weight) / weightTotal) * total);
+  const series = raw.map(Math.floor);
+  let remainder = total - series.reduce((sum, value) => sum + value, 0);
+  const order = raw
+    .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
+    .sort((a, b) => b.remainder - a.remainder);
+
+  for (const item of order) {
+    if (remainder <= 0) break;
+    series[item.index] = (series[item.index] ?? 0) + 1;
+    remainder -= 1;
+  }
+
+  return series;
+}
+
 function formatCurrency(value: number, currency: string): string {
   return `${currency} ${Intl.NumberFormat('en-GB').format(value)}`;
+}
+
+function formatNumber(value: number, locale?: Locale): string {
+  return Intl.NumberFormat(locale === 'ar' ? 'ar-QA' : 'en-US').format(value);
 }
 
 function formatPercent(value: number, locale?: Locale): string {
@@ -1009,19 +1320,37 @@ const HOME_STRINGS = {
     status: 'Status',
     total: 'Total',
     revenueHint: 'total orders',
-    paidOrdersHint: (n: number) => `${n} paid ${n === 1 ? 'order' : 'orders'}`,
+    paidOrdersHint: (n: number) =>
+      `${n.toLocaleString('en-US')} paid ${n === 1 ? 'order' : 'orders'}`,
     pageViewsHint: 'page views in the same window',
     lastThirtyDays: '30d',
     checkoutSignal: 'checkout',
     conversionTooltip: 'Orders divided by unique visitors over the last 30 days.',
     ordersFromVisitors: (orders: number, visits: number) =>
-      `${orders} ${orders === 1 ? 'order' : 'orders'} from ${visits} ${visits === 1 ? 'visit' : 'visits'}`,
+      `${orders.toLocaleString('en-US')} ${orders === 1 ? 'order' : 'orders'} from ${visits.toLocaleString('en-US')} ${visits === 1 ? 'visit' : 'visits'}`,
     visitorsHint: 'Last 30 days',
     productsHint: 'Published and draft items',
     customersHint: 'Saved customer records',
     revenueTrendAria: 'Revenue trend over the last 30 days',
     visitorTrendAria: 'Visitor trend over the last 30 days',
     ordersBarAria: 'Daily order count over the last 30 days',
+    websiteAnalyticsTitle: 'Website analytics',
+    websiteAnalyticsDescription: 'Traffic and product interest from the public storefront.',
+    openAnalytics: 'Open analytics',
+    pageViews: 'Page views',
+    productViews: 'Product views',
+    uniqueVisitors: 'Unique visitors',
+    liveVisitors: 'Live visitors',
+    activeCarts: 'active carts',
+    totalTraffic: 'Total storefront traffic',
+    audienceSignal: 'Audience reach',
+    browsingIntent: 'Product interest',
+    topSources: 'Top sources',
+    directTraffic: 'Direct',
+    noSourcesYet: 'No traffic sources yet.',
+    productDepth: 'Product depth',
+    productDepthHint: 'Product views compared with page views.',
+    websiteTrendAria: 'Website traffic trend over the last 30 days',
     topProductsTitle: 'Top products',
     topProductsViewAll: 'View all',
     topProductsEmpty: 'No paid orders yet. Once buyers check out, your best sellers surface here.',
@@ -1103,6 +1432,23 @@ const HOME_STRINGS = {
     revenueTrendAria: 'منحنى الإيرادات خلال آخر ٣٠ يوماً',
     visitorTrendAria: 'منحنى الزوّار خلال آخر ٣٠ يوماً',
     ordersBarAria: 'عدد الطلبات اليومي خلال آخر ٣٠ يوماً',
+    websiteAnalyticsTitle: 'تحليلات الموقع',
+    websiteAnalyticsDescription: 'الزيارات واهتمام المشترين من واجهة المتجر العامة.',
+    openAnalytics: 'افتح التحليلات',
+    pageViews: 'مشاهدات الصفحات',
+    productViews: 'مشاهدات المنتجات',
+    uniqueVisitors: 'زوار فريدون',
+    liveVisitors: 'زوار مباشرون',
+    activeCarts: 'سلات نشطة',
+    totalTraffic: 'إجمالي زيارات المتجر',
+    audienceSignal: 'وصول الجمهور',
+    browsingIntent: 'اهتمام بالمنتجات',
+    topSources: 'أهم المصادر',
+    directTraffic: 'مباشر',
+    noSourcesYet: 'لا توجد مصادر زيارات بعد.',
+    productDepth: 'عمق التصفح',
+    productDepthHint: 'مشاهدات المنتجات مقارنة بمشاهدات الصفحات.',
+    websiteTrendAria: 'منحنى زيارات الموقع خلال آخر ٣٠ يوماً',
     topProductsTitle: 'أكثر المنتجات مبيعاً',
     topProductsViewAll: 'عرض الكل',
     topProductsEmpty:

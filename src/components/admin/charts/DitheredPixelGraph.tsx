@@ -25,6 +25,7 @@ type Props = {
   stacked?: boolean;
   showPoints?: boolean;
   boil?: boolean;
+  highlightIndex?: number | null;
 };
 
 type BarChartProps = {
@@ -68,6 +69,7 @@ export function DitheredPixelGraph({
   stacked = false,
   showPoints = false,
   boil = false,
+  highlightIndex = null,
 }: Props) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const wrapRef = React.useRef<HTMLDivElement>(null);
@@ -150,6 +152,7 @@ export function DitheredPixelGraph({
         reveal: state.reveal,
         time,
         boil: boil && !reducedMotion,
+        highlightIndex,
         density,
       });
 
@@ -161,7 +164,7 @@ export function DitheredPixelGraph({
     window.cancelAnimationFrame(frameRef.current ?? 0);
     frameRef.current = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameRef.current ?? 0);
-  }, [ariaLabel, boil, dataKey, density, height, padding, reducedMotion, series, showGrid, showPoints, size.height, size.width, stacked, width]);
+  }, [ariaLabel, boil, dataKey, density, height, highlightIndex, padding, reducedMotion, series, showGrid, showPoints, size.height, size.width, stacked, width]);
 
   return (
     <div
@@ -268,6 +271,7 @@ function drawLineChart({
   reveal,
   time,
   boil,
+  highlightIndex,
   density,
 }: {
   canvas: HTMLCanvasElement;
@@ -284,6 +288,7 @@ function drawLineChart({
   reveal: number;
   time: number;
   boil: boolean;
+  highlightIndex: number | null;
   density: Props['density'];
 }) {
   prepareCanvas(canvas, size, dpr);
@@ -357,7 +362,8 @@ function drawLineChart({
   drawCrispGrid(ctx, plot, showGrid);
   displayed.forEach((values, index) => {
     const color = brightColors[index] ?? colors[index] ?? DEFAULT_COLOR;
-    const points = pointsForValues(values, plot, maxValue).filter((point) => point.x <= revealRight + 0.5);
+    const allPoints = pointsForValues(values, plot, maxValue);
+    const points = allPoints.filter((point) => point.x <= revealRight + 0.5);
     if (points.length === 0) return;
     ctx.save();
     ctx.shadowColor = rgb(color, 0.46);
@@ -377,6 +383,18 @@ function drawLineChart({
         ctx.fillRect(Math.round(point.x) - 1.5, Math.round(point.y) - 1.5, 3, 3);
       }
       ctx.restore();
+    }
+
+    if (highlightIndex != null) {
+      drawHoverLineGlow(
+        ctx,
+        lineFns[index] ?? (() => plot.top + plot.height),
+        allPoints,
+        highlightIndex,
+        revealRight,
+        color,
+        index === 0 ? 1 : 0.72,
+      );
     }
   });
   drawLineLabels(ctx, plot, labels);
@@ -572,6 +590,79 @@ function strokeSmoothPath(ctx: CanvasRenderingContext2D, points: Point[]) {
     }
   }
   ctx.stroke();
+}
+
+function drawHoverLineGlow(
+  ctx: CanvasRenderingContext2D,
+  lineAtX: (x: number) => number,
+  points: Point[],
+  highlightIndex: number,
+  revealRight: number,
+  color: Rgb,
+  alphaScale: number,
+) {
+  if (points.length === 0) return;
+
+  const index = Math.max(0, Math.min(points.length - 1, Math.round(highlightIndex)));
+  const current = points[index];
+  if (!current || current.x > revealRight + 0.5) return;
+
+  const previous = points[Math.max(0, index - 1)] ?? current;
+  const next = points[Math.min(points.length - 1, index + 1)] ?? current;
+  const fromX = index === 0 ? current.x : previous.x + (current.x - previous.x) * 0.28;
+  const toX = index === points.length - 1 ? current.x : current.x + (next.x - current.x) * 0.72;
+  const endX = Math.min(toX, revealRight);
+  if (endX - fromX < 3) return;
+
+  const highlight = mixRgb(color, { r: 255, g: 255, b: 255 }, 0.58);
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.shadowColor = rgb(highlight, 0.46 * alphaScale);
+  ctx.shadowBlur = 18;
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = rgb(highlight, 0.16 * alphaScale);
+  drawSampledPath(ctx, lineAtX, fromX, endX, Math.max(6, Math.ceil((endX - fromX) / 4)));
+  ctx.stroke();
+
+  ctx.shadowBlur = 5;
+  ctx.lineWidth = 2.8;
+  ctx.strokeStyle = rgb(highlight, 0.58 * alphaScale);
+  drawSampledPath(ctx, lineAtX, fromX, endX, 14);
+  ctx.stroke();
+
+  const pointY = lineAtX(current.x);
+  ctx.beginPath();
+  ctx.arc(current.x, pointY, 4.4, 0, Math.PI * 2);
+  ctx.fillStyle = rgb(highlight, 0.78 * alphaScale);
+  ctx.shadowBlur = 14;
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = rgb(color, 0.92 * alphaScale);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawSampledPath(
+  ctx: CanvasRenderingContext2D,
+  lineAtX: (x: number) => number,
+  fromX: number,
+  toX: number,
+  steps: number,
+) {
+  ctx.beginPath();
+  for (let step = 0; step <= steps; step += 1) {
+    const x = fromX + ((toX - fromX) * step) / Math.max(1, steps);
+    const y = lineAtX(x);
+    if (step === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  }
 }
 
 function buildMono(ys: number[]): number[] {

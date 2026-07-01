@@ -1,84 +1,18 @@
 import type { AppDescriptor } from './types';
 
 /**
- * Single source of truth for every plugin Souqna lists in Souqna
- * Marketplace. Entries can be external integrations or Souqna-owned
- * plugins that add new builder/runtime surfaces.
+ * Single source of truth for the plugin Souqna lists in Souqna
+ * Marketplace. Keep this tight while the marketplace focuses on the
+ * built-in reviews experience.
  */
 export const APP_REGISTRY: AppDescriptor[] = [
-  {
-    id: 'klaviyo',
-    name: 'Klaviyo',
-    vendor: 'by Klaviyo',
-    tagline: 'High-deliverability flows for serious brands',
-    description:
-      'Push customers + orders to Klaviyo for SMS + email automation. Better suited to higher-volume founders.',
-    category: 'marketing',
-    authKind: 'oauth',
-    available: true,
-    glyph: 'K',
-    accentVar: '--color-maroon',
-    markSrc: '/apps/klaviyo/mark.svg',
-    oauthAuthorizationUrl: 'https://www.klaviyo.com/oauth/authorize',
-    oauthTokenUrl: 'https://a.klaviyo.com/oauth/token',
-    oauthScope: 'accounts:read profiles:read profiles:write events:read events:write',
-    requiredEnv: ['KLAVIYO_CLIENT_ID', 'KLAVIYO_CLIENT_SECRET'],
-    docs: [
-      {
-        label: 'Klaviyo OAuth setup',
-        href: 'https://developers.klaviyo.com/en/docs/set_up_oauth',
-      },
-      {
-        label: 'Klaviyo OAuth flow handling',
-        href: 'https://developers.klaviyo.com/en/docs/handle_your_apps_oauth_flow',
-      },
-    ],
-    connectCopy: {
-      headline: 'Connect your Klaviyo account',
-      body: 'One-tap sign-in. We will keep your list and order data in sync.',
-      ctaLabel: 'Connect Klaviyo',
-    },
-  },
-  {
-    id: 'whatsapp-business',
-    name: 'WhatsApp Business',
-    vendor: 'by Meta',
-    tagline: 'Convert inquiries into chats with one tap',
-    description:
-      'Connect a WhatsApp Business number. The Inquire button opens a pre-filled WhatsApp thread, and inbound messages can be logged as inquiries.',
-    category: 'sales',
-    authKind: 'oauth',
-    available: true,
-    glyph: 'W',
-    accentVar: '--color-gold-deep',
-    markSrc: '/apps/whatsapp-business/mark.svg',
-    oauthAuthorizationUrl: 'https://www.facebook.com/{META_GRAPH_VERSION}/dialog/oauth',
-    oauthTokenUrl: 'https://graph.facebook.com/{META_GRAPH_VERSION}/oauth/access_token',
-    oauthScope: 'business_management,whatsapp_business_management,whatsapp_business_messaging',
-    requiredEnv: ['META_APP_ID', 'META_APP_SECRET'],
-    docs: [
-      {
-        label: 'Meta WhatsApp Embedded Signup',
-        href: 'https://developers.facebook.com/docs/whatsapp/embedded-signup/',
-      },
-      {
-        label: 'Meta Graph API',
-        href: 'https://developers.facebook.com/docs/graph-api/',
-      },
-    ],
-    connectCopy: {
-      headline: 'Connect your WhatsApp Business',
-      body: 'One-tap sign-in with Meta. Souqna routes inquiries to the number you choose.',
-      ctaLabel: 'Connect WhatsApp',
-    },
-  },
   {
     id: 'reviews',
     name: 'Souqna Reviews',
     vendor: 'by Souqna',
     tagline: 'Collect bilingual customer proof on your storefront',
     description:
-      'Let visitors submit Arabic or English reviews from storefront review sections. Merchants can publish, hide, feature, delete, and control what appears publicly.',
+      'Let visitors submit Arabic or English reviews from storefront review sections. Founders can publish, hide, feature, delete, and control what appears publicly.',
     category: 'sales',
     authKind: 'none',
     available: true,
@@ -88,62 +22,9 @@ export const APP_REGISTRY: AppDescriptor[] = [
     accentVar: '--color-gold-deep',
     connectCopy: {
       headline: 'Enable Souqna Reviews',
-      body: 'Add live review components in Builder, collect visitor feedback in Arabic or English, and approve what appears on the public storefront.',
+      body:
+        'Add live review components in Builder, collect visitor feedback in Arabic or English, and approve what appears on the public storefront.',
       ctaLabel: 'Enable Souqna Reviews',
-    },
-  },
-  {
-    id: 'instagram-shop',
-    name: 'Instagram Shop',
-    vendor: 'by Meta',
-    tagline: 'Tag products in your IG posts and reels',
-    description:
-      'Push your product catalogue to Meta Commerce so you can tag them in Instagram posts, reels, and stories.',
-    category: 'sales',
-    authKind: 'oauth',
-    available: true,
-    glyph: 'IG',
-    accentVar: '--color-maroon',
-    markSrc: '/apps/instagram-shop/mark.svg',
-    oauthAuthorizationUrl: 'https://www.facebook.com/{META_GRAPH_VERSION}/dialog/oauth',
-    oauthTokenUrl: 'https://graph.facebook.com/{META_GRAPH_VERSION}/oauth/access_token',
-    oauthScope: 'business_management,catalog_management,instagram_basic,pages_show_list',
-    requiredEnv: ['META_APP_ID', 'META_APP_SECRET'],
-    docs: [
-      {
-        label: 'Meta Commerce Catalog API',
-        href: 'https://developers.facebook.com/docs/marketing-api/catalog-reference/',
-      },
-      {
-        label: 'Meta Graph API',
-        href: 'https://developers.facebook.com/docs/graph-api/',
-      },
-    ],
-    connectCopy: {
-      headline: 'Connect your Instagram',
-      body: 'One-tap sign-in with Meta. We will mirror your products to your Instagram Shop.',
-      ctaLabel: 'Connect Instagram',
-    },
-  },
-  {
-    id: 'tap-payments',
-    name: 'Tap Payments',
-    vendor: 'by Tap',
-    tagline: 'Cards + wallets for the GCC',
-    description:
-      'KNet, mada, Apple Pay, Visa, Mastercard - Tap is the default merchant gateway across the GCC.',
-    category: 'finance',
-    authKind: 'oauth',
-    available: false,
-    glyph: 'T',
-    accentVar: '--color-maroon',
-    oauthAuthorizationUrl: 'https://accounts.tap.company/authorize',
-    oauthTokenUrl: 'https://api.tap.company/v2/oauth/token',
-    requiredEnv: ['TAP_CLIENT_ID', 'TAP_CLIENT_SECRET'],
-    connectCopy: {
-      headline: 'Connect your Tap account',
-      body: 'One-tap sign-in. Tap handles the cards, Souqna handles the rest.',
-      ctaLabel: 'Connect Tap',
     },
   },
 ];

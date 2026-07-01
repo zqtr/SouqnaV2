@@ -60,7 +60,7 @@ const TONE_BADGE_STYLE: Record<MetricTone, CSSProperties> = {
 export function CommerceMetricGrid({ children }: { children: ReactNode }) {
   return (
     <Reveal y={14}>
-      <section className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <section className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {children}
       </section>
     </Reveal>
@@ -91,26 +91,26 @@ export function CommerceMetricCard({
   const accent = TONE_ACCENT[tone];
   return (
     <Card
-      className="souqna-metric-card group relative flex h-[178px] overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/18 hover:shadow-[var(--shadow-card)]"
+      className="souqna-metric-card group relative flex h-[224px] overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/18 hover:shadow-[var(--shadow-card)]"
       style={{
         background:
           'linear-gradient(180deg, color-mix(in srgb, var(--card) 94%, var(--surface-overlay)) 0%, var(--card) 100%)',
       }}
     >
-      <CardHeader className="gap-3 px-4 pt-4 pb-2">
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
+      <CardHeader className="gap-4 px-5 pt-5 pb-2">
+        <div className="flex min-w-0 items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
             <span
-              className="grid size-8 shrink-0 place-items-center rounded-md border"
+              className="grid size-10 shrink-0 place-items-center rounded-lg border"
               style={{
                 borderColor: `color-mix(in srgb, ${accent} 24%, transparent)`,
                 background: `color-mix(in srgb, ${accent} 10%, transparent)`,
                 color: accent,
               }}
             >
-              <Icon className="size-4" aria-hidden />
+              <Icon className="size-5" aria-hidden />
             </span>
-            <CardTitle className="min-w-0 truncate font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            <CardTitle className="min-w-0 truncate font-mono text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               {label}
             </CardTitle>
           </div>
@@ -121,10 +121,10 @@ export function CommerceMetricCard({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-xs"
+                    size="icon-sm"
                     aria-label={`${label} details`}
                   >
-                    <Info className="size-3.5" />
+                    <Info className="size-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-64">
@@ -133,40 +133,41 @@ export function CommerceMetricCard({
               </Tooltip>
             </TooltipProvider>
           ) : badge ? (
-            <Badge variant="outline" className="shrink-0" style={TONE_BADGE_STYLE[tone]}>
+            <Badge
+              variant="outline"
+              className="shrink-0 px-3 py-1 text-sm"
+              style={TONE_BADGE_STYLE[tone]}
+            >
               {badge}
             </Badge>
           ) : null}
         </div>
       </CardHeader>
-      <CardContent className="flex flex-1 px-4 pb-4">
-        <div className="flex w-full items-end justify-between gap-3">
+      <CardContent className="flex flex-1 px-5 pb-5">
+        <div className="flex w-full items-end justify-between gap-5">
           <div className="min-w-0 self-stretch">
-            <div className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">
+            <div className="text-[2.45rem] font-semibold leading-[1.05] tracking-tight text-foreground tabular-nums">
               {value}
             </div>
             <CardDescription
-              className="mt-1 leading-4"
+              className="mt-2 text-base leading-5"
               style={{
-                display: '-webkit-box',
-                height: '2rem',
-                overflow: 'hidden',
+                minHeight: '2.5rem',
+                maxHeight: '2.5rem',
                 overflowWrap: 'normal',
                 wordBreak: 'normal',
                 hyphens: 'none',
-                WebkitBoxOrient: 'vertical',
-                WebkitLineClamp: 2,
               }}
             >
               {hint ?? ''}
             </CardDescription>
           </div>
           {trend && trend.length > 0 ? (
-            <div className="h-12 w-28 shrink-0 opacity-75 transition-opacity group-hover:opacity-95">
+            <div className="h-16 w-36 shrink-0 opacity-75 transition-opacity group-hover:opacity-95">
               <Sparkline
                 data={trend}
-                width={112}
-                height={48}
+                width={144}
+                height={64}
                 accent={accent}
                 ariaLabel={`${label} ${chart === 'bar' ? 'smooth ' : ''}trend`}
               />
