@@ -570,8 +570,16 @@ export async function getProductsForUser(clerkUserId: string): Promise<ProductWi
     select p.*, b.business_name, b.locale, b.created_at as storefront_created_at
     from products p
     join briefs b on b.slug = p.storefront_slug
-    where b.clerk_user_id = ${clerkUserId}
-      and b.expires_at > now()
+    where b.expires_at > now()
+      and (
+        b.clerk_user_id = ${clerkUserId}
+        or exists (
+          select 1
+          from storefront_members m
+          where m.storefront_slug = b.slug
+            and m.clerk_user_id = ${clerkUserId}
+        )
+      )
     order by b.created_at desc, p.position asc, p.created_at asc
   `) as unknown as (ProductRow & {
     business_name: string;
@@ -813,7 +821,17 @@ export async function reorderProductRows(slug: string, orderedIds: string[]): Pr
 export async function assertStorefrontOwner(slug: string, clerkUserId: string | null) {
   if (!clerkUserId) return null;
   const sf = await getStorefront(slug);
-  if (!sf || sf.clerkUserId !== clerkUserId) return null;
+  if (!sf) return null;
+  if (sf.clerkUserId === clerkUserId) return sf;
+  const rows = (await db()`
+    select role
+    from storefront_members
+    where storefront_slug = ${slug}
+      and clerk_user_id = ${clerkUserId}
+      and role = 'owner'
+    limit 1
+  `) as Array<{ role: string }>;
+  if (!rows[0]) return null;
   return sf;
 }
 

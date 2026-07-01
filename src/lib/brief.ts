@@ -925,8 +925,17 @@ export async function getStorefrontsForUser(clerkUserId: string): Promise<Storef
   if (!clerkUserId) return [];
   noStore();
   const rows = (await db()`
-    select * from briefs
-    where clerk_user_id = ${clerkUserId} and expires_at > now()
+    select b.* from briefs b
+    where b.expires_at > now()
+      and (
+        b.clerk_user_id = ${clerkUserId}
+        or exists (
+          select 1
+          from storefront_members m
+          where m.storefront_slug = b.slug
+            and m.clerk_user_id = ${clerkUserId}
+        )
+      )
     order by created_at desc
   `) as unknown as StorefrontRow[];
   return rows.map(fromRow);

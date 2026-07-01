@@ -85,8 +85,16 @@ export async function getCategoriesForUser(
       from product_categories
       group by category_id
     ) pc on pc.category_id = c.id
-    where b.clerk_user_id = ${clerkUserId}
-      and b.expires_at > now()
+    where b.expires_at > now()
+      and (
+        b.clerk_user_id = ${clerkUserId}
+        or exists (
+          select 1
+          from storefront_members m
+          where m.storefront_slug = b.slug
+            and m.clerk_user_id = ${clerkUserId}
+        )
+      )
     order by b.created_at desc, c.position asc, c.created_at asc
   `) as unknown as (CategoryRow & { business_name: string })[];
   return rows.map((row) => ({
