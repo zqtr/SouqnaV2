@@ -1138,6 +1138,10 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
   shape-rendering: geometricPrecision;
 }
 
+.souqna-bayer-chart canvas {
+  image-rendering: pixelated;
+}
+
 .souqna-dither-pixel-graph .souqna-dither-grid {
   color: color-mix(in srgb, var(--dash-black) 62%, transparent);
 }

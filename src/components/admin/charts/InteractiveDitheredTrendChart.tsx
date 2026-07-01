@@ -53,6 +53,27 @@ export function InteractiveDitheredTrendChart({
   const hoverPct = hoverIndex == null ? 0 : (hoverIndex / Math.max(pointCount - 1, 1)) * 100;
   const hoverPrimary = hoverIndex == null ? null : (primary[hoverIndex] ?? 0);
   const hoverSecondary = hoverIndex == null ? null : (secondary[hoverIndex] ?? 0);
+  const graphSeries = React.useMemo(
+    () => [
+      {
+        data: active.data,
+        color: active.color,
+        label: active.label,
+        fill: true,
+        pattern: 'dots' as const,
+      },
+      {
+        data: inactive.data,
+        color: inactive.color,
+        label: inactive.label,
+        fill: stacked,
+        dashed: true,
+        opacity: stacked ? 0.82 : 0.38,
+        pattern: 'hatch' as const,
+      },
+    ],
+    [active.color, active.data, active.label, inactive.color, inactive.data, inactive.label, stacked],
+  );
 
   function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     const rect = chartRef.current?.getBoundingClientRect();
@@ -127,24 +148,7 @@ export function InteractiveDitheredTrendChart({
           onPointerLeave={() => setHoverIndex(null)}
         >
           <DitheredPixelGraph
-            series={[
-              {
-                data: active.data,
-                color: active.color,
-                label: active.label,
-                fill: true,
-                pattern: 'dots',
-              },
-              {
-                data: inactive.data,
-                color: inactive.color,
-                label: inactive.label,
-                fill: stacked,
-                dashed: true,
-                opacity: stacked ? 0.82 : 0.38,
-                pattern: 'hatch',
-              },
-            ]}
+            series={graphSeries}
             width={720}
             height={260}
             padding={22}
