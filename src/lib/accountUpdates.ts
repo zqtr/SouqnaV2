@@ -115,25 +115,27 @@ function cleanEnvValue(value: string | undefined): string | null {
   return cleaned ? cleaned : null;
 }
 
-function cleanPublicUpdateText(value: string | null, fallback: string): string {
+function cleanPublicUpdateText(value: string | null): string | null {
   const cleaned = value?.trim();
-  if (!cleaned) return fallback;
-  return /\bdpl_[a-z0-9_]+\b|deployment|deployed|deploy|production|vercel/iu.test(cleaned)
-    ? fallback
-    : cleaned;
+  if (!cleaned) return null;
+  if (/\bdpl_[a-z0-9_]+\b|https?:\/\/|\.vercel\.app\b/iu.test(cleaned)) return null;
+  if (
+    /^(deploy(?:ed|ment)?|production|vercel)(?:\s+(production|build|deployment|main|preview|live))*[.!-]*$/iu.test(
+      cleaned,
+    )
+  ) {
+    return null;
+  }
+  return cleaned;
 }
 
 export function accountUpdateIdFromSeed(seed: string): string {
   const hex = createHash('sha256').update(`souqna-account-update:${seed}`).digest('hex');
   const versionNibble = `4${hex.slice(13, 16)}`;
   const variantNibble = `${((Number.parseInt(hex[16] ?? '8', 16) & 0x3) | 0x8).toString(16)}${hex.slice(17, 20)}`;
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    versionNibble,
-    variantNibble,
-    hex.slice(20, 32),
-  ].join('-');
+  return [hex.slice(0, 8), hex.slice(8, 12), versionNibble, variantNibble, hex.slice(20, 32)].join(
+    '-',
+  );
 }
 
 export function productionDeploymentAccountUpdateFromEnv(
@@ -149,17 +151,15 @@ export function productionDeploymentAccountUpdateFromEnv(
   if (!deploymentKey) return null;
 
   const commitMessage = cleanEnvValue(source.VERCEL_GIT_COMMIT_MESSAGE);
-  const fallback = 'Souqna improvements are ready to explore.';
-  const visibleMessage = cleanPublicUpdateText(commitMessage, fallback);
+  const visibleMessage = cleanPublicUpdateText(commitMessage);
+  if (!visibleMessage) return null;
   const summary =
-    visibleMessage.length > 120
-      ? `${visibleMessage.slice(0, 117).trimEnd()}...`
-      : visibleMessage;
+    visibleMessage.length > 120 ? `${visibleMessage.slice(0, 117).trimEnd()}...` : visibleMessage;
   const id = accountUpdateIdFromSeed(`push:${deploymentKey}`);
 
   return {
     id,
-    title: summary === fallback ? 'Souqna update' : summary,
+    title: summary,
     body: summary,
     version: `update:${id.slice(0, 8)}`,
     priority: 35,

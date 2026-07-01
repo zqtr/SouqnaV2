@@ -33,3 +33,5 @@ apps/pulse/
 *.apk
 *.aab
 *.ipa
+.vercel
+.env*

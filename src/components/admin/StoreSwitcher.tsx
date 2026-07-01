@@ -254,10 +254,11 @@ export function StoreSwitcher() {
             position: 'absolute',
             top: 'calc(100% + 10px)',
             zIndex: 80,
-            width: 'min(360px, calc(100vw - 32px))',
+            width: 'min(360px, calc(var(--sidebar-width, 16rem) - 24px), calc(100vw - 32px))',
             padding: 8,
             borderRadius: 16,
-            background: 'var(--surface-overlay, var(--surface-bg))',
+            background:
+              'linear-gradient(180deg, var(--surface-overlay, var(--surface-bg)), var(--surface-overlay, var(--surface-bg)))',
             border: '1px solid var(--surface-rule-strong)',
             boxShadow: 'var(--shadow-popover)',
             maxHeight: 420,

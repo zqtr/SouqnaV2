@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import {
   BookOpen,
+  ChevronDown,
   ChevronUp,
   Check,
   ExternalLink,
@@ -63,6 +64,7 @@ type DashboardThemePreset = {
 };
 
 const THEME_STORAGE_KEY = 'souqna.dashboard.theme.v1';
+const DOCK_COLLAPSED_STORAGE_KEY = 'souqna.dashboard.dock.collapsed.v1';
 
 const DEFAULT_COLORS: DashboardThemeColors = {
   background: '#f7f2e8',
@@ -303,6 +305,7 @@ export function AdminCommandDock() {
   const [themeOpen, setThemeOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
   const [mobileSelectorOpen, setMobileSelectorOpen] = useState(false);
+  const [dockCollapsed, setDockCollapsed] = useState(false);
   const [themeTab, setThemeTab] = useState('presets');
   const [themeState, setThemeState] = useState<DashboardThemeState>({
     presetId: THEME_PRESETS[0]!.id,
@@ -314,6 +317,7 @@ export function AdminCommandDock() {
       setThemeState(storedTheme);
       applyDashboardTheme(storedTheme.colors);
     }
+    setDockCollapsed(readDockCollapsed());
   }, []);
 
   const selectedPreset = useMemo(
@@ -371,70 +375,100 @@ export function AdminCommandDock() {
     setDocsOpen(true);
   };
 
+  const toggleDockCollapsed = () => {
+    setDockCollapsed((collapsed) => {
+      const next = !collapsed;
+      persistDockCollapsed(next);
+      if (next) setMobileSelectorOpen(false);
+      return next;
+    });
+  };
+
   const windowOpen = themeOpen || docsOpen;
 
   return (
     <>
       <div
-        className={`souqna-admin-dock-wrap${windowOpen ? ' is-window-open' : ''}`}
+        className={`souqna-admin-dock-wrap${windowOpen ? ' is-window-open' : ''}${dockCollapsed ? ' is-collapsed' : ''}`}
         dir={isArabic ? 'rtl' : 'ltr'}
       >
-        <button
-          type="button"
-          className="souqna-admin-mobile-dock-trigger"
-          aria-expanded={mobileSelectorOpen}
-          onClick={() => setMobileSelectorOpen(true)}
-        >
-          <SlidersHorizontal className="size-4" aria-hidden />
-          <span>{labels.controls}</span>
-          <span className="souqna-admin-mobile-dock-meta">
-            {selectedPresetLabel}
-          </span>
-          <ChevronUp className="size-4" aria-hidden />
-        </button>
-        <nav className="souqna-admin-dock" aria-label={labels.aria}>
-          <DockButton
-            icon={<Palette className="size-4" aria-hidden />}
-            label={selectedPresetLabel}
-            eyebrow={labels.theme}
-            onClick={() => openThemeWindow('presets')}
-          />
-          <div className="souqna-admin-dock-locale" aria-label={labels.language}>
-            <Languages className="size-4" aria-hidden />
-            <LocaleToggle
-              locale={locale}
-              mode="account"
-              style={{
-                minHeight: 34,
-                minWidth: 74,
-                padding: '7px 9px',
-                borderRadius: 8,
-                borderColor: 'var(--dash-rule-strong)',
-                background: 'transparent',
-                color: 'var(--dash-black)',
-              }}
-            />
-          </div>
-          <DockButton
-            icon={<BookOpen className="size-4" aria-hidden />}
-            label={labels.docs}
-            onClick={openDocsWindow}
-          />
-          <DockButton
-            icon={<SlidersHorizontal className="size-4" aria-hidden />}
-            label={labels.customize}
-            onClick={() => openThemeWindow('interface')}
-          />
-        </nav>
+        {dockCollapsed ? (
+          <button
+            type="button"
+            className="souqna-admin-dock-restore"
+            aria-label={labels.showControls}
+            aria-expanded="false"
+            title={labels.showControls}
+            onClick={toggleDockCollapsed}
+          >
+            <ChevronUp className="size-5" aria-hidden />
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="souqna-admin-mobile-dock-trigger"
+              aria-expanded={mobileSelectorOpen}
+              onClick={() => setMobileSelectorOpen(true)}
+            >
+              <SlidersHorizontal className="size-4" aria-hidden />
+              <span>{labels.controls}</span>
+              <span className="souqna-admin-mobile-dock-meta">{selectedPresetLabel}</span>
+              <ChevronUp className="size-4" aria-hidden />
+            </button>
+            <nav className="souqna-admin-dock" aria-label={labels.aria}>
+              <DockButton
+                icon={<Palette className="size-4" aria-hidden />}
+                label={selectedPresetLabel}
+                eyebrow={labels.theme}
+                onClick={() => openThemeWindow('presets')}
+              />
+              <div className="souqna-admin-dock-locale" aria-label={labels.language}>
+                <Languages className="size-4" aria-hidden />
+                <LocaleToggle
+                  locale={locale}
+                  mode="account"
+                  style={{
+                    minHeight: 34,
+                    minWidth: 74,
+                    padding: '7px 9px',
+                    borderRadius: 8,
+                    borderColor: 'var(--dash-rule-strong)',
+                    background: 'transparent',
+                    color: 'var(--dash-black)',
+                  }}
+                />
+              </div>
+              <DockButton
+                icon={<BookOpen className="size-4" aria-hidden />}
+                label={labels.docs}
+                onClick={openDocsWindow}
+              />
+              <DockButton
+                icon={<SlidersHorizontal className="size-4" aria-hidden />}
+                label={labels.customize}
+                onClick={() => openThemeWindow('interface')}
+              />
+              <button
+                type="button"
+                className="souqna-admin-dock-toggle"
+                aria-label={labels.hideControls}
+                aria-expanded="true"
+                title={labels.hideControls}
+                onClick={toggleDockCollapsed}
+              >
+                <ChevronDown className="size-4" aria-hidden />
+              </button>
+            </nav>
+          </>
+        )}
       </div>
 
       <Drawer open={mobileSelectorOpen} onOpenChange={setMobileSelectorOpen} direction="bottom">
         <DrawerContent className="souqna-admin-mobile-panel">
           <DrawerHeader className="souqna-admin-mobile-panel-header">
             <DrawerTitle>{labels.controls}</DrawerTitle>
-            <DrawerDescription>
-              {selectedPresetLabel}
-            </DrawerDescription>
+            <DrawerDescription>{selectedPresetLabel}</DrawerDescription>
           </DrawerHeader>
           <div className="souqna-admin-mobile-panel-body">
             <MobileSelectorButton
@@ -735,6 +769,26 @@ function persistTheme(theme: DashboardThemeState) {
   }
 }
 
+function readDockCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(DOCK_COLLAPSED_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function persistDockCollapsed(collapsed: boolean) {
+  try {
+    if (collapsed) {
+      window.localStorage.setItem(DOCK_COLLAPSED_STORAGE_KEY, '1');
+    } else {
+      window.localStorage.removeItem(DOCK_COLLAPSED_STORAGE_KEY);
+    }
+  } catch {
+    // The toggle remains usable even if storage is blocked.
+  }
+}
+
 function normalizeColors(value: Partial<DashboardThemeColors>): DashboardThemeColors {
   const next = { ...DEFAULT_COLORS };
   for (const key of Object.keys(DEFAULT_COLORS) as Array<keyof DashboardThemeColors>) {
@@ -841,6 +895,8 @@ const DOCK_LABELS = {
   en: {
     aria: 'Dashboard controls',
     controls: 'Controls',
+    hideControls: 'Hide controls',
+    showControls: 'Show controls',
     theme: 'Preset',
     language: 'Language',
     docs: 'Docs',
@@ -866,6 +922,8 @@ const DOCK_LABELS = {
   ar: {
     aria: 'أدوات لوحة التحكم',
     controls: 'الأدوات',
+    hideControls: 'إخفاء الأدوات',
+    showControls: 'إظهار الأدوات',
     theme: 'نمط',
     language: 'اللغة',
     docs: 'الدليل',

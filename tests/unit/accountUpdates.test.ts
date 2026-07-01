@@ -130,20 +130,23 @@ describe('account updates', () => {
     expect(JSON.stringify(update)).not.toMatch(/dpl_123|deployment|production|vercel/i);
   });
 
-  it('replaces rollout wording in automatic changelog copy', () => {
+  it('skips automatic changelog updates without a deployment comment', () => {
+    const update = productionDeploymentAccountUpdateFromEnv({
+      VERCEL_ENV: 'production',
+      VERCEL_DEPLOYMENT_ID: 'dpl_789',
+    });
+
+    expect(update).toBeNull();
+  });
+
+  it('skips generic rollout wording in automatic changelog copy', () => {
     const update = productionDeploymentAccountUpdateFromEnv({
       VERCEL_ENV: 'production',
       VERCEL_DEPLOYMENT_ID: 'dpl_789',
       VERCEL_GIT_COMMIT_MESSAGE: 'Deploy production build',
     });
 
-    expect(update).toMatchObject({
-      title: 'Souqna update',
-      body: 'Souqna improvements are ready to explore.',
-      summary: 'Souqna improvements are ready to explore.',
-      badge: 'Update',
-    });
-    expect(JSON.stringify(update)).not.toMatch(/dpl_789|deployment|production|vercel/i);
+    expect(update).toBeNull();
   });
 
   it('upserts the automatic changelog row idempotently', async () => {
@@ -161,5 +164,15 @@ describe('account updates', () => {
     expect(sql).toContain('on conflict (id) do update');
     expect(sql).toContain('preview_payload');
     expect(sql).toContain('banner_payload');
+  });
+
+  it('does not upsert automatic changelog rows for generic deploys', async () => {
+    await syncProductionDeploymentAccountUpdate({
+      VERCEL_ENV: 'production',
+      VERCEL_DEPLOYMENT_ID: 'dpl_456',
+      VERCEL_GIT_COMMIT_MESSAGE: 'Deploy production build',
+    });
+
+    expect(sqlMock).not.toHaveBeenCalled();
   });
 });

@@ -6,11 +6,11 @@ import { getServerTheme } from '@/components/theme/ServerThemeScript';
 import { PostHogProvider } from '@/components/analytics/PostHogProvider';
 import { souqnaClerkAppearance } from '@/lib/clerkAppearance';
 import { clerkLocalization } from '@/lib/clerkLocalization';
+import { env } from '@/lib/env';
 import { defaultLocale, isLocale } from '@/i18n/locales';
 import './globals.css';
 
-const ROOT_DOMAIN =
-  (process.env.BRIEF_ROOT_DOMAIN && process.env.BRIEF_ROOT_DOMAIN.trim()) || 'souqna.qa';
+const ROOT_DOMAIN = env.BRIEF_ROOT_DOMAIN;
 const RESERVED_HOSTS = new Set([
   'www',
   'mail',
@@ -39,7 +39,7 @@ function isStorefrontSubdomainHost(host: string): boolean {
 }
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://souqna.qa'),
+  metadataBase: new URL(env.NEXT_PUBLIC_SITE_URL),
   title: { default: 'Souqna - bilingual commerce workspace', template: '%s · Souqna' },
   description:
     'Souqna is a bilingual commerce workspace for launching and operating modern Gulf storefronts.',
@@ -77,6 +77,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const hdrs = await headers();
   const host = hdrs.get('host') ?? '';
   const pathname = hdrs.get('x-souqna-pathname') ?? '';
+  const clerkPublishableKey = env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
   const isStorefront = isStorefrontSubdomainHost(host);
   const isAuthRoute =
     pathname === '/sign-in' ||
@@ -93,12 +94,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     </PostHogProvider>
   );
 
-  if (isStorefront || isAuthRoute) return inner;
+  if (isStorefront || isAuthRoute || !clerkPublishableKey) return inner;
 
   return (
     <ClerkProvider
       appearance={souqnaClerkAppearance({ dark })}
       localization={clerkLocalization(locale)}
+      publishableKey={clerkPublishableKey}
     >
       {inner}
     </ClerkProvider>

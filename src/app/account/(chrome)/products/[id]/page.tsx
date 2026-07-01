@@ -64,9 +64,7 @@ export default async function ProductDetailPage({
         eyebrow={`Products · ${storefront.businessName}`}
         title={product.title}
         subtitle={`Edit ${product.title} on ${storefront.businessName}.`}
-        secondaryActions={[
-          { label: '← All products', href: `/account/products?store=${slug}` },
-        ]}
+        secondaryActions={[{ label: '← All products', href: `/account/products?store=${slug}` }]}
       />
 
       <div
@@ -86,6 +84,7 @@ export default async function ProductDetailPage({
             copy={copy}
             initial={product}
             currentPlan={currentPlan}
+            currency={storefront.checkout.currency}
           />
         </Surface>
 
@@ -148,9 +147,7 @@ export default async function ProductDetailPage({
           {storefronts.length > 1 ? (
             <p style={{ marginTop: 16, fontSize: 11.5, color: 'var(--ink-muted)' }}>
               You own {storefronts.length} storefronts. This product belongs to{' '}
-              <strong style={{ color: 'var(--ink-strong)' }}>
-                {storefront.businessName}
-              </strong>{' '}
+              <strong style={{ color: 'var(--ink-strong)' }}>{storefront.businessName}</strong>{' '}
               only.
             </p>
           ) : null}
@@ -166,13 +163,7 @@ export default async function ProductDetailPage({
   );
 }
 
-function KV({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function KV({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
       <dt

@@ -533,41 +533,105 @@ function pointsForValues(values: number[], plot: { left: number; top: number; wi
 
 function makeLineSampler(values: number[], plot: { left: number; top: number; width: number; height: number }, maxValue: number) {
   const points = pointsForValues(values, plot, maxValue);
+  const ys = points.map((point) => point.y);
+  const tangents = buildMono(ys);
   return (x: number) => {
     if (points.length === 0) return plot.top + plot.height;
     if (points.length === 1 || x <= points[0]!.x) return points[0]!.y;
-    for (let index = 1; index < points.length; index += 1) {
-      const previous = points[index - 1]!;
-      const next = points[index]!;
-      if (x <= next.x) {
-        const t = smoothstep((x - previous.x) / Math.max(next.x - previous.x, 1));
-        return previous.y + (next.y - previous.y) * t;
-      }
-    }
-    return points[points.length - 1]!.y;
+    const u = ((x - plot.left) / Math.max(plot.width, 1)) * (points.length - 1);
+    return monoAt(u, ys, tangents);
   };
 }
 
 function strokeSmoothPath(ctx: CanvasRenderingContext2D, points: Point[]) {
   if (points.length === 0) return;
+  if (points.length === 1) {
+    ctx.beginPath();
+    ctx.moveTo(points[0]!.x, points[0]!.y);
+    ctx.lineTo(points[0]!.x + 0.01, points[0]!.y);
+    ctx.stroke();
+    return;
+  }
+
+  const ys = points.map((point) => point.y);
+  const tangents = buildMono(ys);
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  const width = Math.max(last.x - first.x, 1);
+  const steps = Math.max(points.length * 8, Math.ceil(width / 3));
+
   ctx.beginPath();
-  ctx.moveTo(points[0]!.x, points[0]!.y);
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const current = points[index]!;
-    const next = points[index + 1]!;
-    const previous = points[index - 1] ?? current;
-    const following = points[index + 2] ?? next;
-    const scale = 0.18;
-    ctx.bezierCurveTo(
-      current.x + (next.x - previous.x) * scale,
-      current.y + (next.y - previous.y) * scale,
-      next.x - (following.x - current.x) * scale,
-      next.y - (following.y - current.y) * scale,
-      next.x,
-      next.y,
-    );
+  for (let step = 0; step <= steps; step += 1) {
+    const x = first.x + (width * step) / steps;
+    const u = ((x - first.x) / width) * (points.length - 1);
+    const y = monoAt(u, ys, tangents);
+    if (step === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
   }
   ctx.stroke();
+}
+
+function buildMono(ys: number[]): number[] {
+  const n = ys.length;
+  if (n === 0) return [];
+  if (n === 1) return [0];
+
+  const d = new Array<number>(n - 1);
+  const m = new Array<number>(n).fill(0);
+  for (let index = 0; index < n - 1; index += 1) {
+    d[index] = (ys[index + 1] ?? 0) - (ys[index] ?? 0);
+  }
+
+  m[0] = d[0] ?? 0;
+  m[n - 1] = d[n - 2] ?? 0;
+  for (let index = 1; index < n - 1; index += 1) {
+    const previous = d[index - 1] ?? 0;
+    const next = d[index] ?? 0;
+    m[index] = previous * next <= 0 ? 0 : (previous + next) / 2;
+  }
+
+  for (let index = 0; index < n - 1; index += 1) {
+    const delta = d[index] ?? 0;
+    if (delta === 0) {
+      m[index] = 0;
+      m[index + 1] = 0;
+      continue;
+    }
+    const a = (m[index] ?? 0) / delta;
+    const b = (m[index + 1] ?? 0) / delta;
+    const h = Math.hypot(a, b);
+    if (h > 3) {
+      const t = 3 / h;
+      m[index] = (m[index] ?? 0) * t;
+      m[index + 1] = (m[index + 1] ?? 0) * t;
+    }
+  }
+
+  return m;
+}
+
+function monoAt(u: number, ys: number[], m: number[]): number {
+  const n = ys.length;
+  if (n === 0) return 0;
+  if (n === 1) return ys[0] ?? 0;
+
+  const bounded = Math.max(0, Math.min(n - 1, u));
+  let index = Math.floor(bounded);
+  if (index >= n - 1) index = n - 2;
+  const t = bounded - index;
+  const h00 = (1 + 2 * t) * (1 - t) * (1 - t);
+  const h10 = t * (1 - t) * (1 - t);
+  const h01 = t * t * (3 - 2 * t);
+  const h11 = t * t * (t - 1);
+  return (
+    h00 * (ys[index] ?? 0) +
+    h10 * (m[index] ?? 0) +
+    h01 * (ys[index + 1] ?? 0) +
+    h11 * (m[index + 1] ?? 0)
+  );
 }
 
 function drawCrispGrid(ctx: CanvasRenderingContext2D, plot: { left: number; top: number; width: number; height: number }, showGrid: boolean) {
@@ -666,11 +730,6 @@ function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {
     g: a.g + (b.g - a.g) * amount,
     b: a.b + (b.b - a.b) * amount,
   };
-}
-
-function smoothstep(value: number): number {
-  const t = clamp01(value);
-  return t * t * (3 - 2 * t);
 }
 
 function clamp01(value: number): number {

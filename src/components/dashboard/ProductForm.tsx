@@ -1,7 +1,7 @@
 ﻿'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { upload } from '@vercel/blob/client';
 import { Plus, X } from 'lucide-react';
 import type { Copy } from '@/content/copy';
@@ -52,6 +52,7 @@ type Props = {
    */
   initialCategoryIds?: string[];
   currentPlan?: Plan;
+  currency?: string;
   /**
    * Hide the form's own header + footer cancel link. Used when the form
    * is rendered inside a modal that supplies its own chrome.
@@ -200,6 +201,29 @@ function textToMetafields(value: string): Record<string, string> {
   return out;
 }
 
+function slugifyProductHandle(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0600-\u06ff]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120);
+}
+
+function buildSeoDescription(title: string, subtitle: string, description: string): string {
+  const source = [subtitle, description, title]
+    .map((part) => part.replace(/\s+/g, ' ').trim())
+    .find(Boolean);
+  return (source ?? '').slice(0, 220);
+}
+
+function formatMoneyPreview(currency: string, value: string): string {
+  const n = nullableNumber(value);
+  if (n === null) return `${currency} 0`;
+  return `${currency} ${Intl.NumberFormat('en-GB').format(n)}`;
+}
+
 function defaultsFrom(initial: Product | undefined): FormState {
   if (!initial) {
     return {
@@ -227,7 +251,7 @@ function defaultsFrom(initial: Product | undefined): FormState {
       publishedAt: '',
       saleStartsAt: '',
       saleEndsAt: '',
-      status: 'active',
+      status: 'draft',
       stock: '0',
       sku: '',
       barcode: '',
@@ -272,8 +296,7 @@ function defaultsFrom(initial: Product | undefined): FormState {
     subtitle: initial.subtitle ?? '',
     description: initial.description ?? '',
     priceQar: initial.priceQar !== null ? String(initial.priceQar) : '',
-    compareAtPriceQar:
-      initial.compareAtPriceQar !== null ? String(initial.compareAtPriceQar) : '',
+    compareAtPriceQar: initial.compareAtPriceQar !== null ? String(initial.compareAtPriceQar) : '',
     costPerItemQar: initial.costPerItemQar !== null ? String(initial.costPerItemQar) : '',
     taxable: initial.taxable,
     discountEligible: initial.discountEligible,
@@ -299,15 +322,13 @@ function defaultsFrom(initial: Product | undefined): FormState {
     barcode: initial.barcode ?? '',
     trackInventory: initial.trackInventory,
     continueSellingWhenOutOfStock: initial.continueSellingWhenOutOfStock,
-    lowStockThreshold:
-      initial.lowStockThreshold !== null ? String(initial.lowStockThreshold) : '',
+    lowStockThreshold: initial.lowStockThreshold !== null ? String(initial.lowStockThreshold) : '',
     restockAt: dateInputValue(initial.restockAt),
     supplierCostQar: initial.supplierCostQar !== null ? String(initial.supplierCostQar) : '',
     purchaseOrderRef: initial.purchaseOrderRef ?? '',
     stockStatusLabel: initial.stockStatusLabel ?? '',
     minOrderQuantity: String(initial.minOrderQuantity),
-    maxOrderQuantity:
-      initial.maxOrderQuantity !== null ? String(initial.maxOrderQuantity) : '',
+    maxOrderQuantity: initial.maxOrderQuantity !== null ? String(initial.maxOrderQuantity) : '',
     physicalProduct: initial.physicalProduct,
     weightGrams: initial.weightGrams !== null ? String(initial.weightGrams) : '',
     packageLengthCm:
@@ -345,6 +366,7 @@ export function ProductForm({
   categories = [],
   initialCategoryIds = [],
   currentPlan = 'free',
+  currency = 'QAR',
   noChrome = false,
   onSaved,
   onCancel,
@@ -353,8 +375,16 @@ export function ProductForm({
   const isRtl = locale === 'ar' || /[\u0600-\u06ff]/.test(t.labels.status);
   const fontFamily = isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)';
   const idBase = useId();
+  const formRef = useRef<HTMLFormElement>(null);
+  const submitStatusRef = useRef<ProductStatus | null>(null);
 
   const [form, setForm] = useState<FormState>(defaultsFrom(initial));
+  const [autoFields, setAutoFields] = useState({
+    handle: !initial?.handle,
+    seoTitle: !initial?.seoTitle,
+    seoDescription: !initial?.seoDescription,
+  });
+  const [autosaveState, setAutosaveState] = useState<'saved' | 'unsaved' | 'saving'>('saved');
   const [categoryList, setCategoryList] = useState<Category[]>(categories);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(() =>
     initialCategoryIds.filter((id) => categories.some((c) => c.id === id)),
@@ -363,15 +393,72 @@ export function ProductForm({
   const [saving, setSaving] = useState(false);
   const dashboardHref = `/account/products?store=${encodeURIComponent(storefrontSlug)}`;
   const canUseMonthlyPayments = planUnlocksMonthlyPayments(currentPlan);
+  const autosaveKey = `souqna.product-draft.${storefrontSlug}.${initial?.id ?? 'new'}`;
+  const currencyCode = currency.trim().toUpperCase() || 'QAR';
+  const priceLabel = t.labels.price.replace(/\bQAR\b/g, currencyCode);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      if (mode === 'create') {
+        const title = key === 'title' ? String(value) : next.title;
+        const subtitle = key === 'subtitle' ? String(value) : next.subtitle;
+        const description = key === 'description' ? String(value) : next.description;
+        if (autoFields.handle && key === 'title') {
+          next.handle = slugifyProductHandle(title);
+        }
+        if (autoFields.seoTitle && key === 'title') {
+          next.seoTitle = title.replace(/\s+/g, ' ').trim().slice(0, 160);
+        }
+        if (autoFields.seoDescription && ['title', 'subtitle', 'description'].includes(key)) {
+          next.seoDescription = buildSeoDescription(title, subtitle, description);
+        }
+      }
+      return next;
+    });
     if (state.status === 'error') setState({ status: 'idle' });
   }
+
+  function updateManual<K extends keyof FormState>(key: K, value: FormState[K]) {
+    if (key === 'handle' || key === 'seoTitle' || key === 'seoDescription') {
+      setAutoFields((prev) => ({ ...prev, [key]: false }));
+    }
+    update(key, value);
+  }
+
+  function submitWithStatus(status: ProductStatus) {
+    submitStatusRef.current = status;
+    setForm((prev) => ({ ...prev, status }));
+    window.setTimeout(() => formRef.current?.requestSubmit(), 0);
+  }
+
+  useEffect(() => {
+    if (mode !== 'create') return;
+    setAutosaveState('unsaved');
+    const timer = window.setTimeout(() => {
+      setAutosaveState('saving');
+      try {
+        window.localStorage.setItem(
+          autosaveKey,
+          JSON.stringify({
+            form,
+            selectedCategoryIds,
+            savedAt: new Date().toISOString(),
+          }),
+        );
+        setAutosaveState('saved');
+      } catch {
+        setAutosaveState('unsaved');
+      }
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [autosaveKey, form, mode, selectedCategoryIds]);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (saving) return;
+    const requestedStatus = submitStatusRef.current;
+    submitStatusRef.current = null;
 
     const priceParsed = form.priceQar.trim() === '' ? null : Number(form.priceQar);
     const priceQar = priceParsed === null || Number.isNaN(priceParsed) ? null : priceParsed;
@@ -451,7 +538,7 @@ export function ProductForm({
       publishedAt: form.publishedAt.trim(),
       saleStartsAt: form.saleStartsAt.trim(),
       saleEndsAt: form.saleEndsAt.trim(),
-      status: form.status,
+      status: requestedStatus ?? form.status,
       stock: Math.max(0, Math.floor(nullableNumber(form.stock) ?? 0)),
       sku: form.sku.trim(),
       barcode: form.barcode.trim(),
@@ -522,6 +609,10 @@ export function ProductForm({
       );
       setState(result);
       if (result.status === 'success') {
+        if (mode === 'create') {
+          window.localStorage.removeItem(autosaveKey);
+          setAutosaveState('saved');
+        }
         setSaving(false);
         if (onSaved && result.product) {
           onSaved(result.product);
@@ -538,8 +629,49 @@ export function ProductForm({
     });
   }
 
+  const hasImage = form.imageUrl.trim().length > 0;
+  const hasTitle = form.title.trim().length > 0;
+  const hasPrice = form.priceQar.trim().length > 0 && nullableNumber(form.priceQar) !== null;
+  const hasCategory = selectedCategoryIds.length > 0;
+  const hasStatus = Boolean(form.status);
+  const requiredItems = [
+    { key: 'image', label: isRtl ? 'الصورة' : 'Image', done: hasImage },
+    { key: 'title', label: isRtl ? 'العنوان' : 'Title', done: hasTitle },
+    { key: 'price', label: isRtl ? 'السعر' : 'Price', done: hasPrice },
+    { key: 'category', label: isRtl ? 'التصنيف' : 'Category', done: hasCategory },
+    { key: 'status', label: isRtl ? 'الحالة' : 'Status', done: hasStatus },
+  ];
+  const missingRequired = requiredItems.filter((item) => !item.done);
+  const readyForPreview = hasImage && hasTitle && hasPrice && hasCategory;
+  const completionItems = [
+    { label: isRtl ? 'أضف صورة' : 'Add image', done: hasImage },
+    { label: isRtl ? 'حدد السعر' : 'Set price', done: hasPrice },
+    { label: isRtl ? 'اختر التصنيف' : 'Choose category', done: hasCategory },
+    { label: isRtl ? 'راجع معاينة المتجر' : 'Review storefront preview', done: readyForPreview },
+    { label: isRtl ? 'انشر المنتج' : 'Publish', done: form.status === 'active' },
+  ];
+  const summaryStatusLabel =
+    form.status === 'active'
+      ? t.status.active
+      : form.status === 'sold_out'
+        ? t.status.sold_out
+        : t.status.draft;
+  const autosaveLabel =
+    autosaveState === 'saving'
+      ? isRtl
+        ? 'جارٍ الحفظ'
+        : 'Saving'
+      : autosaveState === 'unsaved'
+        ? isRtl
+          ? 'غير محفوظ'
+          : 'Unsaved'
+        : isRtl
+          ? 'تم الحفظ'
+          : 'Saved';
+
   return (
     <form
+      ref={formRef}
       onSubmit={onSubmit}
       noValidate
       className="rounded-[4px]"
@@ -591,659 +723,815 @@ export function ProductForm({
         </header>
       )}
 
-      <div className="flex flex-col gap-5">
-        <ImageField
-          label={t.labels.image}
-          helper={t.helpers.image}
-          value={form.imageUrl}
-          onChange={(v) => update('imageUrl', v)}
-          slug={storefrontSlug}
-        />
-
-        <Field
-          id={`${idBase}-title`}
-          label={t.labels.title}
-          value={form.title}
-          onChange={(v) => update('title', v)}
-          isRtl={isRtl}
-          placeholder={t.placeholders.title}
-          maxLength={160}
-          required
-        />
-
-        <Field
-          id={`${idBase}-subtitle`}
-          label={isRtl ? 'وصف قصير' : 'Short description'}
-          value={form.subtitle}
-          onChange={(v) => update('subtitle', v)}
-          isRtl={isRtl}
-          placeholder={isRtl ? 'جملة قصيرة تظهر تحت اسم المنتج' : 'A short line under the title'}
-          maxLength={240}
-        />
-
-        <TextArea
-          id={`${idBase}-desc`}
-          label={t.labels.description}
-          value={form.description}
-          onChange={(v) => update('description', v)}
-          isRtl={isRtl}
-          placeholder={t.placeholders.description}
-          maxLength={4000}
-        />
-
-        <CollapsibleField
-          label={isRtl ? 'واجهة المتجر و SEO' : 'Storefront & SEO'}
-          summary={
-            form.handle || form.seoTitle || form.tagsText
-              ? isRtl
-                ? 'تم ضبط بيانات الظهور'
-                : 'Visibility details set'
-              : isRtl
-                ? 'الرابط، البحث، الشارات'
-                : 'Handle, search, badges'
-          }
-          defaultOpen={Boolean(form.handle || form.seoTitle || form.tagsText)}
-          isRtl={isRtl}
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-start">
+        <div className="flex flex-col gap-5">
+          <FormSection
+            title={isRtl ? 'الأساسيات' : 'Basics'}
+            eyebrow={isRtl ? 'مطلوب' : 'Required'}
+            description={
+              isRtl
+                ? 'العنوان، التصنيف، والوصف المختصر الذي يراه العميل أولاً.'
+                : 'Title, category, and the short buyer-facing description.'
+            }
+            isRtl={isRtl}
+          >
             <Field
-              id={`${idBase}-handle`}
-              label={isRtl ? 'رابط المنتج' : 'Product URL handle'}
-              value={form.handle}
-              onChange={(v) => update('handle', v)}
-              isRtl={false}
-              placeholder="oud-amber-launch"
-              maxLength={120}
-              helper={
-                isRtl
-                  ? 'اتركه فارغاً ليتم إنشاؤه من اسم المنتج.'
-                  : 'Leave blank to generate from the product title.'
+              id={`${idBase}-title`}
+              label={t.labels.title}
+              value={form.title}
+              onChange={(v) => update('title', v)}
+              isRtl={isRtl}
+              placeholder={t.placeholders.title}
+              maxLength={160}
+              required
+            />
+
+            <Field
+              id={`${idBase}-subtitle`}
+              label={isRtl ? 'وصف قصير' : 'Short description'}
+              value={form.subtitle}
+              onChange={(v) => update('subtitle', v)}
+              isRtl={isRtl}
+              placeholder={
+                isRtl ? 'جملة قصيرة تظهر تحت اسم المنتج' : 'A short line under the title'
+              }
+              maxLength={240}
+            />
+
+            <TextArea
+              id={`${idBase}-desc`}
+              label={t.labels.description}
+              value={form.description}
+              onChange={(v) => update('description', v)}
+              isRtl={isRtl}
+              placeholder={t.placeholders.description}
+              maxLength={4000}
+              optional
+            />
+
+            <CategoryPicker
+              label={t.labels.category}
+              helper={t.helpers.category}
+              categories={categoryList}
+              value={selectedCategoryIds}
+              onChange={setSelectedCategoryIds}
+              storefrontSlug={storefrontSlug}
+              isRtl={isRtl}
+              required
+              onCategoryCreated={(cat) => {
+                setCategoryList((prev) => [...prev, cat]);
+                setSelectedCategoryIds((prev) =>
+                  prev.includes(cat.id) ? prev : [...prev, cat.id],
+                );
+              }}
+            />
+          </FormSection>
+
+          <FormSection
+            title={isRtl ? 'الوسائط' : 'Media'}
+            eyebrow={isRtl ? 'مطلوب' : 'Required'}
+            description={
+              isRtl
+                ? 'أضف صورة الغلاف التي ستظهر في المتجر والملخص.'
+                : 'Add the cover image shown in the storefront and summary.'
+            }
+            isRtl={isRtl}
+          >
+            <ImageField
+              label={t.labels.image}
+              helper={t.helpers.image}
+              value={form.imageUrl}
+              onChange={(v) => update('imageUrl', v)}
+              slug={storefrontSlug}
+              required
+            />
+          </FormSection>
+
+          <FormSection
+            title={isRtl ? 'واجهة المتجر و SEO' : 'Storefront & SEO'}
+            eyebrow={isRtl ? 'اختياري' : 'Optional'}
+            description={
+              isRtl
+                ? 'الرابط، الوسوم، الشارات، وبيانات البحث تتعبأ تلقائياً ويمكن تعديلها.'
+                : 'Handle, tags, badges, and search metadata auto-fill and can be tuned.'
+            }
+            isRtl={isRtl}
+          >
+            <CollapsibleField
+              label={isRtl ? 'واجهة المتجر و SEO' : 'Storefront & SEO'}
+              summary={
+                form.handle || form.seoTitle || form.tagsText
+                  ? isRtl
+                    ? 'تم ضبط بيانات الظهور'
+                    : 'Visibility details set'
+                  : isRtl
+                    ? 'الرابط، البحث، الشارات'
+                    : 'Handle, search, badges'
+              }
+              defaultOpen={Boolean(form.handle || form.seoTitle || form.tagsText)}
+              isRtl={isRtl}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <Field
+                  id={`${idBase}-handle`}
+                  label={isRtl ? 'رابط المنتج' : 'Product URL handle'}
+                  value={form.handle}
+                  onChange={(v) => updateManual('handle', v)}
+                  isRtl={false}
+                  placeholder="oud-amber-launch"
+                  maxLength={120}
+                  helper={
+                    isRtl
+                      ? 'اتركه فارغاً ليتم إنشاؤه من اسم المنتج.'
+                      : 'Leave blank to generate from the product title.'
+                  }
+                />
+                <Field
+                  id={`${idBase}-media-alt`}
+                  label={isRtl ? 'وصف الوسائط' : 'Media alt text'}
+                  value={form.mediaAltText}
+                  onChange={(v) => update('mediaAltText', v)}
+                  isRtl={isRtl}
+                  maxLength={180}
+                />
+                <Field
+                  id={`${idBase}-product-type`}
+                  label={isRtl ? 'نوع المنتج' : 'Product type'}
+                  value={form.productType}
+                  onChange={(v) => update('productType', v)}
+                  isRtl={isRtl}
+                  placeholder={isRtl ? 'عطر، باقة، خدمة' : 'Perfume, bundle, service'}
+                  maxLength={80}
+                />
+                <Field
+                  id={`${idBase}-vendor`}
+                  label={isRtl ? 'العلامة / المورد' : 'Brand / vendor'}
+                  value={form.vendor}
+                  onChange={(v) => update('vendor', v)}
+                  isRtl={isRtl}
+                  maxLength={120}
+                />
+                <Field
+                  id={`${idBase}-tags`}
+                  label={isRtl ? 'وسوم' : 'Tags'}
+                  value={form.tagsText}
+                  onChange={(v) => update('tagsText', v)}
+                  isRtl={isRtl}
+                  placeholder={isRtl ? 'رمضان، هدية، فاخر' : 'Ramadan, gift, premium'}
+                  helper={isRtl ? 'افصل بينها بفواصل.' : 'Separate with commas.'}
+                />
+                <Field
+                  id={`${idBase}-badges`}
+                  label={isRtl ? 'شارات المنتج' : 'Product badges'}
+                  value={form.badgesText}
+                  onChange={(v) => update('badgesText', v)}
+                  isRtl={isRtl}
+                  placeholder={isRtl ? 'جديد، الأكثر مبيعاً' : 'New, bestseller'}
+                  helper={isRtl ? 'افصل بينها بفواصل.' : 'Separate with commas.'}
+                />
+                <Field
+                  id={`${idBase}-template`}
+                  label={isRtl ? 'قالب المنتج' : 'Product template'}
+                  value={form.templateKey}
+                  onChange={(v) => update('templateKey', v)}
+                  isRtl={false}
+                  placeholder="premium-detail"
+                  maxLength={80}
+                />
+                <Field
+                  id={`${idBase}-published-at`}
+                  label={isRtl ? 'تاريخ النشر' : 'Publish date'}
+                  value={form.publishedAt}
+                  onChange={(v) => update('publishedAt', v)}
+                  isRtl={false}
+                  type="datetime-local"
+                />
+              </div>
+              <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <Field
+                  id={`${idBase}-seo-title`}
+                  label={isRtl ? 'عنوان SEO' : 'SEO title'}
+                  value={form.seoTitle}
+                  onChange={(v) => updateManual('seoTitle', v)}
+                  isRtl={isRtl}
+                  maxLength={160}
+                />
+                <TextArea
+                  id={`${idBase}-seo-description`}
+                  label={isRtl ? 'وصف SEO' : 'SEO description'}
+                  value={form.seoDescription}
+                  onChange={(v) => updateManual('seoDescription', v)}
+                  isRtl={isRtl}
+                  maxLength={220}
+                />
+              </div>
+            </CollapsibleField>
+          </FormSection>
+
+          <FormSection
+            title={isRtl ? 'التسعير' : 'Pricing'}
+            eyebrow={isRtl ? 'مطلوب' : 'Required'}
+            description={
+              isRtl
+                ? 'السعر يستخدم عملة المتجر الحالية.'
+                : 'Price uses the storefront currency by default.'
+            }
+            isRtl={isRtl}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <Field
+                id={`${idBase}-price`}
+                label={priceLabel}
+                value={form.priceQar}
+                onChange={(v) => update('priceQar', v)}
+                isRtl={false}
+                type="number"
+                placeholder={t.placeholders.price}
+                helper={t.helpers.priceOptional}
+                required
+              />
+              {canUseMonthlyPayments ? (
+                <PricingModeField
+                  idBase={`${idBase}-pricing`}
+                  mode={form.pricingMode}
+                  onModeChange={(v) => update('pricingMode', v)}
+                  monthlyPrice={form.monthlyPriceQar}
+                  onMonthlyPriceChange={(v) => update('monthlyPriceQar', v)}
+                  isRtl={isRtl}
+                />
+              ) : null}
+            </div>
+
+            <CollapsibleField
+              label={isRtl ? 'التسعير والحدود' : 'Pricing controls'}
+              summary={
+                form.compareAtPriceQar || form.costPerItemQar || form.maxOrderQuantity
+                  ? isRtl
+                    ? 'تم ضبط أسعار إضافية'
+                    : 'Extra pricing set'
+                  : isRtl
+                    ? 'السعر قبل الخصم، التكلفة، الكمية'
+                    : 'Compare-at, cost, quantity'
+              }
+              defaultOpen={Boolean(form.compareAtPriceQar || form.costPerItemQar)}
+              isRtl={isRtl}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <Field
+                  id={`${idBase}-compare-price`}
+                  label={isRtl ? 'السعر قبل الخصم' : 'Compare-at price'}
+                  value={form.compareAtPriceQar}
+                  onChange={(v) => update('compareAtPriceQar', v)}
+                  isRtl={false}
+                  type="number"
+                />
+                <Field
+                  id={`${idBase}-cost-price`}
+                  label={isRtl ? 'تكلفة المنتج' : 'Cost per item'}
+                  value={form.costPerItemQar}
+                  onChange={(v) => update('costPerItemQar', v)}
+                  isRtl={false}
+                  type="number"
+                />
+                <Field
+                  id={`${idBase}-sale-start`}
+                  label={isRtl ? 'بداية التخفيض' : 'Sale starts'}
+                  value={form.saleStartsAt}
+                  onChange={(v) => update('saleStartsAt', v)}
+                  isRtl={false}
+                  type="datetime-local"
+                />
+                <Field
+                  id={`${idBase}-sale-end`}
+                  label={isRtl ? 'نهاية التخفيض' : 'Sale ends'}
+                  value={form.saleEndsAt}
+                  onChange={(v) => update('saleEndsAt', v)}
+                  isRtl={false}
+                  type="datetime-local"
+                />
+                <Field
+                  id={`${idBase}-min-qty`}
+                  label={isRtl ? 'أقل كمية للطلب' : 'Minimum order quantity'}
+                  value={form.minOrderQuantity}
+                  onChange={(v) => update('minOrderQuantity', v)}
+                  isRtl={false}
+                  type="number"
+                />
+                <Field
+                  id={`${idBase}-max-qty`}
+                  label={isRtl ? 'أعلى كمية للطلب' : 'Maximum order quantity'}
+                  value={form.maxOrderQuantity}
+                  onChange={(v) => update('maxOrderQuantity', v)}
+                  isRtl={false}
+                  type="number"
+                />
+              </div>
+              <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <ToggleRow
+                  label={isRtl ? 'خاضع للضريبة' : 'Taxable product'}
+                  helper={isRtl ? 'يُحسب ضمن إعدادات الضرائب.' : 'Included in tax settings.'}
+                  checked={form.taxable}
+                  onChange={(v) => update('taxable', v)}
+                  isRtl={isRtl}
+                />
+                <ToggleRow
+                  label={isRtl ? 'مؤهل للخصومات' : 'Discount eligible'}
+                  helper={isRtl ? 'يسمح بتطبيق أكواد الخصم.' : 'Allow discount codes on this item.'}
+                  checked={form.discountEligible}
+                  onChange={(v) => update('discountEligible', v)}
+                  isRtl={isRtl}
+                />
+              </div>
+            </CollapsibleField>
+          </FormSection>
+
+          <FormSection
+            title={isRtl ? 'المخزون' : 'Inventory'}
+            eyebrow={isRtl ? 'اختياري' : 'Optional'}
+            description={
+              isRtl
+                ? 'تتبع الكمية، SKU، الشحن، والحقول المخصصة عند الحاجة.'
+                : 'Track stock, SKU, shipping, and extra product data when needed.'
+            }
+            isRtl={isRtl}
+          >
+            <CollapsibleField
+              label={isRtl ? 'المخزون' : 'Inventory'}
+              summary={
+                form.sku || form.trackInventory
+                  ? isRtl
+                    ? 'تم ضبط SKU أو تتبع المخزون'
+                    : 'SKU or tracking enabled'
+                  : isRtl
+                    ? 'SKU، الباركود، نفاد المخزون'
+                    : 'SKU, barcode, stock'
+              }
+              defaultOpen={Boolean(form.sku || form.trackInventory)}
+              isRtl={isRtl}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                <Field
+                  id={`${idBase}-stock`}
+                  label={isRtl ? 'الكمية' : 'Stock'}
+                  value={form.stock}
+                  onChange={(v) => update('stock', v)}
+                  isRtl={false}
+                  type="number"
+                />
+                <Field
+                  id={`${idBase}-sku`}
+                  label="SKU"
+                  value={form.sku}
+                  onChange={(v) => update('sku', v)}
+                  isRtl={false}
+                  maxLength={80}
+                />
+                <Field
+                  id={`${idBase}-barcode`}
+                  label={isRtl ? 'الباركود' : 'Barcode / GTIN'}
+                  value={form.barcode}
+                  onChange={(v) => update('barcode', v)}
+                  isRtl={false}
+                  maxLength={80}
+                />
+                <Field
+                  id={`${idBase}-low-stock`}
+                  label={isRtl ? 'حد المخزون المنخفض' : 'Low-stock threshold'}
+                  value={form.lowStockThreshold}
+                  onChange={(v) => update('lowStockThreshold', v)}
+                  isRtl={false}
+                  type="number"
+                />
+                <Field
+                  id={`${idBase}-restock`}
+                  label={isRtl ? 'تاريخ إعادة التوفر' : 'Restock date'}
+                  value={form.restockAt}
+                  onChange={(v) => update('restockAt', v)}
+                  isRtl={false}
+                  type="datetime-local"
+                />
+                <Field
+                  id={`${idBase}-stock-label`}
+                  label={isRtl ? 'وسم حالة المخزون' : 'Stock status label'}
+                  value={form.stockStatusLabel}
+                  onChange={(v) => update('stockStatusLabel', v)}
+                  isRtl={isRtl}
+                  maxLength={80}
+                />
+                <Field
+                  id={`${idBase}-supplier-cost`}
+                  label={isRtl ? 'تكلفة المورد' : 'Supplier cost'}
+                  value={form.supplierCostQar}
+                  onChange={(v) => update('supplierCostQar', v)}
+                  isRtl={false}
+                  type="number"
+                />
+                <Field
+                  id={`${idBase}-po-ref`}
+                  label={isRtl ? 'مرجع أمر الشراء' : 'Purchase order ref'}
+                  value={form.purchaseOrderRef}
+                  onChange={(v) => update('purchaseOrderRef', v)}
+                  isRtl={false}
+                  maxLength={80}
+                />
+              </div>
+              <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <ToggleRow
+                  label={isRtl ? 'تتبع الكمية' : 'Track quantity'}
+                  helper={
+                    isRtl
+                      ? 'يمنع البيع عند النفاد إذا لم تسمح بالاستمرار.'
+                      : 'Controls sold-out behavior.'
+                  }
+                  checked={form.trackInventory}
+                  onChange={(v) => update('trackInventory', v)}
+                  isRtl={isRtl}
+                />
+                <ToggleRow
+                  label={isRtl ? 'استمر بالبيع عند النفاد' : 'Continue selling when out of stock'}
+                  helper={isRtl ? 'مفيد للطلبات المسبقة.' : 'Useful for preorders.'}
+                  checked={form.continueSellingWhenOutOfStock}
+                  onChange={(v) => update('continueSellingWhenOutOfStock', v)}
+                  isRtl={isRtl}
+                />
+              </div>
+            </CollapsibleField>
+
+            <CollapsibleField
+              label={isRtl ? 'الشحن والبيانات' : 'Shipping & custom data'}
+              summary={
+                form.weightGrams || form.metafieldsText
+                  ? isRtl
+                    ? 'تم ضبط بيانات إضافية'
+                    : 'Extra product data set'
+                  : isRtl
+                    ? 'الوزن، الأبعاد، الحقول المخصصة'
+                    : 'Weight, dimensions, metafields'
+              }
+              defaultOpen={Boolean(form.weightGrams || form.metafieldsText)}
+              isRtl={isRtl}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <ToggleRow
+                  label={isRtl ? 'منتج فعلي' : 'Physical product'}
+                  helper={isRtl ? 'يحتاج شحناً أو توصيلاً.' : 'Requires delivery or pickup.'}
+                  checked={form.physicalProduct}
+                  onChange={(v) => update('physicalProduct', v)}
+                  isRtl={isRtl}
+                />
+                <ToggleRow
+                  label={isRtl ? 'يتطلب الشحن' : 'Requires shipping'}
+                  helper={isRtl ? 'يظهر ضمن حساب الشحن.' : 'Included in shipping calculations.'}
+                  checked={form.requiresShipping}
+                  onChange={(v) => update('requiresShipping', v)}
+                  isRtl={isRtl}
+                />
+                <ToggleRow
+                  label={isRtl ? 'مؤهل للشحن المجاني' : 'Free shipping eligible'}
+                  helper={isRtl ? 'يستخدم مع إعدادات الشحن.' : 'Works with shipping rules.'}
+                  checked={form.freeShippingEligible}
+                  onChange={(v) => update('freeShippingEligible', v)}
+                  isRtl={isRtl}
+                />
+                <ToggleRow
+                  label={isRtl ? 'منتج رقمي' : 'Digital product'}
+                  helper={isRtl ? 'للملفات أو التنزيلات.' : 'For downloads or files.'}
+                  checked={form.digitalDelivery}
+                  onChange={(v) => update('digitalDelivery', v)}
+                  isRtl={isRtl}
+                />
+              </div>
+              <div className="mt-5 grid grid-cols-1 sm:grid-cols-4 gap-5">
+                <Field
+                  id={`${idBase}-weight`}
+                  label={isRtl ? 'الوزن بالجرام' : 'Weight (g)'}
+                  value={form.weightGrams}
+                  onChange={(v) => update('weightGrams', v)}
+                  isRtl={false}
+                  type="number"
+                />
+                <Field
+                  id={`${idBase}-dim-l`}
+                  label={isRtl ? 'الطول سم' : 'Length cm'}
+                  value={form.packageLengthCm}
+                  onChange={(v) => update('packageLengthCm', v)}
+                  isRtl={false}
+                  type="number"
+                />
+                <Field
+                  id={`${idBase}-dim-w`}
+                  label={isRtl ? 'العرض سم' : 'Width cm'}
+                  value={form.packageWidthCm}
+                  onChange={(v) => update('packageWidthCm', v)}
+                  isRtl={false}
+                  type="number"
+                />
+                <Field
+                  id={`${idBase}-dim-h`}
+                  label={isRtl ? 'الارتفاع سم' : 'Height cm'}
+                  value={form.packageHeightCm}
+                  onChange={(v) => update('packageHeightCm', v)}
+                  isRtl={false}
+                  type="number"
+                />
+                <Field
+                  id={`${idBase}-origin`}
+                  label={isRtl ? 'بلد المنشأ' : 'Country of origin'}
+                  value={form.countryOfOrigin}
+                  onChange={(v) => update('countryOfOrigin', v)}
+                  isRtl={isRtl}
+                  maxLength={80}
+                />
+                <Field
+                  id={`${idBase}-hs-code`}
+                  label="HS code"
+                  value={form.hsCode}
+                  onChange={(v) => update('hsCode', v)}
+                  isRtl={false}
+                  maxLength={40}
+                />
+                <Field
+                  id={`${idBase}-customs`}
+                  label={isRtl ? 'وصف الجمارك' : 'Customs description'}
+                  value={form.customsDescription}
+                  onChange={(v) => update('customsDescription', v)}
+                  isRtl={isRtl}
+                  maxLength={160}
+                />
+              </div>
+              <div className="mt-5">
+                <TextArea
+                  id={`${idBase}-metafields`}
+                  label={isRtl ? 'حقول مخصصة' : 'Product metafields'}
+                  value={form.metafieldsText}
+                  onChange={(v) => update('metafieldsText', v)}
+                  isRtl={isRtl}
+                  placeholder={isRtl ? 'المكونات: عود، عنبر' : 'Ingredients: oud, amber'}
+                  maxLength={2000}
+                />
+              </div>
+            </CollapsibleField>
+          </FormSection>
+
+          <FormSection
+            title={isRtl ? 'المتغيرات' : 'Variants'}
+            eyebrow={isRtl ? 'اختياري' : 'Optional'}
+            description={
+              isRtl
+                ? 'فعّل الخيارات فقط إذا كان العميل يحتاج لاختيار مقاس أو لون أو خامة.'
+                : 'Turn options on only when buyers need to choose size, color, or material.'
+            }
+            isRtl={isRtl}
+          >
+            <ProductOptionsToggle
+              enabled={form.hasSizes || form.hasVariants || form.requiresHeightInput}
+              isRtl={isRtl}
+              onEnabledChange={(enabled) =>
+                setForm((prev) => ({
+                  ...prev,
+                  hasVariants: enabled,
+                  variantOptions:
+                    enabled && normalizePricedOptions(prev.variantOptions).length === 0
+                      ? draftOptionsFromLabels(DEFAULT_PRODUCT_VARIANT_OPTIONS)
+                      : prev.variantOptions,
+                  hasSizes: enabled ? prev.hasSizes : false,
+                  requiresHeightInput: enabled ? prev.requiresHeightInput : false,
+                  sizeOptions: enabled ? prev.sizeOptions : [],
+                  heightOptions: enabled ? prev.heightOptions : [],
+                }))
+              }
+              onPreset={(preset) =>
+                setForm((prev) => {
+                  if (preset === 'size') {
+                    return {
+                      ...prev,
+                      hasSizes: true,
+                      sizeOptions:
+                        normalizePricedOptions(prev.sizeOptions).length === 0
+                          ? draftOptionsFromLabels(['S', 'M', 'L', 'XL'])
+                          : prev.sizeOptions,
+                    };
+                  }
+                  if (preset === 'material') {
+                    return {
+                      ...prev,
+                      hasVariants: true,
+                      variantOptions: draftOptionsFromLabels(['Cotton', 'Silk', 'Leather']),
+                    };
+                  }
+                  return {
+                    ...prev,
+                    hasVariants: true,
+                    variantOptions:
+                      normalizePricedOptions(prev.variantOptions).length === 0
+                        ? draftOptionsFromLabels(DEFAULT_PRODUCT_VARIANT_OPTIONS)
+                        : prev.variantOptions,
+                  };
+                })
               }
             />
-            <Field
-              id={`${idBase}-media-alt`}
-              label={isRtl ? 'وصف الوسائط' : 'Media alt text'}
-              value={form.mediaAltText}
-              onChange={(v) => update('mediaAltText', v)}
-              isRtl={isRtl}
-              maxLength={180}
-            />
-            <Field
-              id={`${idBase}-product-type`}
-              label={isRtl ? 'نوع المنتج' : 'Product type'}
-              value={form.productType}
-              onChange={(v) => update('productType', v)}
-              isRtl={isRtl}
-              placeholder={isRtl ? 'عطر، باقة، خدمة' : 'Perfume, bundle, service'}
-              maxLength={80}
-            />
-            <Field
-              id={`${idBase}-vendor`}
-              label={isRtl ? 'العلامة / المورد' : 'Brand / vendor'}
-              value={form.vendor}
-              onChange={(v) => update('vendor', v)}
-              isRtl={isRtl}
-              maxLength={120}
-            />
-            <Field
-              id={`${idBase}-tags`}
-              label={isRtl ? 'وسوم' : 'Tags'}
-              value={form.tagsText}
-              onChange={(v) => update('tagsText', v)}
-              isRtl={isRtl}
-              placeholder={isRtl ? 'رمضان، هدية، فاخر' : 'Ramadan, gift, premium'}
-              helper={isRtl ? 'افصل بينها بفواصل.' : 'Separate with commas.'}
-            />
-            <Field
-              id={`${idBase}-badges`}
-              label={isRtl ? 'شارات المنتج' : 'Product badges'}
-              value={form.badgesText}
-              onChange={(v) => update('badgesText', v)}
-              isRtl={isRtl}
-              placeholder={isRtl ? 'جديد، الأكثر مبيعاً' : 'New, bestseller'}
-              helper={isRtl ? 'افصل بينها بفواصل.' : 'Separate with commas.'}
-            />
-            <Field
-              id={`${idBase}-template`}
-              label={isRtl ? 'قالب المنتج' : 'Product template'}
-              value={form.templateKey}
-              onChange={(v) => update('templateKey', v)}
-              isRtl={false}
-              placeholder="premium-detail"
-              maxLength={80}
-            />
-            <Field
-              id={`${idBase}-published-at`}
-              label={isRtl ? 'تاريخ النشر' : 'Publish date'}
-              value={form.publishedAt}
-              onChange={(v) => update('publishedAt', v)}
-              isRtl={false}
-              type="datetime-local"
-            />
-          </div>
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <Field
-              id={`${idBase}-seo-title`}
-              label={isRtl ? 'عنوان SEO' : 'SEO title'}
-              value={form.seoTitle}
-              onChange={(v) => update('seoTitle', v)}
-              isRtl={isRtl}
-              maxLength={160}
-            />
-            <TextArea
-              id={`${idBase}-seo-description`}
-              label={isRtl ? 'وصف SEO' : 'SEO description'}
-              value={form.seoDescription}
-              onChange={(v) => update('seoDescription', v)}
-              isRtl={isRtl}
-              maxLength={220}
-            />
-          </div>
-        </CollapsibleField>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <Field
-            id={`${idBase}-price`}
-            label={t.labels.price}
-            value={form.priceQar}
-            onChange={(v) => update('priceQar', v)}
-            isRtl={false}
-            type="number"
-            placeholder={t.placeholders.price}
-            helper={t.helpers.priceOptional}
-          />
-          {canUseMonthlyPayments ? (
-            <PricingModeField
-              idBase={`${idBase}-pricing`}
-              mode={form.pricingMode}
-              onModeChange={(v) => update('pricingMode', v)}
-              monthlyPrice={form.monthlyPriceQar}
-              onMonthlyPriceChange={(v) => update('monthlyPriceQar', v)}
+            <CustomizableField
+              idBase={`${idBase}-customizable`}
+              checked={form.isCustomizable}
+              label={form.customizationLabel}
+              defaultLabel={locale === 'ar' ? 'قابل للتخصيص' : 'Customizable'}
+              labels={{
+                checkbox: t.labels.customizable,
+                customLabel: t.labels.customizationLabel,
+              }}
+              helpers={{
+                checkbox: t.helpers.customizable,
+                customLabel: t.helpers.customizationLabel,
+              }}
+              onCheckedChange={(v) => update('isCustomizable', v)}
+              onLabelChange={(v) => update('customizationLabel', v)}
               isRtl={isRtl}
             />
-          ) : null}
-          <CategoryPicker
-            label={t.labels.category}
-            helper={t.helpers.category}
-            categories={categoryList}
-            value={selectedCategoryIds}
-            onChange={setSelectedCategoryIds}
-            storefrontSlug={storefrontSlug}
+
+            <div
+              style={{
+                display: 'grid',
+                gap: 4,
+                paddingTop: 4,
+                color: 'var(--ink-muted)',
+                direction: isRtl ? 'rtl' : 'ltr',
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {isRtl ? 'اختيارات مخصصة' : 'Custom selections'}
+              </span>
+              <span
+                style={{
+                  fontFamily: isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  color: 'var(--ink-faint)',
+                }}
+              >
+                {isRtl
+                  ? 'فعّل المقاسات أو المتغيرات فقط عندما يحتاج المنتج لاختيار من العميل.'
+                  : 'Turn on sizes or variants only when the product needs a buyer choice.'}
+              </span>
+            </div>
+
+            <SizeOptionsField
+              idBase={`${idBase}-sizes`}
+              enabled={form.hasSizes}
+              values={form.sizeOptions}
+              onEnabledChange={(enabled) =>
+                setForm((prev) => ({
+                  ...prev,
+                  hasSizes: enabled,
+                  sizeOptions:
+                    enabled && normalizePricedOptions(prev.sizeOptions).length === 0
+                      ? draftOptionsFromLabels(['S', 'M', 'L', 'XL'])
+                      : prev.sizeOptions,
+                  allowCustomSize: enabled ? prev.allowCustomSize : false,
+                }))
+              }
+              onValuesChange={(values) => update('sizeOptions', values)}
+              allowCustomSize={form.allowCustomSize}
+              onAllowCustomSizeChange={(enabled) => update('allowCustomSize', enabled)}
+              isRtl={isRtl}
+            />
+
+            <VariantOptionsField
+              idBase={`${idBase}-variants`}
+              enabled={form.hasVariants}
+              values={form.variantOptions}
+              onEnabledChange={(enabled) =>
+                setForm((prev) => ({
+                  ...prev,
+                  hasVariants: enabled,
+                  variantOptions:
+                    enabled && normalizePricedOptions(prev.variantOptions).length === 0
+                      ? draftOptionsFromLabels(DEFAULT_PRODUCT_VARIANT_OPTIONS)
+                      : prev.variantOptions,
+                }))
+              }
+              onValuesChange={(values) => update('variantOptions', values)}
+              isRtl={isRtl}
+            />
+
+            <HeightOptionsField
+              idBase={`${idBase}-height-input`}
+              enabled={form.requiresHeightInput}
+              label={form.heightInputLabel}
+              values={form.heightOptions}
+              defaultLabel={locale === 'ar' ? 'الطول' : 'Height'}
+              onEnabledChange={(enabled) =>
+                setForm((prev) => ({
+                  ...prev,
+                  requiresHeightInput: enabled,
+                  heightInputLabel:
+                    enabled && !prev.heightInputLabel.trim()
+                      ? locale === 'ar'
+                        ? 'الطول'
+                        : 'Height'
+                      : prev.heightInputLabel,
+                  heightOptions:
+                    enabled && normalizeHeightOptions(prev.heightOptions).length === 0
+                      ? DEFAULT_PRODUCT_HEIGHT_OPTIONS
+                      : prev.heightOptions,
+                }))
+              }
+              onLabelChange={(value) => update('heightInputLabel', value)}
+              onValuesChange={(values) => update('heightOptions', values)}
+              isRtl={isRtl}
+            />
+          </FormSection>
+
+          <FormSection
+            title={isRtl ? 'النشر' : 'Publish'}
+            eyebrow={isRtl ? 'مطلوب' : 'Required'}
+            description={
+              isRtl
+                ? 'المسودة تبقى مخفية. النشر يجعل المنتج متاحاً في المتجر.'
+                : 'Drafts stay hidden. Publishing makes the product visible in the store.'
+            }
             isRtl={isRtl}
-            onCategoryCreated={(cat) => {
-              setCategoryList((prev) => [...prev, cat]);
-              setSelectedCategoryIds((prev) => (prev.includes(cat.id) ? prev : [...prev, cat.id]));
-            }}
-          />
+          >
+            <CollapsibleField
+              label={t.labels.eventAt}
+              summary={
+                form.eventAt
+                  ? new Date(form.eventAt).toLocaleString(isRtl ? 'ar-QA' : undefined)
+                  : isRtl
+                    ? 'أضف تاريخاً'
+                    : 'Add a date'
+              }
+              defaultOpen={Boolean(form.eventAt)}
+              onClear={form.eventAt ? () => update('eventAt', '') : undefined}
+              clearLabel={isRtl ? 'مسح' : 'Clear'}
+              isRtl={isRtl}
+            >
+              <input
+                id={`${idBase}-when`}
+                type="datetime-local"
+                value={form.eventAt}
+                onChange={(e) => update('eventAt', e.target.value)}
+                placeholder={t.placeholders.eventAt}
+                style={{
+                  width: '100%',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: '1px solid var(--surface-rule-strong)',
+                  color: 'var(--ink-strong)',
+                  padding: '10px 0',
+                  marginTop: 6,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 16,
+                  outline: 'none',
+                }}
+              />
+              <p
+                className="m-0 mt-2"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  color: 'var(--ink-faint)',
+                  letterSpacing: '0.03em',
+                }}
+              >
+                {t.helpers.eventAt}
+              </p>
+            </CollapsibleField>
+
+            <StatusField
+              label={t.labels.status}
+              value={form.status}
+              onChange={(v) => update('status', v)}
+              options={[
+                { id: 'active', label: t.status.active },
+                { id: 'draft', label: t.status.draft },
+                { id: 'sold_out', label: t.status.sold_out },
+              ]}
+              isRtl={isRtl}
+              required
+            />
+          </FormSection>
         </div>
 
-        <CollapsibleField
-          label={isRtl ? 'التسعير والحدود' : 'Pricing controls'}
-          summary={
-            form.compareAtPriceQar || form.costPerItemQar || form.maxOrderQuantity
-              ? isRtl
-                ? 'تم ضبط أسعار إضافية'
-                : 'Extra pricing set'
-              : isRtl
-                ? 'السعر قبل الخصم، التكلفة، الكمية'
-                : 'Compare-at, cost, quantity'
-          }
-          defaultOpen={Boolean(form.compareAtPriceQar || form.costPerItemQar)}
-          isRtl={isRtl}
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <Field
-              id={`${idBase}-compare-price`}
-              label={isRtl ? 'السعر قبل الخصم' : 'Compare-at price'}
-              value={form.compareAtPriceQar}
-              onChange={(v) => update('compareAtPriceQar', v)}
-              isRtl={false}
-              type="number"
-            />
-            <Field
-              id={`${idBase}-cost-price`}
-              label={isRtl ? 'تكلفة المنتج' : 'Cost per item'}
-              value={form.costPerItemQar}
-              onChange={(v) => update('costPerItemQar', v)}
-              isRtl={false}
-              type="number"
-            />
-            <Field
-              id={`${idBase}-sale-start`}
-              label={isRtl ? 'بداية التخفيض' : 'Sale starts'}
-              value={form.saleStartsAt}
-              onChange={(v) => update('saleStartsAt', v)}
-              isRtl={false}
-              type="datetime-local"
-            />
-            <Field
-              id={`${idBase}-sale-end`}
-              label={isRtl ? 'نهاية التخفيض' : 'Sale ends'}
-              value={form.saleEndsAt}
-              onChange={(v) => update('saleEndsAt', v)}
-              isRtl={false}
-              type="datetime-local"
-            />
-            <Field
-              id={`${idBase}-min-qty`}
-              label={isRtl ? 'أقل كمية للطلب' : 'Minimum order quantity'}
-              value={form.minOrderQuantity}
-              onChange={(v) => update('minOrderQuantity', v)}
-              isRtl={false}
-              type="number"
-            />
-            <Field
-              id={`${idBase}-max-qty`}
-              label={isRtl ? 'أعلى كمية للطلب' : 'Maximum order quantity'}
-              value={form.maxOrderQuantity}
-              onChange={(v) => update('maxOrderQuantity', v)}
-              isRtl={false}
-              type="number"
-            />
-          </div>
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <ToggleRow
-              label={isRtl ? 'خاضع للضريبة' : 'Taxable product'}
-              helper={isRtl ? 'يُحسب ضمن إعدادات الضرائب.' : 'Included in tax settings.'}
-              checked={form.taxable}
-              onChange={(v) => update('taxable', v)}
-              isRtl={isRtl}
-            />
-            <ToggleRow
-              label={isRtl ? 'مؤهل للخصومات' : 'Discount eligible'}
-              helper={isRtl ? 'يسمح بتطبيق أكواد الخصم.' : 'Allow discount codes on this item.'}
-              checked={form.discountEligible}
-              onChange={(v) => update('discountEligible', v)}
-              isRtl={isRtl}
-            />
-          </div>
-        </CollapsibleField>
-
-        <CollapsibleField
-          label={isRtl ? 'المخزون' : 'Inventory'}
-          summary={
-            form.sku || form.trackInventory
-              ? isRtl
-                ? 'تم ضبط SKU أو تتبع المخزون'
-                : 'SKU or tracking enabled'
-              : isRtl
-                ? 'SKU، الباركود، نفاد المخزون'
-                : 'SKU, barcode, stock'
-          }
-          defaultOpen={Boolean(form.sku || form.trackInventory)}
-          isRtl={isRtl}
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <Field
-              id={`${idBase}-stock`}
-              label={isRtl ? 'الكمية' : 'Stock'}
-              value={form.stock}
-              onChange={(v) => update('stock', v)}
-              isRtl={false}
-              type="number"
-            />
-            <Field
-              id={`${idBase}-sku`}
-              label="SKU"
-              value={form.sku}
-              onChange={(v) => update('sku', v)}
-              isRtl={false}
-              maxLength={80}
-            />
-            <Field
-              id={`${idBase}-barcode`}
-              label={isRtl ? 'الباركود' : 'Barcode / GTIN'}
-              value={form.barcode}
-              onChange={(v) => update('barcode', v)}
-              isRtl={false}
-              maxLength={80}
-            />
-            <Field
-              id={`${idBase}-low-stock`}
-              label={isRtl ? 'حد المخزون المنخفض' : 'Low-stock threshold'}
-              value={form.lowStockThreshold}
-              onChange={(v) => update('lowStockThreshold', v)}
-              isRtl={false}
-              type="number"
-            />
-            <Field
-              id={`${idBase}-restock`}
-              label={isRtl ? 'تاريخ إعادة التوفر' : 'Restock date'}
-              value={form.restockAt}
-              onChange={(v) => update('restockAt', v)}
-              isRtl={false}
-              type="datetime-local"
-            />
-            <Field
-              id={`${idBase}-stock-label`}
-              label={isRtl ? 'وسم حالة المخزون' : 'Stock status label'}
-              value={form.stockStatusLabel}
-              onChange={(v) => update('stockStatusLabel', v)}
-              isRtl={isRtl}
-              maxLength={80}
-            />
-            <Field
-              id={`${idBase}-supplier-cost`}
-              label={isRtl ? 'تكلفة المورد' : 'Supplier cost'}
-              value={form.supplierCostQar}
-              onChange={(v) => update('supplierCostQar', v)}
-              isRtl={false}
-              type="number"
-            />
-            <Field
-              id={`${idBase}-po-ref`}
-              label={isRtl ? 'مرجع أمر الشراء' : 'Purchase order ref'}
-              value={form.purchaseOrderRef}
-              onChange={(v) => update('purchaseOrderRef', v)}
-              isRtl={false}
-              maxLength={80}
-            />
-          </div>
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <ToggleRow
-              label={isRtl ? 'تتبع الكمية' : 'Track quantity'}
-              helper={isRtl ? 'يمنع البيع عند النفاد إذا لم تسمح بالاستمرار.' : 'Controls sold-out behavior.'}
-              checked={form.trackInventory}
-              onChange={(v) => update('trackInventory', v)}
-              isRtl={isRtl}
-            />
-            <ToggleRow
-              label={isRtl ? 'استمر بالبيع عند النفاد' : 'Continue selling when out of stock'}
-              helper={isRtl ? 'مفيد للطلبات المسبقة.' : 'Useful for preorders.'}
-              checked={form.continueSellingWhenOutOfStock}
-              onChange={(v) => update('continueSellingWhenOutOfStock', v)}
-              isRtl={isRtl}
-            />
-          </div>
-        </CollapsibleField>
-
-        <CollapsibleField
-          label={isRtl ? 'الشحن والبيانات' : 'Shipping & custom data'}
-          summary={
-            form.weightGrams || form.metafieldsText
-              ? isRtl
-                ? 'تم ضبط بيانات إضافية'
-                : 'Extra product data set'
-              : isRtl
-                ? 'الوزن، الأبعاد، الحقول المخصصة'
-                : 'Weight, dimensions, metafields'
-          }
-          defaultOpen={Boolean(form.weightGrams || form.metafieldsText)}
-          isRtl={isRtl}
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <ToggleRow
-              label={isRtl ? 'منتج فعلي' : 'Physical product'}
-              helper={isRtl ? 'يحتاج شحناً أو توصيلاً.' : 'Requires delivery or pickup.'}
-              checked={form.physicalProduct}
-              onChange={(v) => update('physicalProduct', v)}
-              isRtl={isRtl}
-            />
-            <ToggleRow
-              label={isRtl ? 'يتطلب الشحن' : 'Requires shipping'}
-              helper={isRtl ? 'يظهر ضمن حساب الشحن.' : 'Included in shipping calculations.'}
-              checked={form.requiresShipping}
-              onChange={(v) => update('requiresShipping', v)}
-              isRtl={isRtl}
-            />
-            <ToggleRow
-              label={isRtl ? 'مؤهل للشحن المجاني' : 'Free shipping eligible'}
-              helper={isRtl ? 'يستخدم مع إعدادات الشحن.' : 'Works with shipping rules.'}
-              checked={form.freeShippingEligible}
-              onChange={(v) => update('freeShippingEligible', v)}
-              isRtl={isRtl}
-            />
-            <ToggleRow
-              label={isRtl ? 'منتج رقمي' : 'Digital product'}
-              helper={isRtl ? 'للملفات أو التنزيلات.' : 'For downloads or files.'}
-              checked={form.digitalDelivery}
-              onChange={(v) => update('digitalDelivery', v)}
-              isRtl={isRtl}
-            />
-          </div>
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-4 gap-5">
-            <Field
-              id={`${idBase}-weight`}
-              label={isRtl ? 'الوزن بالجرام' : 'Weight (g)'}
-              value={form.weightGrams}
-              onChange={(v) => update('weightGrams', v)}
-              isRtl={false}
-              type="number"
-            />
-            <Field
-              id={`${idBase}-dim-l`}
-              label={isRtl ? 'الطول سم' : 'Length cm'}
-              value={form.packageLengthCm}
-              onChange={(v) => update('packageLengthCm', v)}
-              isRtl={false}
-              type="number"
-            />
-            <Field
-              id={`${idBase}-dim-w`}
-              label={isRtl ? 'العرض سم' : 'Width cm'}
-              value={form.packageWidthCm}
-              onChange={(v) => update('packageWidthCm', v)}
-              isRtl={false}
-              type="number"
-            />
-            <Field
-              id={`${idBase}-dim-h`}
-              label={isRtl ? 'الارتفاع سم' : 'Height cm'}
-              value={form.packageHeightCm}
-              onChange={(v) => update('packageHeightCm', v)}
-              isRtl={false}
-              type="number"
-            />
-            <Field
-              id={`${idBase}-origin`}
-              label={isRtl ? 'بلد المنشأ' : 'Country of origin'}
-              value={form.countryOfOrigin}
-              onChange={(v) => update('countryOfOrigin', v)}
-              isRtl={isRtl}
-              maxLength={80}
-            />
-            <Field
-              id={`${idBase}-hs-code`}
-              label="HS code"
-              value={form.hsCode}
-              onChange={(v) => update('hsCode', v)}
-              isRtl={false}
-              maxLength={40}
-            />
-            <Field
-              id={`${idBase}-customs`}
-              label={isRtl ? 'وصف الجمارك' : 'Customs description'}
-              value={form.customsDescription}
-              onChange={(v) => update('customsDescription', v)}
-              isRtl={isRtl}
-              maxLength={160}
-            />
-          </div>
-          <div className="mt-5">
-            <TextArea
-              id={`${idBase}-metafields`}
-              label={isRtl ? 'حقول مخصصة' : 'Product metafields'}
-              value={form.metafieldsText}
-              onChange={(v) => update('metafieldsText', v)}
-              isRtl={isRtl}
-              placeholder={isRtl ? 'المكونات: عود، عنبر' : 'Ingredients: oud, amber'}
-              maxLength={2000}
-            />
-          </div>
-        </CollapsibleField>
-
-        <CollapsibleField
-          label={t.labels.eventAt}
-          summary={
-            form.eventAt
-              ? new Date(form.eventAt).toLocaleString(isRtl ? 'ar-QA' : undefined)
-              : isRtl
-                ? 'أضف تاريخاً'
-                : 'Add a date'
-          }
-          defaultOpen={Boolean(form.eventAt)}
-          onClear={form.eventAt ? () => update('eventAt', '') : undefined}
-          clearLabel={isRtl ? 'مسح' : 'Clear'}
-          isRtl={isRtl}
-        >
-          <input
-            id={`${idBase}-when`}
-            type="datetime-local"
-            value={form.eventAt}
-            onChange={(e) => update('eventAt', e.target.value)}
-            placeholder={t.placeholders.eventAt}
-            style={{
-              width: '100%',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: '1px solid var(--surface-rule-strong)',
-              color: 'var(--ink-strong)',
-              padding: '10px 0',
-              marginTop: 6,
-              fontFamily: 'var(--font-sans)',
-              fontSize: 16,
-              outline: 'none',
-            }}
-          />
-          <p
-            className="m-0 mt-2"
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              color: 'var(--ink-faint)',
-              letterSpacing: '0.03em',
-            }}
-          >
-            {t.helpers.eventAt}
-          </p>
-        </CollapsibleField>
-
-        <CustomizableField
-          idBase={`${idBase}-customizable`}
-          checked={form.isCustomizable}
-          label={form.customizationLabel}
-          defaultLabel={locale === 'ar' ? 'قابل للتخصيص' : 'Customizable'}
-          labels={{
-            checkbox: t.labels.customizable,
-            customLabel: t.labels.customizationLabel,
-          }}
-          helpers={{
-            checkbox: t.helpers.customizable,
-            customLabel: t.helpers.customizationLabel,
-          }}
-          onCheckedChange={(v) => update('isCustomizable', v)}
-          onLabelChange={(v) => update('customizationLabel', v)}
-          isRtl={isRtl}
-        />
-
-        <div
-          style={{
-            display: 'grid',
-            gap: 4,
-            paddingTop: 4,
-            color: 'var(--ink-muted)',
-            direction: isRtl ? 'rtl' : 'ltr',
-          }}
-        >
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-            }}
-          >
-            {isRtl ? 'اختيارات مخصصة' : 'Custom selections'}
-          </span>
-          <span
-            style={{
-              fontFamily: isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)',
-              fontSize: 13,
-              lineHeight: 1.5,
-              color: 'var(--ink-faint)',
-            }}
-          >
-            {isRtl
-              ? 'فعّل المقاسات أو المتغيرات فقط عندما يحتاج المنتج لاختيار من العميل.'
-              : 'Turn on sizes or variants only when the product needs a buyer choice.'}
-          </span>
-        </div>
-
-        <SizeOptionsField
-          idBase={`${idBase}-sizes`}
-          enabled={form.hasSizes}
-          values={form.sizeOptions}
-          onEnabledChange={(enabled) =>
-            setForm((prev) => ({
-              ...prev,
-              hasSizes: enabled,
-              sizeOptions:
-                enabled && normalizePricedOptions(prev.sizeOptions).length === 0
-                  ? draftOptionsFromLabels(['S', 'M', 'L', 'XL'])
-                  : prev.sizeOptions,
-              allowCustomSize: enabled ? prev.allowCustomSize : false,
-            }))
-          }
-          onValuesChange={(values) => update('sizeOptions', values)}
-          allowCustomSize={form.allowCustomSize}
-          onAllowCustomSizeChange={(enabled) => update('allowCustomSize', enabled)}
-          isRtl={isRtl}
-        />
-
-        <VariantOptionsField
-          idBase={`${idBase}-variants`}
-          enabled={form.hasVariants}
-          values={form.variantOptions}
-          onEnabledChange={(enabled) =>
-            setForm((prev) => ({
-              ...prev,
-              hasVariants: enabled,
-              variantOptions:
-                enabled && normalizePricedOptions(prev.variantOptions).length === 0
-                  ? draftOptionsFromLabels(DEFAULT_PRODUCT_VARIANT_OPTIONS)
-                  : prev.variantOptions,
-            }))
-          }
-          onValuesChange={(values) => update('variantOptions', values)}
-          isRtl={isRtl}
-        />
-
-        <HeightOptionsField
-          idBase={`${idBase}-height-input`}
-          enabled={form.requiresHeightInput}
-          label={form.heightInputLabel}
-          values={form.heightOptions}
-          defaultLabel={locale === 'ar' ? 'الطول' : 'Height'}
-          onEnabledChange={(enabled) =>
-            setForm((prev) => ({
-              ...prev,
-              requiresHeightInput: enabled,
-              heightInputLabel:
-                enabled && !prev.heightInputLabel.trim()
-                  ? locale === 'ar'
-                    ? 'الطول'
-                    : 'Height'
-                  : prev.heightInputLabel,
-              heightOptions:
-                enabled && normalizeHeightOptions(prev.heightOptions).length === 0
-                  ? DEFAULT_PRODUCT_HEIGHT_OPTIONS
-                  : prev.heightOptions,
-            }))
-          }
-          onLabelChange={(value) => update('heightInputLabel', value)}
-          onValuesChange={(values) => update('heightOptions', values)}
-          isRtl={isRtl}
-        />
-
-        <StatusField
-          label={t.labels.status}
-          value={form.status}
-          onChange={(v) => update('status', v)}
-          options={[
-            { id: 'active', label: t.status.active },
-            { id: 'draft', label: t.status.draft },
-            { id: 'sold_out', label: t.status.sold_out },
-          ]}
+        <ProductSummaryPanel
+          imageUrl={form.imageUrl}
+          title={form.title}
+          price={formatMoneyPreview(currencyCode, form.priceQar)}
+          status={summaryStatusLabel}
+          missingRequired={missingRequired.map((item) => item.label)}
+          completionItems={completionItems}
+          autosaveLabel={autosaveLabel}
+          saving={saving}
+          canPublish={missingRequired.length === 0}
+          onSaveDraft={() => submitWithStatus('draft')}
+          onPublish={() => submitWithStatus('active')}
           isRtl={isRtl}
         />
       </div>
@@ -1342,11 +1630,415 @@ function withSaveTimeout<T>(promise: Promise<T>): Promise<T> {
   });
 }
 
-function FormLabel({ htmlFor, children }: { htmlFor?: string; children: React.ReactNode }) {
+function FormSection({
+  title,
+  eyebrow,
+  description,
+  isRtl,
+  children,
+}: {
+  title: string;
+  eyebrow: string;
+  description: string;
+  isRtl: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      dir={isRtl ? 'rtl' : 'ltr'}
+      style={{
+        borderTop: '1px solid var(--surface-rule)',
+        paddingTop: 18,
+        display: 'grid',
+        gap: 16,
+      }}
+    >
+      <header style={{ display: 'grid', gap: 5 }}>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            color: 'var(--admin-accent)',
+          }}
+        >
+          {eyebrow}
+        </span>
+        <h3
+          style={{
+            margin: 0,
+            color: 'var(--ink-strong)',
+            fontFamily: isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)',
+            fontSize: 18,
+            fontWeight: 650,
+            letterSpacing: 0,
+          }}
+        >
+          {title}
+        </h3>
+        <p
+          style={{
+            margin: 0,
+            color: 'var(--ink-faint)',
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          {description}
+        </p>
+      </header>
+      <div style={{ display: 'grid', gap: 16 }}>{children}</div>
+    </section>
+  );
+}
+
+function ProductSummaryPanel({
+  imageUrl,
+  title,
+  price,
+  status,
+  missingRequired,
+  completionItems,
+  autosaveLabel,
+  saving,
+  canPublish,
+  onSaveDraft,
+  onPublish,
+  isRtl,
+}: {
+  imageUrl: string;
+  title: string;
+  price: string;
+  status: string;
+  missingRequired: string[];
+  completionItems: { label: string; done: boolean }[];
+  autosaveLabel: string;
+  saving: boolean;
+  canPublish: boolean;
+  onSaveDraft: () => void;
+  onPublish: () => void;
+  isRtl: boolean;
+}) {
+  const mediaKind = imageUrl ? mediaKindFromUrl(imageUrl) : null;
+  return (
+    <aside
+      dir={isRtl ? 'rtl' : 'ltr'}
+      className="xl:sticky xl:top-4"
+      style={{
+        border: '1px solid var(--surface-rule)',
+        borderRadius: 8,
+        background: 'var(--surface-bg)',
+        padding: 16,
+        display: 'grid',
+        gap: 16,
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          style={{
+            width: 68,
+            height: 68,
+            borderRadius: 6,
+            overflow: 'hidden',
+            border: '1px solid var(--surface-rule-strong)',
+            background: 'var(--surface-sunken)',
+            display: 'grid',
+            placeItems: 'center',
+            color: 'var(--ink-faint)',
+            flex: '0 0 auto',
+          }}
+        >
+          {imageUrl && mediaKind === 'video' ? (
+            <video
+              src={imageUrl}
+              muted
+              playsInline
+              preload="metadata"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : imageUrl ? (
+            <img
+              src={imageUrl}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : (
+            <span style={{ fontFamily: 'var(--font-serif), serif', fontStyle: 'italic' }}>◯</span>
+          )}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <p
+            style={{
+              margin: 0,
+              color: 'var(--ink-strong)',
+              fontWeight: 700,
+              fontSize: 15,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {title.trim() || (isRtl ? 'منتج بلا اسم' : 'Untitled product')}
+          </p>
+          <p
+            style={{
+              margin: '4px 0 0',
+              color: 'var(--ink-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+            }}
+          >
+            {price}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            color: 'var(--ink-faint)',
+            textTransform: 'uppercase',
+          }}
+        >
+          {isRtl ? 'الحالة' : 'Status'}
+        </span>
+        <span
+          style={{
+            border: '1px solid color-mix(in srgb, var(--admin-accent) 55%, transparent)',
+            borderRadius: 999,
+            color: 'var(--admin-accent)',
+            padding: '4px 9px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {status}
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gap: 8 }}>
+        <p
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: missingRequired.length ? '#f1b1a1' : 'var(--admin-accent)',
+          }}
+        >
+          {missingRequired.length
+            ? isRtl
+              ? 'حقول مطلوبة ناقصة'
+              : 'Missing required fields'
+            : isRtl
+              ? 'جاهز للنشر'
+              : 'Ready to publish'}
+        </p>
+        {missingRequired.length ? (
+          <div className="flex flex-wrap gap-2">
+            {missingRequired.map((item) => (
+              <span
+                key={item}
+                style={{
+                  border: '1px solid color-mix(in srgb, #f1b1a1 45%, transparent)',
+                  borderRadius: 999,
+                  color: '#f1b1a1',
+                  padding: '3px 8px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                }}
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div style={{ display: 'grid', gap: 8 }}>
+        {completionItems.map((item) => (
+          <div
+            key={item.label}
+            className="flex items-center gap-2"
+            style={{
+              color: item.done ? 'var(--ink-strong)' : 'var(--ink-faint)',
+              fontSize: 12,
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: '50%',
+                border: `1px solid ${item.done ? 'var(--admin-accent)' : 'var(--surface-rule-strong)'}`,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: item.done ? 'var(--admin-accent)' : 'transparent',
+                flex: '0 0 auto',
+                fontSize: 10,
+              }}
+            >
+              ✓
+            </span>
+            <span>{item.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{
+          borderTop: '1px dashed var(--surface-rule)',
+          paddingTop: 14,
+          display: 'grid',
+          gap: 10,
+        }}
+      >
+        <span
+          style={{
+            color:
+              autosaveLabel === 'Unsaved' || autosaveLabel === 'غير محفوظ'
+                ? '#f1b1a1'
+                : 'var(--ink-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {autosaveLabel}
+        </span>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={onSaveDraft}
+          style={summaryButtonStyle(false, saving)}
+        >
+          {saving ? (isRtl ? 'جارٍ الحفظ…' : 'Saving…') : isRtl ? 'حفظ مسودة' : 'Save draft'}
+        </button>
+        <button
+          type="button"
+          disabled={saving || !canPublish}
+          onClick={onPublish}
+          style={summaryButtonStyle(true, saving || !canPublish)}
+        >
+          {isRtl ? 'نشر' : 'Publish'}
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function summaryButtonStyle(primary: boolean, disabled: boolean): React.CSSProperties {
+  return {
+    minHeight: 42,
+    borderRadius: 999,
+    border: primary ? '1px solid rgba(255,255,255,0.18)' : '1px solid var(--surface-rule-strong)',
+    background: primary
+      ? disabled
+        ? 'rgba(216,180,106,0.38)'
+        : 'var(--admin-accent)'
+      : 'transparent',
+    color: primary ? 'var(--ink-on-gold)' : 'var(--ink-strong)',
+    cursor: disabled ? 'default' : 'pointer',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 11,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+  };
+}
+
+function ProductOptionsToggle({
+  enabled,
+  onEnabledChange,
+  onPreset,
+  isRtl,
+}: {
+  enabled: boolean;
+  onEnabledChange: (v: boolean) => void;
+  onPreset: (preset: 'size' | 'color' | 'material') => void;
+  isRtl: boolean;
+}) {
+  const presets = isRtl
+    ? [
+        { id: 'size' as const, label: 'المقاس' },
+        { id: 'color' as const, label: 'اللون' },
+        { id: 'material' as const, label: 'الخامة' },
+      ]
+    : [
+        { id: 'size' as const, label: 'Size' },
+        { id: 'color' as const, label: 'Color' },
+        { id: 'material' as const, label: 'Material' },
+      ];
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      <ToggleRow
+        label={isRtl ? 'هذا المنتج له خيارات' : 'This product has options'}
+        helper={
+          isRtl
+            ? 'يفتح صفوف المتغيرات تلقائياً ويمكن تعديلها بعد ذلك.'
+            : 'Starts simple variant rows that you can tune after.'
+        }
+        checked={enabled}
+        onChange={onEnabledChange}
+        isRtl={isRtl}
+      />
+      {enabled ? (
+        <div className="flex flex-wrap gap-2">
+          {presets.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => onPreset(preset.id)}
+              style={{
+                border: '1px solid var(--surface-rule-strong)',
+                borderRadius: 999,
+                background: 'var(--surface-bg)',
+                color: 'var(--ink-strong)',
+                minHeight: 34,
+                padding: '0 12px',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+              }}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function FormLabel({
+  htmlFor,
+  children,
+  required,
+  optional,
+}: {
+  htmlFor?: string;
+  children: React.ReactNode;
+  required?: boolean;
+  optional?: boolean;
+}) {
   return (
     <label
       htmlFor={htmlFor}
       style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
         fontFamily: 'var(--font-mono)',
         fontSize: 11,
         color: 'var(--ink-muted)',
@@ -1354,7 +2046,21 @@ function FormLabel({ htmlFor, children }: { htmlFor?: string; children: React.Re
         textTransform: 'uppercase',
       }}
     >
-      {children}
+      <span>{children}</span>
+      {required || optional ? (
+        <span
+          style={{
+            border: '1px solid var(--surface-rule-strong)',
+            borderRadius: 999,
+            padding: '1px 6px',
+            color: required ? 'var(--admin-accent)' : 'var(--ink-faint)',
+            fontSize: 9,
+            letterSpacing: '0.04em',
+          }}
+        >
+          {required ? 'Required' : 'Optional'}
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -1451,7 +2157,9 @@ function Field({
   const [focused, setFocused] = useState(false);
   return (
     <div>
-      <FormLabel htmlFor={id}>{label}</FormLabel>
+      <FormLabel htmlFor={id} required={required}>
+        {label}
+      </FormLabel>
       <input
         id={id}
         type={type}
@@ -1505,6 +2213,8 @@ function TextArea({
   isRtl,
   placeholder,
   maxLength,
+  required,
+  optional,
 }: {
   id: string;
   label: string;
@@ -1513,11 +2223,15 @@ function TextArea({
   isRtl: boolean;
   placeholder?: string;
   maxLength?: number;
+  required?: boolean;
+  optional?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   return (
     <div>
-      <FormLabel htmlFor={id}>{label}</FormLabel>
+      <FormLabel htmlFor={id} required={required} optional={optional}>
+        {label}
+      </FormLabel>
       <textarea
         id={id}
         value={value}
@@ -2483,6 +3197,7 @@ function CategoryPicker({
   onChange,
   storefrontSlug,
   isRtl,
+  required,
   onCategoryCreated,
 }: {
   label: string;
@@ -2492,6 +3207,7 @@ function CategoryPicker({
   onChange: (ids: string[]) => void;
   storefrontSlug: string;
   isRtl: boolean;
+  required?: boolean;
   onCategoryCreated: (cat: Category) => void;
 }) {
   const [query, setQuery] = useState('');
@@ -2561,7 +3277,7 @@ function CategoryPicker({
 
   return (
     <div>
-      <FormLabel>{label}</FormLabel>
+      <FormLabel required={required}>{label}</FormLabel>
       <div
         dir={isRtl ? 'rtl' : 'ltr'}
         style={{
@@ -2856,16 +3572,18 @@ function StatusField({
   onChange,
   options,
   isRtl,
+  required,
 }: {
   label: string;
   value: ProductStatus;
   onChange: (v: ProductStatus) => void;
   options: { id: ProductStatus; label: string }[];
   isRtl: boolean;
+  required?: boolean;
 }) {
   return (
     <div>
-      <FormLabel>{label}</FormLabel>
+      <FormLabel required={required}>{label}</FormLabel>
       <div className="flex gap-2 mt-2 flex-wrap">
         {options.map((opt) => {
           const active = value === opt.id;
@@ -2905,16 +3623,19 @@ function ImageField({
   value,
   onChange,
   slug,
+  required,
 }: {
   label: string;
   helper: string;
   value: string;
   onChange: (v: string) => void;
   slug: string;
+  required?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewFit, setPreviewFit] = useState<'cover' | 'contain'>('cover');
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -2944,16 +3665,18 @@ function ImageField({
     }
   }
 
+  const mediaKind = value ? mediaKindFromUrl(value) : null;
+
   return (
     <div>
-      <FormLabel>{label}</FormLabel>
+      <FormLabel required={required}>{label}</FormLabel>
       <div
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
           handleFile(e.dataTransfer.files?.[0]);
         }}
-        className="mt-2 flex items-center gap-4"
+        className="mt-2 grid gap-4"
         style={{
           border: '1px dashed var(--surface-rule-strong)',
           borderRadius: 4,
@@ -2961,132 +3684,188 @@ function ImageField({
           background: 'transparent',
         }}
       >
-        {value && mediaKindFromUrl(value) === 'video' ? (
-          <video
-            src={value}
-            width={64}
-            height={64}
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 4,
-              objectFit: 'contain',
-              border: '1px solid color-mix(in srgb, var(--admin-accent) 35%, transparent)',
-              background: 'var(--surface-sunken)',
-            }}
-            onMouseEnter={(event) => {
-              void event.currentTarget.play().catch(() => undefined);
-            }}
-            onMouseLeave={(event) => {
-              event.currentTarget.pause();
-            }}
-          />
-        ) : value ? (
-          <img
-            src={value}
-            alt=""
-            width={64}
-            height={64}
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 4,
-              objectFit: 'cover',
-              border: '1px solid color-mix(in srgb, var(--admin-accent) 35%, transparent)',
-              background: 'var(--surface-sunken)',
-            }}
-          />
-        ) : (
-          <div
-            aria-hidden
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 4,
-              border: '1px dashed var(--surface-rule-strong)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--ink-faint)',
-              fontFamily: 'var(--font-serif), serif',
-              fontStyle: 'italic',
-              fontSize: 22,
-            }}
-          >
-            ◯
-          </div>
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={uploading}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--admin-accent)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              letterSpacing: '0.04em',
-              cursor: uploading ? 'default' : 'pointer',
-              padding: 0,
-            }}
-          >
-            {uploading ? '…' : value ? 'Replace' : 'Drop or click to upload'}
-          </button>
-          {value ? (
-            <>
-              {' · '}
-              <button
-                type="button"
-                onClick={() => onChange('')}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--ink-muted)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 12,
-                  letterSpacing: '0.04em',
-                  cursor: 'pointer',
-                  padding: 0,
-                }}
-              >
-                Remove
-              </button>
-            </>
-          ) : null}
-          <p
-            className="m-0 mt-1"
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              color: 'var(--ink-faint)',
-              letterSpacing: '0.03em',
-            }}
-          >
-            {helper}
-            {' · '}
-            {STOREFRONT_MEDIA_FORMATS_LABEL}
-          </p>
-          {error ? (
+        <div className="flex items-center gap-4">
+          {value && mediaKind === 'video' ? (
+            <video
+              src={value}
+              width={96}
+              height={96}
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              style={{
+                width: 96,
+                height: 96,
+                borderRadius: 4,
+                objectFit: 'contain',
+                border: '1px solid color-mix(in srgb, var(--admin-accent) 35%, transparent)',
+                background: 'var(--surface-sunken)',
+              }}
+              onMouseEnter={(event) => {
+                void event.currentTarget.play().catch(() => undefined);
+              }}
+              onMouseLeave={(event) => {
+                event.currentTarget.pause();
+              }}
+            />
+          ) : value ? (
+            <img
+              src={value}
+              alt=""
+              width={96}
+              height={96}
+              style={{
+                width: 96,
+                height: 96,
+                borderRadius: 4,
+                objectFit: previewFit,
+                border: '1px solid color-mix(in srgb, var(--admin-accent) 35%, transparent)',
+                background: 'var(--surface-sunken)',
+              }}
+            />
+          ) : (
+            <div
+              aria-hidden
+              style={{
+                width: 96,
+                height: 96,
+                borderRadius: 4,
+                border: '1px dashed var(--surface-rule-strong)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--ink-faint)',
+                fontFamily: 'var(--font-serif), serif',
+                fontStyle: 'italic',
+                fontSize: 22,
+              }}
+            >
+              ◯
+            </div>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              disabled={uploading}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--admin-accent)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                letterSpacing: '0.04em',
+                cursor: uploading ? 'default' : 'pointer',
+                padding: 0,
+              }}
+            >
+              {uploading ? '…' : value ? 'Replace' : 'Drop or click to upload'}
+            </button>
+            {value ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <MediaControlButton onClick={() => inputRef.current?.click()}>
+                  Replace
+                </MediaControlButton>
+                <MediaControlButton
+                  onClick={() => setPreviewFit((fit) => (fit === 'cover' ? 'contain' : 'cover'))}
+                >
+                  Crop
+                </MediaControlButton>
+                <MediaControlButton active>Set as cover</MediaControlButton>
+                <MediaControlButton muted onClick={() => onChange('')}>
+                  Remove
+                </MediaControlButton>
+              </div>
+            ) : null}
             <p
-              role="alert"
               className="m-0 mt-1"
               style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
-                color: '#f1b1a1',
+                color: 'var(--ink-faint)',
                 letterSpacing: '0.03em',
               }}
             >
-              {error}
+              {helper}
+              {' · '}
+              {STOREFRONT_MEDIA_FORMATS_LABEL}
             </p>
-          ) : null}
+            {error ? (
+              <p
+                role="alert"
+                className="m-0 mt-1"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  color: '#f1b1a1',
+                  letterSpacing: '0.03em',
+                }}
+              >
+                {error}
+              </p>
+            ) : null}
+          </div>
         </div>
+        {value ? (
+          <div
+            style={{
+              display: 'grid',
+              gap: 8,
+              borderTop: '1px dashed var(--surface-rule)',
+              paddingTop: 12,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--ink-faint)',
+              }}
+            >
+              Media order
+            </span>
+            <div className="flex items-center gap-2">
+              <div
+                style={{
+                  width: 54,
+                  height: 54,
+                  borderRadius: 4,
+                  overflow: 'hidden',
+                  border: '1px solid var(--admin-accent)',
+                  background: 'var(--surface-sunken)',
+                }}
+              >
+                {mediaKind === 'video' ? (
+                  <video
+                    src={value}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <img
+                    src={value}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                )}
+              </div>
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  color: 'var(--ink-muted)',
+                }}
+              >
+                Cover 1
+              </span>
+            </div>
+          </div>
+        ) : null}
         <input
           ref={inputRef}
           type="file"
@@ -3096,6 +3875,42 @@ function ImageField({
         />
       </div>
     </div>
+  );
+}
+
+function MediaControlButton({
+  children,
+  onClick,
+  active = false,
+  muted = false,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  active?: boolean;
+  muted?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        border: `1px solid ${active ? 'var(--admin-accent)' : 'var(--surface-rule-strong)'}`,
+        borderRadius: 999,
+        background: active
+          ? 'color-mix(in srgb, var(--admin-accent) 12%, transparent)'
+          : 'transparent',
+        color: muted ? 'var(--ink-muted)' : active ? 'var(--admin-accent)' : 'var(--ink-strong)',
+        minHeight: 30,
+        padding: '0 10px',
+        cursor: onClick ? 'pointer' : 'default',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+      }}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { ProductForm } from '@/components/dashboard/ProductForm';
 import type { Copy } from '@/content/copy';
@@ -20,6 +21,7 @@ type Props = {
   categories: Category[];
   initialCategoryIds: string[];
   currentPlan: Plan;
+  currency?: string;
   closeHref: string;
 };
 
@@ -34,8 +36,15 @@ export function ProductModal({
   categories,
   initialCategoryIds,
   currentPlan,
+  currency = 'QAR',
   closeHref,
 }: Props) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
@@ -53,7 +62,7 @@ export function ProductModal({
     };
   }, [closeHref, open]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
   const isRtl = locale === 'ar' || /[\u0600-\u06ff]/.test(copy.products.form.submit.create);
   const labels = isRtl
@@ -74,19 +83,25 @@ export function ProductModal({
         close: 'Close',
       };
 
-  return (
+  const modal = (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="product-modal-title"
       dir={isRtl ? 'rtl' : 'ltr'}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-5"
+      className="fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto bg-black/55 p-3 backdrop-blur-sm sm:p-5"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) navigate(closeHref);
       }}
     >
-      <section className="flex max-h-[min(92vh,820px)] w-full max-w-[min(960px,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-2xl">
-        <header className="flex items-start justify-between gap-4 border-b px-6 pb-4 pt-5 text-start">
+      <section
+        className="flex max-h-[min(92dvh,820px)] max-w-none flex-col overflow-hidden rounded-lg border bg-background shadow-2xl"
+        style={{
+          width: 'min(1120px, calc(100vw - 24px))',
+          boxSizing: 'border-box',
+        }}
+      >
+        <header className="flex items-start justify-between gap-4 border-b px-4 pb-4 pt-5 text-start sm:px-6">
           <div className="min-w-0">
             <p className="m-0 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
               {storefrontName} · {mode === 'edit' ? labels.editMeta : labels.newMeta}
@@ -110,7 +125,7 @@ export function ProductModal({
             <X className="h-4 w-4" aria-hidden />
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 sm:px-6">
           <ProductForm
             mode={mode}
             storefrontSlug={storefrontSlug}
@@ -120,6 +135,7 @@ export function ProductModal({
             categories={categories}
             initialCategoryIds={initialCategoryIds}
             currentPlan={currentPlan}
+            currency={currency}
             noChrome
             onCancel={() => navigate(closeHref)}
             onSaved={() => navigate(closeHref)}
@@ -128,6 +144,8 @@ export function ProductModal({
       </section>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }
 
 function navigate(href: string) {

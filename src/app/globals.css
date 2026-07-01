@@ -881,11 +881,15 @@ body.souqna-admin-shell::before {
   mask-image: linear-gradient(180deg, black, transparent 78%);
 }
 
-.souqna-admin-shell [data-slot='sidebar-header'],
 .souqna-admin-shell [data-slot='sidebar-content'],
 .souqna-admin-shell [data-slot='sidebar-footer'] {
   position: relative;
   z-index: 1;
+}
+
+.souqna-admin-shell [data-slot='sidebar-header'] {
+  position: relative;
+  z-index: 4;
 }
 
 .souqna-admin-shell [data-slot='sidebar-menu-button'],
@@ -1271,6 +1275,10 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
   pointer-events: none;
 }
 
+.souqna-admin-dock-wrap.is-collapsed {
+  bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
 .souqna-admin-dock {
   position: relative;
   display: flex;
@@ -1421,6 +1429,81 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
 
 .souqna-admin-dock-button:hover {
   background: var(--dash-important-soft);
+}
+
+.souqna-admin-dock-toggle,
+.souqna-admin-dock-restore {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--dash-black) 14%, transparent);
+  border-radius: var(--dash-radius);
+  background: color-mix(in srgb, var(--dash-panel-strong) 82%, transparent);
+  color: var(--dash-black);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 62%, transparent);
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.souqna-admin-dock-toggle {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+}
+
+.souqna-admin-dock-restore {
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-color: var(--dash-rule-strong);
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--dash-panel-strong) 92%, transparent),
+      color-mix(in srgb, var(--dash-panel) 88%, transparent)
+    ),
+    var(--dash-panel);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 64%, transparent),
+    0 14px 32px color-mix(in srgb, var(--dash-black-soft) 22%, transparent);
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.souqna-admin-dock-restore::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.12;
+  background-image:
+    radial-gradient(circle, var(--dash-black) 0.58px, transparent 0.72px),
+    radial-gradient(circle, var(--dash-important) 0.52px, transparent 0.68px);
+  background-size:
+    8px 8px,
+    13px 13px;
+  background-position:
+    0 0,
+    7px 6px;
+}
+
+.souqna-admin-dock-toggle:hover,
+.souqna-admin-dock-restore:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--dash-important) 40%, transparent);
+  background: var(--dash-important-soft);
+}
+
+.souqna-admin-dock-toggle:focus-visible,
+.souqna-admin-dock-restore:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--dash-important) 72%, var(--dash-panel-strong));
+  outline-offset: 3px;
 }
 
 .souqna-admin-dock-eyebrow {
@@ -1660,7 +1743,13 @@ body.souqna-admin-shell [data-slot='drawer-overlay'] {
 }
 
 .souqna-admin-shell .souqy-launcher {
-  bottom: calc(96px + env(safe-area-inset-bottom));
+  bottom: calc(22px + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 1024px) {
+  .souqna-admin-shell .souqy-launcher {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1698,12 +1787,6 @@ body.souqna-admin-shell [data-slot='drawer-overlay'] {
 
   .souqna-admin-window-header {
     padding-inline-end: 28px;
-  }
-}
-
-@media (max-width: 640px) {
-  .souqna-admin-shell .souqy-launcher {
-    bottom: calc(88px + env(safe-area-inset-bottom));
   }
 }
 

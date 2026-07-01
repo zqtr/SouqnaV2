@@ -22,23 +22,23 @@ import type { TopProductByOrders } from '@/lib/products';
 type MetricTone = 'neutral' | 'success' | 'warning' | 'critical' | 'info';
 
 const TONE_ACCENT: Record<MetricTone, string> = {
-  neutral: 'var(--dash-black)',
-  success: 'var(--dash-green)',
+  neutral: 'var(--chart-secondary)',
+  success: 'var(--chart-success)',
   warning: 'var(--dash-important)',
-  critical: 'var(--dash-red)',
-  info: 'var(--dash-important)',
+  critical: 'var(--chart-danger)',
+  info: 'var(--chart-primary)',
 };
 
 const TONE_BADGE_STYLE: Record<MetricTone, CSSProperties> = {
   neutral: {
     borderColor: 'var(--dash-rule-strong)',
-    background: 'color-mix(in srgb, var(--dash-black) 5%, transparent)',
+    background: 'color-mix(in srgb, var(--chart-secondary) 5%, transparent)',
     color: 'var(--dash-ink-muted)',
   },
   success: {
-    borderColor: 'color-mix(in srgb, var(--dash-green) 32%, transparent)',
+    borderColor: 'color-mix(in srgb, var(--chart-success) 32%, transparent)',
     background: 'var(--dash-green-soft)',
-    color: 'var(--dash-green)',
+    color: 'var(--chart-success)',
   },
   warning: {
     borderColor: 'color-mix(in srgb, var(--dash-important) 42%, transparent)',
@@ -46,21 +46,23 @@ const TONE_BADGE_STYLE: Record<MetricTone, CSSProperties> = {
     color: 'var(--dash-black)',
   },
   critical: {
-    borderColor: 'color-mix(in srgb, var(--dash-red) 40%, transparent)',
+    borderColor: 'color-mix(in srgb, var(--chart-danger) 40%, transparent)',
     background: 'var(--dash-red-soft)',
-    color: 'var(--dash-red)',
+    color: 'var(--chart-danger)',
   },
   info: {
-    borderColor: 'color-mix(in srgb, var(--dash-important) 36%, transparent)',
-    background: 'color-mix(in srgb, var(--dash-important) 16%, transparent)',
-    color: 'var(--dash-black)',
+    borderColor: 'color-mix(in srgb, var(--chart-primary) 36%, transparent)',
+    background: 'color-mix(in srgb, var(--chart-primary) 16%, transparent)',
+    color: 'var(--chart-primary)',
   },
 };
 
 export function CommerceMetricGrid({ children }: { children: ReactNode }) {
   return (
     <Reveal y={14}>
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{children}</section>
+      <section className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {children}
+      </section>
     </Reveal>
   );
 }
@@ -89,7 +91,7 @@ export function CommerceMetricCard({
   const accent = TONE_ACCENT[tone];
   return (
     <Card
-      className="souqna-metric-card group relative overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/18 hover:shadow-[var(--shadow-card)]"
+      className="souqna-metric-card group relative flex h-[178px] overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/18 hover:shadow-[var(--shadow-card)]"
       style={{
         background:
           'linear-gradient(180deg, color-mix(in srgb, var(--card) 94%, var(--surface-overlay)) 0%, var(--card) 100%)',
@@ -99,10 +101,11 @@ export function CommerceMetricCard({
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <span
-              className="grid size-8 shrink-0 place-items-center rounded-md border text-foreground/80"
+              className="grid size-8 shrink-0 place-items-center rounded-md border"
               style={{
                 borderColor: `color-mix(in srgb, ${accent} 24%, transparent)`,
                 background: `color-mix(in srgb, ${accent} 10%, transparent)`,
+                color: accent,
               }}
             >
               <Icon className="size-4" aria-hidden />
@@ -136,13 +139,27 @@ export function CommerceMetricCard({
           ) : null}
         </div>
       </CardHeader>
-      <CardContent className="px-4 pb-4">
-        <div className="flex items-end justify-between gap-3">
-          <div className="min-w-0">
+      <CardContent className="flex flex-1 px-4 pb-4">
+        <div className="flex w-full items-end justify-between gap-3">
+          <div className="min-w-0 self-stretch">
             <div className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">
               {value}
             </div>
-            {hint ? <CardDescription className="mt-1 truncate">{hint}</CardDescription> : null}
+            <CardDescription
+              className="mt-1 leading-4"
+              style={{
+                display: '-webkit-box',
+                height: '2rem',
+                overflow: 'hidden',
+                overflowWrap: 'normal',
+                wordBreak: 'normal',
+                hyphens: 'none',
+                WebkitBoxOrient: 'vertical',
+                WebkitLineClamp: 2,
+              }}
+            >
+              {hint ?? ''}
+            </CardDescription>
           </div>
           {trend && trend.length > 0 ? (
             <div className="h-12 w-28 shrink-0 opacity-75 transition-opacity group-hover:opacity-95">

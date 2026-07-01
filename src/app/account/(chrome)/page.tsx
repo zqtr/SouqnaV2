@@ -44,7 +44,6 @@ import { countCustomers } from '@/lib/customers';
 import {
   dailyOrdersSince,
   dailyEventSeriesSince,
-  dailyVisitorsSince,
   eventCountSince,
   uniqueVisitorsSince,
 } from '@/lib/analytics';
@@ -117,7 +116,6 @@ export default async function AccountHomePage({
     visitors30,
     pageViews30,
     carts30,
-    visitorTrend,
     ordersTrend,
     cartAddTrend,
     topProductsRows,
@@ -131,7 +129,6 @@ export default async function AccountHomePage({
     uniqueVisitorsSince(storefront.slug, 30),
     eventCountSince(storefront.slug, 'page_view', 30),
     eventCountSince(storefront.slug, 'cart_add', 30),
-    dailyVisitorsSince(storefront.slug, 30).catch(() => [] as number[]),
     dailyOrdersSince(storefront.slug, 30).catch(() => [] as number[]),
     dailyEventSeriesSince(storefront.slug, 'cart_add', 30).catch(() => [] as number[]),
     topProductsByOrders(storefront.slug, 30, 5).catch(() => []),
@@ -172,7 +169,7 @@ export default async function AccountHomePage({
       <CommerceMetricCard
         label={t.revenue}
         value={revenueDisplay}
-        hint={`${orderStats.paidOrders} ${t.paidOrdersHint}`}
+        hint={t.paidOrdersHint(orderStats.paidOrders)}
         badge={t.lastThirtyDays}
         tone="success"
         trend={ordersTrend}
@@ -183,10 +180,10 @@ export default async function AccountHomePage({
       <CommerceMetricCard
         label={t.conversionRate}
         value={formatPercent(conversionRate, locale)}
-        hint={`${orderStats.totalOrders} ${t.ordersFromVisitors(visitors30)}`}
+        hint={t.ordersFromVisitors(orderStats.totalOrders, visitors30)}
         badge={t.checkoutSignal}
-        tone={conversionRate > 0 ? 'info' : 'neutral'}
-        trend={visitorTrend}
+        tone="info"
+        trend={ordersTrend}
         icon={Gauge}
         tooltip={t.conversionTooltip}
       />
@@ -195,7 +192,7 @@ export default async function AccountHomePage({
         value={formatCurrency(orderStats.averageOrderQar, storefront.checkout.currency)}
         hint={t.aovHint}
         badge={t.average}
-        tone="neutral"
+        tone="success"
         trend={ordersTrend}
         chart="bar"
         icon={ShoppingBag}
@@ -215,7 +212,7 @@ export default async function AccountHomePage({
         value={orderStats.unpaidOrders}
         hint={t.unpaidHint}
         badge={orderStats.unpaidOrders > 0 ? t.needsAction : t.clear}
-        tone={orderStats.unpaidOrders > 0 ? 'warning' : 'neutral'}
+        tone={orderStats.unpaidOrders > 0 ? 'critical' : 'neutral'}
         icon={AlertCircle}
       />
       <CommerceMetricCard
@@ -1012,12 +1009,13 @@ const HOME_STRINGS = {
     status: 'Status',
     total: 'Total',
     revenueHint: 'total orders',
-    paidOrdersHint: 'paid orders',
+    paidOrdersHint: (n: number) => `${n} paid ${n === 1 ? 'order' : 'orders'}`,
     pageViewsHint: 'page views in the same window',
     lastThirtyDays: '30d',
     checkoutSignal: 'checkout',
     conversionTooltip: 'Orders divided by unique visitors over the last 30 days.',
-    ordersFromVisitors: (n: number) => `orders from ${n} visitors`,
+    ordersFromVisitors: (orders: number, visits: number) =>
+      `${orders} ${orders === 1 ? 'order' : 'orders'} from ${visits} ${visits === 1 ? 'visit' : 'visits'}`,
     visitorsHint: 'Last 30 days',
     productsHint: 'Published and draft items',
     customersHint: 'Saved customer records',
@@ -1045,14 +1043,14 @@ const HOME_STRINGS = {
     noOrdersYet: 'No orders yet',
     noOrdersBody: 'Orders placed from checkout will appear here automatically.',
     paidOrders: 'Paid orders',
-    ofOrdersPaid: 'of orders paid',
+    ofOrdersPaid: 'of orders',
     settled: 'settled',
-    aovHint: 'Average checkout value',
+    aovHint: 'Average cart value',
     average: 'average',
-    unpaidHint: 'Awaiting payment or cash confirmation',
+    unpaidHint: 'Awaiting payment',
     needsAction: 'needs action',
     clear: 'clear',
-    cartAddsHint: 'Buyers who added an item to cart',
+    cartAddsHint: 'Buyers who added to cart',
     intent: 'intent',
     recentActivityTitle: 'Recent activity',
     log: 'Log',
@@ -1091,12 +1089,14 @@ const HOME_STRINGS = {
     status: 'الحالة',
     total: 'الإجمالي',
     revenueHint: 'إجمالي الطلبات',
-    paidOrdersHint: 'طلبات مدفوعة',
+    paidOrdersHint: (n: number) =>
+      `${n.toLocaleString('ar-QA')} ${n === 1 ? 'طلب مدفوع' : 'طلبات مدفوعة'}`,
     pageViewsHint: 'مشاهدات صفحة في نفس الفترة',
     lastThirtyDays: '٣٠ يوم',
     checkoutSignal: 'الدفع',
     conversionTooltip: 'الطلبات مقسومة على الزوار الفريدين خلال آخر ٣٠ يوماً.',
-    ordersFromVisitors: (n: number) => `طلبات من ${n.toLocaleString('ar-QA')} زائر`,
+    ordersFromVisitors: (orders: number, visits: number) =>
+      `${orders.toLocaleString('ar-QA')} ${orders === 1 ? 'طلب' : 'طلبات'} من ${visits.toLocaleString('ar-QA')} زيارة`,
     visitorsHint: 'آخر ٣٠ يوماً',
     productsHint: 'منتجات منشورة ومسوّدات',
     customersHint: 'سجلات العملاء',
@@ -1125,11 +1125,11 @@ const HOME_STRINGS = {
     noOrdersYet: 'لا توجد طلبات بعد',
     noOrdersBody: 'ستظهر الطلبات القادمة من الدفع هنا تلقائياً.',
     paidOrders: 'الطلبات المدفوعة',
-    ofOrdersPaid: 'من الطلبات مدفوعة',
+    ofOrdersPaid: 'من الطلبات',
     settled: 'تمت التسوية',
     aovHint: 'متوسط قيمة الطلب',
     average: 'متوسط',
-    unpaidHint: 'بانتظار الدفع أو تأكيد الدفع عند الاستلام',
+    unpaidHint: 'بانتظار الدفع',
     needsAction: 'يحتاج إجراء',
     clear: 'لا يوجد',
     cartAddsHint: 'عملاء أضافوا منتجاً إلى السلة',
@@ -1153,4 +1153,7 @@ const HOME_STRINGS = {
     pending: 'قيد الانتظار',
     unpaid: 'غير مدفوع',
   },
-} as const satisfies Record<Locale, Record<string, string | ((n: number) => string)>>;
+} as const satisfies Record<
+  Locale,
+  Record<string, string | ((n: number) => string) | ((a: number, b: number) => string)>
+>;

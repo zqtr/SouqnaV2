@@ -53,10 +53,7 @@ type AdminTopBarProps = {
   accountUpdates?: AccountUpdateView[];
 };
 
-export function AdminTopBar({
-  initialSouqyOpen = false,
-  accountUpdates = [],
-}: AdminTopBarProps) {
+export function AdminTopBar({ initialSouqyOpen = false, accountUpdates = [] }: AdminTopBarProps) {
   const { active, plan, planPeriodEnd } = useStorefronts();
   const locale = useLocale() as Locale;
   const t = adminText(locale);
@@ -64,6 +61,7 @@ export function AdminTopBar({
   const [assistantOpen, setAssistantOpen] = useState(initialSouqyOpen);
   const [updatesOpen, setUpdatesOpen] = useState(false);
   const [updates, setUpdates] = useState(accountUpdates);
+  const [focusedUpdateId, setFocusedUpdateId] = useState<string | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResponse>(EMPTY_RESULTS);
@@ -71,17 +69,23 @@ export function AdminTopBar({
   const autoOpenedUpdatesRef = useRef(false);
   const souqyPortalHref = active ? (locale === 'ar' ? '/ar/begin/souqy' : '/begin/souqy') : null;
   const canUseSouqy = planUnlocksSouqy(plan);
-  const unreadUpdates = updates.filter((update) => !update.readAt).length;
+  const deploymentCommentUpdate = updates.find(
+    (update) => !update.readAt && isDeploymentCommentUpdate(update),
+  );
+  const unreadDeploymentCommentUpdates = updates.filter(
+    (update) => !update.readAt && isDeploymentCommentUpdate(update),
+  ).length;
 
   useEffect(() => {
     setUpdates(accountUpdates);
   }, [accountUpdates]);
 
   useEffect(() => {
-    if (autoOpenedUpdatesRef.current || unreadUpdates === 0) return;
+    if (autoOpenedUpdatesRef.current || !deploymentCommentUpdate) return;
     autoOpenedUpdatesRef.current = true;
+    setFocusedUpdateId(deploymentCommentUpdate.id);
     setUpdatesOpen(true);
-  }, [unreadUpdates]);
+  }, [deploymentCommentUpdate]);
 
   useEffect(() => {
     if (canUseSouqy && window.location.search.includes('souqy=1')) {
@@ -183,15 +187,18 @@ export function AdminTopBar({
           type="button"
           variant="ghost"
           size="icon-sm"
-          onClick={() => setUpdatesOpen(true)}
-          aria-label={`${locale === 'ar' ? 'التحديثات' : 'Updates'}${unreadUpdates > 0 ? ` (${unreadUpdates})` : ''}`}
+          onClick={() => {
+            setFocusedUpdateId(null);
+            setUpdatesOpen(true);
+          }}
+          aria-label={`${locale === 'ar' ? 'التحديثات' : 'Updates'}${unreadDeploymentCommentUpdates > 0 ? ` (${unreadDeploymentCommentUpdates})` : ''}`}
           title={locale === 'ar' ? 'التحديثات' : 'Updates'}
           className="relative h-9 w-9 shrink-0 rounded-md border border-border bg-background/60 text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
         >
           <Newspaper className="size-4" aria-hidden />
-          {unreadUpdates > 0 ? (
+          {unreadDeploymentCommentUpdates > 0 ? (
             <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-[var(--admin-accent)] px-1 font-mono text-[10px] font-bold leading-4 text-[var(--surface-bg)] shadow-[0_0_0_2px_var(--surface-bg)]">
-              {unreadUpdates > 9 ? '9+' : unreadUpdates}
+              {unreadDeploymentCommentUpdates > 9 ? '9+' : unreadDeploymentCommentUpdates}
             </span>
           ) : null}
         </Button>
@@ -257,8 +264,12 @@ export function AdminTopBar({
         initialUpdates={updates}
         locale={locale}
         open={updatesOpen}
-        onOpenChange={setUpdatesOpen}
+        onOpenChange={(open) => {
+          setUpdatesOpen(open);
+          if (!open) setFocusedUpdateId(null);
+        }}
         onUpdateRead={markUpdateRead}
+        focusUpdateId={focusedUpdateId}
         autoOpen={false}
       />
 
@@ -275,6 +286,10 @@ export function AdminTopBar({
       ) : null}
     </>
   );
+}
+
+function isDeploymentCommentUpdate(update: AccountUpdateView): boolean {
+  return update.previewPayload?.kind === 'souqna-update';
 }
 
 function SouqyFloatingTrigger({ hidden, onOpen }: { hidden: boolean; onOpen: () => void }) {

@@ -215,6 +215,7 @@ export default async function ProductsPage({
           categories={activeStoreCategories}
           initialCategoryIds={editingProductCategoryIds}
           currentPlan={currentPlan}
+          currency={activeStorefront.checkout.currency}
           closeHref={closeBase}
         />
       ) : null}

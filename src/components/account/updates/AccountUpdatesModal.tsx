@@ -17,6 +17,7 @@ type AccountUpdatesModalProps = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onUpdateRead?: (updateId: string) => void;
+  focusUpdateId?: string | null;
   autoOpen?: boolean;
 };
 
@@ -52,6 +53,7 @@ export function AccountUpdatesModal({
   open,
   onOpenChange,
   onUpdateRead,
+  focusUpdateId = null,
   autoOpen = true,
 }: AccountUpdatesModalProps) {
   const [updates, setUpdates] = useState(initialUpdates);
@@ -82,6 +84,11 @@ export function AccountUpdatesModal({
     const unreadIndex = updates.findIndex((update) => !update.readAt);
     return unreadIndex >= 0 ? unreadIndex : 0;
   }, [updates]);
+  const focusedIndex = useMemo(() => {
+    if (!focusUpdateId) return null;
+    const updateIndex = updates.findIndex((update) => update.id === focusUpdateId);
+    return updateIndex >= 0 ? updateIndex : null;
+  }, [focusUpdateId, updates]);
 
   const current = updates[index] ?? null;
   const detailsHref = current?.detailsHref ?? current?.ctaHref ?? null;
@@ -98,8 +105,8 @@ export function AccountUpdatesModal({
 
   useEffect(() => {
     if (!modalOpen) return;
-    setIndex(firstUnreadIndex);
-  }, [firstUnreadIndex, modalOpen]);
+    setIndex(focusedIndex ?? firstUnreadIndex);
+  }, [firstUnreadIndex, focusedIndex, modalOpen]);
 
   const markReadOptimistically = useCallback(
     (update: AccountUpdateView) => {
@@ -137,8 +144,9 @@ export function AccountUpdatesModal({
 
   const closeIfAllowed = useCallback(() => {
     if (current?.isSticky && !current.readAt) return;
+    if (current) markReadOptimistically(current);
     setModalOpen(false);
-  }, [current, setModalOpen]);
+  }, [current, markReadOptimistically, setModalOpen]);
 
   useEffect(() => {
     if (!modalOpen) return;

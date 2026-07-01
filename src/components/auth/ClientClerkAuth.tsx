@@ -23,6 +23,17 @@ export function ClientClerkAuth({ mode, locale, publishableKey }: ClientClerkAut
     return <div aria-hidden className="min-h-[230px]" />;
   }
 
+  if (!publishableKey) {
+    return (
+      <div
+        role="status"
+        className="rounded-[9px] border border-[rgba(255,190,138,0.24)] bg-black/25 px-4 py-3 text-[12px] leading-5 text-current"
+      >
+        Authentication is not configured for this local session.
+      </div>
+    );
+  }
+
   if (mode === 'sign-in') {
     return (
       <ClerkProvider
