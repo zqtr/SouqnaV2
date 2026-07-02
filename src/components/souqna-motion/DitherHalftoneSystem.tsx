@@ -1,25 +1,34 @@
 "use client";
 
-import React, { useRef, useEffect, useState, useCallback, type ReactNode, type CSSProperties } from "react";
+import React, { useRef, useEffect, type ReactNode, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import DitherWave from "@/components/dither-wave";
 import HalftoneWave from "@/components/halftone-wave";
 import { useReducedMotion } from "framer-motion";
 
 /**
- * Souqy IDE Dithered/Halftone Visual System
- * 
- * Unified, reusable signature treatment for backgrounds, transitions,
- * loading states, selection states, and component states across the Souqy IDE.
- * 
- * Extends HalftoneWave (R3F dot-field) and DitherWave (Three.js procedural).
- * 
- * Design goals:
- * - Reusability: single source of truth with mode presets + prop overrides
- * - Performance: reduced-motion guard, FPS caps, offscreen pause, optional static canvas fallback,
- *   lazy Three init only for rich modes, CSS layers for lightweight states
- * - Signature: consistent Souqna cream/coal/black palette with subtle dither/halftone texture
- * - IDE integration: explicit support for loading, selection, transitions, component surfaces
+ * Souqy IDE Dithered/Halftone Visual System — CORE SIGNATURE IDENTITY
+ *
+ * This is the single source of truth for all dithered/halftone visuals across the
+ * entire Souqy IDE (Studio, Builder, previews, loading, selection, transitions).
+ *
+ * Unified, reusable signature treatment built on HalftoneWave (R3F dot-matrix)
+ * and DitherWave (Three.js flow-field + Bayer dither).
+ *
+ * Souqna Design Language:
+ *   --sqs-cream (#F4EAD6), --sqs-coal (#131211), --sqs-black (#030303), --sqs-white
+ *   Monochrome + subtle cream halftone on coal/black grounds. No bright accents.
+ *
+ * Performance:
+ *   - Reduced-motion: intensity clamped, static fallback
+ *   - IntersectionObserver pause + FPS cap + quality tiers
+ *   - Static 2D canvas for component/grain (zero WebGL cost)
+ *   - Memoized shaders/uniforms, no per-frame allocations in hot path
+ *
+ * Reusability:
+ *   - MODE_PRESETS for instant IDE states (background | loading | selection | transition)
+ *   - Override any prop; CSS vars respected via studioTheme
+ *   - Drop-in replacement for raw DitherWave/HalftoneWave
  */
 
 export type DitherMode =
@@ -61,51 +70,51 @@ export interface DitherSystemProps {
   "data-state"?: string;
 }
 
-/** Preset configs tuned for Souqy IDE surfaces */
+/** Preset configs tuned for Souqy IDE surfaces — Souqna palette (matches studioTheme) */
 const MODE_PRESETS: Record<DitherMode, Partial<DitherSystemProps>> = {
   background: {
-    speed: 1.4,
-    intensity: 0.12,
-    colorA: "#FFFFFF",
-    colorB: "#F4EAD6",
-    colorC: "#050505",
+    speed: 1.35,
+    intensity: 0.09,
+    colorA: "#F4EAD6", // --sqs-cream
+    colorB: "#E8DCC4",
+    colorC: "#030303", // --sqs-black
     quality: "medium",
-    maxFPS: 42,
+    maxFPS: 38,
     pauseWhenOffscreen: true,
   },
   halftone: {
-    speed: 0.6,
-    intensity: 0.55,
+    speed: 0.55,
+    intensity: 0.48,
     colorA: "#F4EAD6",
     colorB: "#E8DCC4",
     colorC: "#0A0A0A",
     quality: "high",
-    maxFPS: 55,
+    maxFPS: 52,
     cursorInteraction: true,
   },
   loading: {
-    speed: 2.2,
-    intensity: 0.35,
+    speed: 1.95,
+    intensity: 0.42,
     colorA: "#FFFFFF",
     colorB: "#F4EAD6",
     colorC: "#111111",
     quality: "low",
-    maxFPS: 30,
+    maxFPS: 28,
     pauseWhenOffscreen: false,
   },
   selection: {
-    speed: 1.1,
-    intensity: 0.65,
+    speed: 0.95,
+    intensity: 0.72,
     colorA: "#F4EAD6",
     colorB: "#E8DCC4",
-    colorC: "#1C1A18",
+    colorC: "#1C1A18", // --sqs-coal-soft
     quality: "medium",
-    maxFPS: 48,
+    maxFPS: 45,
     cursorInteraction: true,
   },
   transition: {
-    speed: 0.9,
-    intensity: 0.28,
+    speed: 0.85,
+    intensity: 0.32,
     colorA: "#F4EAD6",
     colorB: "#FFFFFF",
     colorC: "#030303",
@@ -114,26 +123,76 @@ const MODE_PRESETS: Record<DitherMode, Partial<DitherSystemProps>> = {
     pauseWhenOffscreen: true,
   },
   component: {
-    speed: 0.4,
-    intensity: 0.18,
+    speed: 0.35,
+    intensity: 0.15,
     colorA: "#E8DCC4",
     colorB: "#F4EAD6",
-    colorC: "#131211",
+    colorC: "#131211", // --sqs-coal
     quality: "low",
-    maxFPS: 24,
+    maxFPS: 22,
     static: true,
   },
   grain: {
-    speed: 0.2,
-    intensity: 0.08,
+    speed: 0.18,
+    intensity: 0.07,
     colorA: "#F4EAD6",
     colorB: "#E8DCC4",
     colorC: "#0A0A0A",
     quality: "low",
-    maxFPS: 20,
+    maxFPS: 18,
     static: true,
   },
 };
+
+interface StaticDitherCanvasProps {
+  colorA: string;
+  colorC: string;
+  intensity: number;
+  mode: DitherMode;
+}
+
+function StaticDitherCanvas({ colorA, colorC, intensity, mode }: StaticDitherCanvasProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d", { alpha: true });
+    if (!ctx) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = canvas.offsetWidth * dpr;
+    const h = canvas.offsetHeight * dpr;
+    canvas.width = w;
+    canvas.height = h;
+    ctx.scale(dpr, dpr);
+
+    ctx.fillStyle = colorC;
+    ctx.fillRect(0, 0, w, h);
+
+    const cell = mode === "grain" ? 2 : 3;
+    ctx.fillStyle = colorA;
+    for (let y = 0; y < h / dpr; y += cell) {
+      for (let x = 0; x < w / dpr; x += cell) {
+        const n = ((x * 73 + y * 37) % 17) / 17;
+        if (n > 0.6) {
+          ctx.globalAlpha = 0.12 * intensity;
+          ctx.fillRect(x, y, cell * 0.6, cell * 0.6);
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+  }, [colorA, colorC, intensity, mode]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 pointer-events-none"
+      style={{ width: "100%", height: "100%", mixBlendMode: "screen", opacity: intensity }}
+    />
+  );
+}
 
 function DitherHalftoneSystem({
   mode = "background",
@@ -155,7 +214,6 @@ function DitherHalftoneSystem({
   ...rest
 }: DitherSystemProps) {
   const reduced = useReducedMotion();
-  const [isVisible, setIsVisible] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const preset = MODE_PRESETS[mode];
@@ -169,69 +227,7 @@ function DitherHalftoneSystem({
   const finalPause = pauseWhenOffscreen ?? preset.pauseWhenOffscreen ?? true;
   const useStatic = forceStatic ?? preset.static ?? false;
 
-  // Visibility observer for perf (pause expensive renders)
-  useEffect(() => {
-    if (!finalPause || !containerRef.current) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry) {
-          setIsVisible(entry.isIntersecting);
-        }
-      },
-      { threshold: 0.05, rootMargin: "200px" }
-    );
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, [finalPause]);
-
-  const shouldRender = !reduced && isVisible;
   const effectiveIntensity = reduced ? Math.min(finalIntensity, 0.05) : finalIntensity;
-
-  // Lightweight static canvas dither for component/grain modes (no Three.js cost)
-  const StaticDither = useCallback(() => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-
-    useEffect(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const ctx = canvas.getContext("2d", { alpha: true });
-      if (!ctx) return;
-
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = canvas.offsetWidth * dpr;
-      const h = canvas.offsetHeight * dpr;
-      canvas.width = w;
-      canvas.height = h;
-      ctx.scale(dpr, dpr);
-
-      ctx.fillStyle = finalColorC;
-      ctx.fillRect(0, 0, w, h);
-
-      // Bayer-like dither pattern (lightweight, reusable)
-      const cell = mode === "grain" ? 2 : 3;
-      ctx.fillStyle = finalColorA;
-      for (let y = 0; y < h / dpr; y += cell) {
-        for (let x = 0; x < w / dpr; x += cell) {
-          const n = ((x * 73 + y * 37) % 17) / 17;
-          if (n > 0.6) {
-            ctx.globalAlpha = 0.12 * effectiveIntensity;
-            ctx.fillRect(x, y, cell * 0.6, cell * 0.6);
-          }
-        }
-      }
-      ctx.globalAlpha = 1;
-    }, [finalColorA, finalColorC, effectiveIntensity, mode]);
-
-    return (
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 pointer-events-none"
-        style={{ width: "100%", height: "100%", mixBlendMode: "screen", opacity: effectiveIntensity }}
-      />
-    );
-  }, [finalColorA, finalColorC, effectiveIntensity, mode]);
 
   if (useStatic || mode === "component" || mode === "grain") {
     return (
@@ -242,7 +238,12 @@ function DitherHalftoneSystem({
         data-dither-mode={mode}
         {...rest}
       >
-        <StaticDither />
+        <StaticDitherCanvas
+          colorA={finalColorA}
+          colorC={finalColorC}
+          intensity={effectiveIntensity}
+          mode={mode}
+        />
         {children}
       </div>
     );
@@ -280,7 +281,14 @@ function DitherHalftoneSystem({
     >
       {mode === "halftone" || mode === "selection" ? (
         <HalftoneWave
-          {...commonProps}
+          width={width}
+          height={height}
+          className={commonProps.className}
+          speed={commonProps.speed}
+          colorA={finalColorA}
+          colorB={finalColorB}
+          opacity={commonProps.opacity}
+          cursorInteraction={commonProps.cursorInteraction}
           noiseScale={mode === "selection" ? 1.8 : 2.4}
           gridDensity={mode === "selection" ? 38 : 28}
           dotSize={mode === "selection" ? 0.72 : 0.58}

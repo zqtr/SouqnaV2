@@ -78,6 +78,17 @@ body:has(.sqs-shell) [data-homepage-blank] { display: none !important; }
   filter: saturate(.7) contrast(1.05);
 }
 .sqs-dither canvas { inline-size: 100% !important; block-size: 100% !important; }
+.sqs-selection-dither-layer {
+  position: absolute !important;
+  inset: 0;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  opacity: .75;
+}
+.sqs-selection-dither-layer canvas {
+  inline-size: 100% !important;
+  block-size: 100% !important;
+}
 .sqs-pixel-layer {
   position: absolute;
   inset: 0;

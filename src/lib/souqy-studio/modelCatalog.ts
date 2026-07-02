@@ -1,4 +1,5 @@
 export const SOUQY_STUDIO_PRICE_MULTIPLIER = 3;
+export const SOUQY_STUDIO_FANAR_PRICE_MULTIPLIER = 1.5;
 export const SOUQY_STUDIO_USD_PER_CREDIT = 0.01;
 
 export const SOUQY_STUDIO_MODEL_IDS = [
@@ -11,6 +12,7 @@ export const SOUQY_STUDIO_MODEL_IDS = [
 
 export type SouqyStudioModelId = (typeof SOUQY_STUDIO_MODEL_IDS)[number];
 export type SouqyStudioModelProvider = 'openai' | 'replicate';
+export type SouqyStudioChatModelProvider = 'runpod' | 'cranl';
 export type SouqyStudioModelQuality = 'standard' | 'high' | 'print';
 export type SouqyStudioPricingTier = 'low' | 'medium' | 'high';
 export type SouqyStudioCostAspect = 'square' | 'portrait' | 'landscape';
@@ -26,6 +28,18 @@ export type SouqyStudioModel = {
   bestFor: string;
   latency: string;
   supportsReferences: boolean;
+  pricingNote: string;
+};
+
+export type SouqyStudioChatModel = {
+  id: 'fanar:runpod-primary' | 'cranl:default';
+  provider: SouqyStudioChatModelProvider;
+  providerModel: string;
+  label: string;
+  shortLabel: string;
+  supportsStreaming: boolean;
+  bestFor: string;
+  latency: string;
   pricingNote: string;
 };
 
@@ -122,6 +136,31 @@ export const SOUQY_STUDIO_MODELS: SouqyStudioModel[] = [
   },
 ];
 
+export const SOUQY_STUDIO_CHAT_MODELS: SouqyStudioChatModel[] = [
+  {
+    id: 'fanar:runpod-primary',
+    provider: 'runpod',
+    providerModel: 'QCRI/Fanar-1-9B-Instruct',
+    label: 'Fanar 1-9B on RunPod',
+    shortLabel: 'Fanar RunPod',
+    supportsStreaming: true,
+    bestFor: 'Arabic-first Studio chat, GCC copy, and transformation intelligence.',
+    latency: 'Low to medium',
+    pricingNote: 'Estimated from RunPod token usage, then x1.5 Souqna credits.',
+  },
+  {
+    id: 'cranl:default',
+    provider: 'cranl',
+    providerModel: 'default',
+    label: 'AI runtime fallback',
+    shortLabel: 'AI fallback',
+    supportsStreaming: false,
+    bestFor: 'Fallback chat when Fanar is disabled or unavailable.',
+    latency: 'Queued',
+    pricingNote: 'Runtime-dependent queue cost.',
+  },
+];
+
 export type SouqyStudioModelCost = {
   baseUsd: number;
   billableUsd: number;
@@ -129,6 +168,15 @@ export type SouqyStudioModelCost = {
   multiplier: number;
   pricingTier: SouqyStudioPricingTier;
   aspect: SouqyStudioCostAspect;
+};
+
+export type SouqyStudioChatCost = {
+  inputTokens: number;
+  outputTokens: number;
+  baseUsd: number;
+  billableUsd: number;
+  credits: number;
+  multiplier: number;
 };
 
 export function isSouqyStudioModelId(value: unknown): value is SouqyStudioModelId {
@@ -181,6 +229,26 @@ export function estimateSouqyStudioModelCost(args: {
   };
 }
 
+export function estimateFanarChatCost(args: {
+  inputText: string;
+  outputText?: string;
+  usdPer1kTokens?: number;
+}): SouqyStudioChatCost {
+  const inputTokens = estimateTextTokens(args.inputText);
+  const outputTokens = estimateTextTokens(args.outputText ?? '');
+  const usdPer1kTokens = args.usdPer1kTokens ?? 0.0002;
+  const baseUsd = ((inputTokens + outputTokens) / 1000) * usdPer1kTokens;
+  const billableUsd = baseUsd * SOUQY_STUDIO_FANAR_PRICE_MULTIPLIER;
+  return {
+    inputTokens,
+    outputTokens,
+    baseUsd: roundCurrency(baseUsd),
+    billableUsd: roundCurrency(billableUsd),
+    credits: Math.max(1, Math.ceil(billableUsd / SOUQY_STUDIO_USD_PER_CREDIT)),
+    multiplier: SOUQY_STUDIO_FANAR_PRICE_MULTIPLIER,
+  };
+}
+
 export function formatSouqyStudioUsd(value: number): string {
   const roundedMillis = Math.round(value * 1000);
   const decimals = value < 0.1 && roundedMillis % 10 !== 0 ? 3 : 2;
@@ -194,4 +262,10 @@ function estimateReplicateFlux2MaxUsd(width: number, height: number): number {
 
 function roundCurrency(value: number): number {
   return Math.round(value * 1000) / 1000;
+}
+
+function estimateTextTokens(value: string): number {
+  const normalized = value.trim();
+  if (!normalized) return 0;
+  return Math.max(1, Math.ceil(normalized.length / 4));
 }

@@ -8,6 +8,7 @@ export const FANAR_ALLOWED_USE_CASES = [
   'arabic-seo',
   'arabic-marketing-copy',
   'arabic-translations',
+  'transformation-intel',
 ] as const;
 
 export const FANAR_BLOCKED_USE_CASES = [
@@ -32,6 +33,7 @@ export type FanarChatCompletionInput = {
   temperature?: number;
   maxOutputTokens?: number;
   timeoutMs?: number;
+  stream?: boolean;
 };
 
 export type FanarChatCompletionResult = {
@@ -40,6 +42,7 @@ export type FanarChatCompletionResult = {
   useCase: FanarUseCase;
   text: string;
   raw: unknown;
+  latencyMs?: number;
 };
 
 export class FanarConfigurationError extends Error {
@@ -64,6 +67,10 @@ export function isFanarConfigured(): boolean {
   return Boolean(env.FANAR_API_URL && env.FANAR_API_KEY);
 }
 
+export function isSouqyStudioFanarEnabled(): boolean {
+  return env.SOUQY_STUDIO_FANAR_ENABLED && isFanarConfigured();
+}
+
 export function fanarChatCompletionUrl(baseUrl = env.FANAR_API_URL): string {
   if (!baseUrl) throw new FanarConfigurationError();
 
@@ -79,6 +86,8 @@ export async function fanarChatCompletion(
   if (!env.FANAR_API_KEY) throw new FanarConfigurationError();
 
   const model = input.model ?? env.FANAR_MODEL;
+  const start = Date.now();
+  const stream = input.stream ?? false;
   const response = await fetch(fanarChatCompletionUrl(), {
     method: 'POST',
     headers: {
@@ -90,7 +99,7 @@ export async function fanarChatCompletion(
       messages: input.messages,
       temperature: input.temperature ?? 0.35,
       max_tokens: input.maxOutputTokens ?? 1024,
-      stream: false,
+      stream,
     }),
     signal: AbortSignal.timeout(input.timeoutMs ?? env.FANAR_TIMEOUT_MS),
   });
@@ -102,6 +111,19 @@ export async function fanarChatCompletion(
       response.status,
       body,
     );
+  }
+
+  const latencyMs = Date.now() - start;
+  if (stream) {
+    // Streaming handled by caller (e.g. via ReadableStream or AI SDK adapter in IDE)
+    return {
+      provider: 'fanar',
+      model,
+      useCase: input.useCase,
+      text: '[stream]',
+      raw: response.body,
+      latencyMs,
+    };
   }
 
   const raw = (await response.json().catch(() => null)) as unknown;
@@ -116,6 +138,7 @@ export async function fanarChatCompletion(
     useCase: input.useCase,
     text,
     raw,
+    latencyMs,
   };
 }
 

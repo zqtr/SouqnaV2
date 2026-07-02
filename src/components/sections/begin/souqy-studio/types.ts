@@ -116,6 +116,27 @@ export type StudioTextMessage = {
   modelLabel?: string;
 };
 
+export type SouqyStudioChatCost = {
+  inputTokens: number;
+  outputTokens: number;
+  baseUsd: number;
+  billableUsd: number;
+  credits: number;
+  multiplier: number;
+};
+
+export type SouqyStudioChatStreamMeta = {
+  provider?: string;
+  backend?: string;
+  model?: string;
+  cost?: SouqyStudioChatCost;
+};
+
+export type SouqyStudioChatStreamDone = SouqyStudioChatStreamMeta & {
+  text?: string;
+  latencyMs?: number;
+};
+
 export type StudioThreadMessage = StudioChatMessage | StudioTextMessage;
 
 export type StudioProjectSummary = {

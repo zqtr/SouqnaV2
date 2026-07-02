@@ -14,6 +14,11 @@ const clean = (v: string | undefined) => {
   return trimmed || undefined;
 };
 
+const flag = z
+  .enum(['0', '1', 'false', 'true'])
+  .default('0')
+  .transform((value) => value === '1' || value === 'true');
+
 const schema = z.object({
   NEXT_PUBLIC_SITE_URL: z.string().url().default('https://souqna.qa'),
   RESEND_API_KEY: z.string().min(1).optional(),
@@ -31,6 +36,8 @@ const schema = z.object({
   FANAR_API_KEY: z.string().min(16).optional(),
   FANAR_MODEL: z.string().min(1).default('QCRI/Fanar-1-9B-Instruct'),
   FANAR_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(180_000).default(90_000),
+  SOUQY_STUDIO_FANAR_ENABLED: flag,
+  FANAR_ESTIMATED_USD_PER_1K_TOKENS: z.coerce.number().positive().default(0.0002),
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1).optional(),
   CLERK_SECRET_KEY: z.string().min(1).optional(),
   // Signing secret for the Clerk → /api/clerk-webhooks bridge. Pulled from
@@ -176,6 +183,8 @@ const parsed = schema.safeParse({
   FANAR_API_KEY: clean(process.env.FANAR_API_KEY),
   FANAR_MODEL: clean(process.env.FANAR_MODEL),
   FANAR_TIMEOUT_MS: clean(process.env.FANAR_TIMEOUT_MS),
+  SOUQY_STUDIO_FANAR_ENABLED: clean(process.env.SOUQY_STUDIO_FANAR_ENABLED),
+  FANAR_ESTIMATED_USD_PER_1K_TOKENS: clean(process.env.FANAR_ESTIMATED_USD_PER_1K_TOKENS),
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: clean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY),
   CLERK_SECRET_KEY: clean(process.env.CLERK_SECRET_KEY),
   CLERK_WEBHOOK_SIGNING_SECRET: clean(process.env.CLERK_WEBHOOK_SIGNING_SECRET),
@@ -259,6 +268,8 @@ export const env = parsed.success
       FANAR_API_KEY: undefined as string | undefined,
       FANAR_MODEL: 'QCRI/Fanar-1-9B-Instruct',
       FANAR_TIMEOUT_MS: 90_000,
+      SOUQY_STUDIO_FANAR_ENABLED: false,
+      FANAR_ESTIMATED_USD_PER_1K_TOKENS: 0.0002,
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: undefined as string | undefined,
       CLERK_SECRET_KEY: undefined as string | undefined,
       CLERK_WEBHOOK_SIGNING_SECRET: undefined as string | undefined,
