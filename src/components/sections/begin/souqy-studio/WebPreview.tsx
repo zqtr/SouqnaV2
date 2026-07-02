@@ -2,6 +2,7 @@
 
 import { ArrowUp, Maximize2, RefreshCw, Sparkles } from 'lucide-react';
 import { MetalFx } from 'metal-fx';
+import { BorderBeam } from 'border-beam';
 import {
   PromptInput,
   PromptInputAction,
@@ -101,47 +102,56 @@ export function WebPreview({
           </div>
           <small>{copy.live}</small>
         </div>
-        <div className="sqs-composer-frame">
-          <PromptInput
-            className="sqs-composer"
-            value={prompt}
-            onValueChange={onPromptChange}
-            maxHeight={92}
-            isLoading={isDesigning}
-            onSubmit={onSubmit}
-            disabled={isDesigning}
-          >
-            <PromptInputTextarea placeholder={copy.webPromptPlaceholder} dir="auto" />
-            <div className="sqs-composer-toolbar">
-              <PromptInputActions>
-                <PromptInputAction tooltip={copy.webDesign}>
-                  <MetalFx
-                    variant="circle"
-                    preset="chromatic"
-                    theme="dark"
-                    strength={isDesigning ? 0.55 : 0.88}
-                    borderRadius={999}
-                    ringCssPx={1.4}
-                    normalizeHostStyles={false}
-                    className="sqs-submit-metal"
-                  >
-                    <button type="submit" disabled={isDesigning} aria-label={copy.webDesign}>
-                      {isDesigning ? <Sparkles size={15} /> : <ArrowUp size={17} />}
-                    </button>
-                  </MetalFx>
-                </PromptInputAction>
-              </PromptInputActions>
-            </div>
-            <div
-              className={isDesigning ? 'sqs-deck-status is-generating' : 'sqs-deck-status'}
-              role="status"
-              aria-live="polite"
+        <BorderBeam
+          size="pulse-inner"
+          theme="dark"
+          duration={2.3}
+          strength={0.85}
+          active={isDesigning}
+          className="sqs-composer-beam"
+        >
+          <div className="sqs-composer-frame">
+            <PromptInput
+              className="sqs-composer"
+              value={prompt}
+              onValueChange={onPromptChange}
+              maxHeight={92}
+              isLoading={isDesigning}
+              onSubmit={onSubmit}
+              disabled={isDesigning}
             >
-              <span className="sqs-status-dot" aria-hidden />
-              <span>{isDesigning ? copy.webDesigning : statusMessage || copy.webPromptHint}</span>
-            </div>
-          </PromptInput>
-        </div>
+              <PromptInputTextarea placeholder={copy.webPromptPlaceholder} dir="auto" />
+              <div className="sqs-composer-toolbar">
+                <PromptInputActions>
+                  <PromptInputAction tooltip={copy.webDesign}>
+                    <MetalFx
+                      variant="circle"
+                      preset="chromatic"
+                      theme="dark"
+                      strength={isDesigning ? 0.55 : 0.88}
+                      borderRadius={999}
+                      ringCssPx={1.4}
+                      normalizeHostStyles={false}
+                      className="sqs-submit-metal"
+                    >
+                      <button type="submit" disabled={isDesigning} aria-label={copy.webDesign}>
+                        {isDesigning ? <Sparkles size={15} /> : <ArrowUp size={17} />}
+                      </button>
+                    </MetalFx>
+                  </PromptInputAction>
+                </PromptInputActions>
+              </div>
+              <div
+                className={isDesigning ? 'sqs-deck-status is-generating' : 'sqs-deck-status'}
+                role="status"
+                aria-live="polite"
+              >
+                <span className="sqs-status-dot" aria-hidden />
+                <span>{isDesigning ? copy.webDesigning : statusMessage || copy.webPromptHint}</span>
+              </div>
+            </PromptInput>
+          </div>
+        </BorderBeam>
       </form>
     </section>
   );
