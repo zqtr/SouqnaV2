@@ -60,9 +60,7 @@ const TONE_BADGE_STYLE: Record<MetricTone, CSSProperties> = {
 export function CommerceMetricGrid({ children }: { children: ReactNode }) {
   return (
     <Reveal y={14}>
-      <section className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {children}
-      </section>
+      <section className="souqna-metric-grid grid items-stretch gap-4">{children}</section>
     </Reveal>
   );
 }
@@ -91,7 +89,7 @@ export function CommerceMetricCard({
   const accent = TONE_ACCENT[tone];
   return (
     <Card
-      className="souqna-metric-card group relative flex h-[224px] overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/18 hover:shadow-[var(--shadow-card)]"
+      className="souqna-metric-card group relative flex min-h-[282px] overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/18 hover:shadow-[var(--shadow-card)]"
       style={{
         background:
           'linear-gradient(180deg, color-mix(in srgb, var(--card) 94%, var(--surface-overlay)) 0%, var(--card) 100%)',
@@ -110,7 +108,7 @@ export function CommerceMetricCard({
             >
               <Icon className="size-5" aria-hidden />
             </span>
-            <CardTitle className="min-w-0 truncate font-mono text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <CardTitle className="min-w-0 font-mono text-xs font-semibold uppercase leading-4 tracking-[0.18em] text-muted-foreground">
               {label}
             </CardTitle>
           </div>
@@ -143,37 +141,36 @@ export function CommerceMetricCard({
           ) : null}
         </div>
       </CardHeader>
-      <CardContent className="flex flex-1 px-5 pb-5">
-        <div className="flex w-full items-end justify-between gap-5">
-          <div className="min-w-0 self-stretch">
-            <div className="text-[2.45rem] font-semibold leading-[1.05] tracking-tight text-foreground tabular-nums">
-              {value}
-            </div>
-            <CardDescription
-              className="mt-2 text-base leading-5"
-              style={{
-                minHeight: '2.5rem',
-                maxHeight: '2.5rem',
-                overflowWrap: 'normal',
-                wordBreak: 'normal',
-                hyphens: 'none',
-              }}
-            >
-              {hint ?? ''}
-            </CardDescription>
+      <CardContent className="grid flex-1 content-end gap-3 px-5 pb-5">
+        <div className="min-w-0">
+          <div className="text-[2.35rem] font-semibold leading-[1.05] tracking-tight text-foreground tabular-nums">
+            {value}
           </div>
-          {trend && trend.length > 0 ? (
-            <div className="h-16 w-36 shrink-0 opacity-75 transition-opacity group-hover:opacity-95">
-              <Sparkline
-                data={trend}
-                width={144}
-                height={64}
-                accent={accent}
-                ariaLabel={`${label} ${chart === 'bar' ? 'smooth ' : ''}trend`}
-              />
-            </div>
-          ) : null}
+          <CardDescription
+            className="mt-2 line-clamp-2 text-base leading-5"
+            style={{
+              minHeight: '2.5rem',
+              overflowWrap: 'normal',
+              wordBreak: 'normal',
+              hyphens: 'none',
+            }}
+          >
+            {hint ?? ''}
+          </CardDescription>
         </div>
+        {trend && trend.length > 0 ? (
+          <div className="pointer-events-none h-[74px] w-full overflow-hidden opacity-[0.55] transition-opacity group-hover:opacity-[0.78]">
+            <Sparkline
+              data={trend}
+              width={360}
+              height={74}
+              accent={accent}
+              fluid
+              variant="ribbon"
+              ariaLabel={`${label} ${chart === 'bar' ? 'smooth ' : ''}trend`}
+            />
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

@@ -483,7 +483,7 @@ export async function getOrderStatsForStorefront(slug: string): Promise<Storefro
     revenueQar: row?.revenue_qar ?? 0,
     pendingOrders: row?.pending_orders ?? 0,
     unpaidOrders: row?.unpaid_orders ?? 0,
-  averageOrderQar: row?.average_order_qar ?? 0,
+    averageOrderQar: row?.average_order_qar ?? 0,
   };
 }
 
@@ -578,11 +578,14 @@ export type RevenueSeriesPoint = {
   label: string;
   revenueQar: number;
   ordersCount: number;
+  paidOrders: number;
+  unpaidOrders: number;
 };
 
 export async function revenueSeriesForStorefront(
   slug: string,
   grain: RevenueGrain,
+  offsetDays = 0,
 ): Promise<RevenueSeriesPoint[]> {
   noStore();
   const bucket =
@@ -593,25 +596,45 @@ export async function revenueSeriesForStorefront(
         : grain === 'week'
           ? db()`date_trunc('week', created_at)`
           : db()`date_trunc('day', created_at)`;
-  const lookbackDays = grain === 'year' ? 365 * 5 : grain === 'month' ? 365 : grain === 'week' ? 84 : 30;
-  const format = grain === 'year' ? 'YYYY' : grain === 'month' ? 'Mon YYYY' : grain === 'week' ? '"W"IW YYYY' : 'YYYY-MM-DD';
+  const lookbackDays =
+    grain === 'year' ? 365 * 5 : grain === 'month' ? 365 : grain === 'week' ? 84 : 30;
+  const windowDays = lookbackDays + offsetDays;
+  const format =
+    grain === 'year'
+      ? 'YYYY'
+      : grain === 'month'
+        ? 'Mon YYYY'
+        : grain === 'week'
+          ? '"W"IW YYYY'
+          : 'YYYY-MM-DD';
 
   const rows = (await db()`
     select
       to_char(${bucket}, ${format}) as label,
       coalesce(sum(total_qar) filter (where payment_status = 'marked_paid'), 0)::int as revenue_qar,
-      count(*) filter (where order_status <> 'cancelled')::int as orders_count
+      count(*) filter (where order_status <> 'cancelled')::int as orders_count,
+      count(*) filter (where payment_status = 'marked_paid')::int as paid_orders,
+      count(*) filter (where payment_status = 'unpaid')::int as unpaid_orders
     from checkout_orders
     where storefront_slug = ${slug}
-      and created_at >= now() - (${lookbackDays}::int * interval '1 day')
+      and created_at >= now() - (${windowDays}::int * interval '1 day')
+      and (${offsetDays}::int = 0 or created_at < now() - (${offsetDays}::int * interval '1 day'))
     group by ${bucket}
     order by ${bucket}
-  `) as unknown as Array<{ label: string; revenue_qar: number; orders_count: number }>;
+  `) as unknown as Array<{
+    label: string;
+    revenue_qar: number;
+    orders_count: number;
+    paid_orders: number;
+    unpaid_orders: number;
+  }>;
 
   return rows.map((row) => ({
     label: row.label,
     revenueQar: Number(row.revenue_qar ?? 0),
     ordersCount: Number(row.orders_count ?? 0),
+    paidOrders: Number(row.paid_orders ?? 0),
+    unpaidOrders: Number(row.unpaid_orders ?? 0),
   }));
 }
 

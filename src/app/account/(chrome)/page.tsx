@@ -8,13 +8,8 @@ import {
   Bell,
   CheckCircle2,
   Clock3,
-  CreditCard,
   Eye,
-  Gauge,
   MousePointerClick,
-  ReceiptText,
-  ShoppingBag,
-  ShoppingCart,
   type LucideIcon,
   Users,
 } from 'lucide-react';
@@ -39,16 +34,19 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { EmptyState, PageHeader, StatusBadge, Surface } from '@/components/admin/primitives';
-import { CommerceMetricCard, CommerceMetricGrid } from '@/components/admin/commerce-metrics';
+import {
+  CommerceMetricChartGroup,
+  type CommerceChartMetric,
+} from '@/components/admin/CommerceMetricChartGroup';
 import { InteractiveDitheredTrendChart } from '@/components/admin/charts/InteractiveDitheredTrendChart';
 import { adminPhrase } from '@/components/admin/adminLocale';
 import { getAdminUserId } from '@/lib/adminAuth';
 import { getStorefrontsForUser } from '@/lib/brief';
 import { getAllProducts, topProductsByOrders } from '@/lib/products';
-import { countCustomers } from '@/lib/customers';
 import {
   dailyOrdersSince,
   dailyEventSeriesSince,
+  dailyVisitorsSince,
   eventCountSince,
   realtimeAnalyticsSnapshot,
   topReferrersSince,
@@ -59,8 +57,14 @@ import { listInstalledApps } from '@/lib/apps/installed';
 import {
   getOrderStatsForStorefront,
   listOrdersForStorefront,
+  revenueSeriesForStorefront,
   type Order,
+  type RevenueSeriesPoint,
 } from '@/lib/checkout-orders';
+import {
+  evaluateSetupCompletion,
+  type AccountSetupTask,
+} from '@/lib/accountSetupCompletion';
 
 type StorefrontForHome = Awaited<ReturnType<typeof getStorefrontsForUser>>[number];
 type HomeLabels = (typeof HOME_STRINGS)[Locale];
@@ -75,6 +79,17 @@ type DashboardMetricSnapshot = {
   pageViews30: number;
   carts30: number;
   productViews30: number;
+  revenueTrend: number[];
+  paidOrderTrend: number[];
+  unpaidOrderTrend: number[];
+  aovTrend: number[];
+  conversionTrend: number[];
+  previousRevenueTrend: number[];
+  previousPaidOrderTrend: number[];
+  previousUnpaidOrderTrend: number[];
+  previousAovTrend: number[];
+  previousConversionTrend: number[];
+  previousCartAddTrend: number[];
   ordersTrend: number[];
   cartAddTrend: number[];
   pageViewTrend: number[];
@@ -130,7 +145,6 @@ export default async function AccountHomePage({
 
   const [
     products,
-    customersTotal,
     ordersPage,
     orderStats,
     installedApps,
@@ -138,8 +152,13 @@ export default async function AccountHomePage({
     visitors30,
     pageViews30,
     carts30,
+    revenueSeries,
+    previousRevenueSeries,
     ordersTrend,
+    visitorTrend,
+    previousVisitorTrend,
     cartAddTrend,
+    previousCartAddTrend,
     pageViewTrend,
     productViewTrend,
     productViews30,
@@ -148,7 +167,6 @@ export default async function AccountHomePage({
     topProductsRows,
   ] = await Promise.all([
     getAllProducts(storefront.slug),
-    countCustomers(storefront.slug),
     listOrdersForStorefront(storefront.slug, { limit: 6 }),
     getOrderStatsForStorefront(storefront.slug),
     listInstalledApps(storefront.slug),
@@ -156,8 +174,13 @@ export default async function AccountHomePage({
     uniqueVisitorsSince(storefront.slug, 30),
     eventCountSince(storefront.slug, 'page_view', 30),
     eventCountSince(storefront.slug, 'cart_add', 30),
+    revenueSeriesForStorefront(storefront.slug, 'day').catch(() => [] as RevenueSeriesPoint[]),
+    revenueSeriesForStorefront(storefront.slug, 'day', 30).catch(() => [] as RevenueSeriesPoint[]),
     dailyOrdersSince(storefront.slug, 30).catch(() => [] as number[]),
+    dailyVisitorsSince(storefront.slug, 30).catch(() => [] as number[]),
+    dailyVisitorsSince(storefront.slug, 30, 30).catch(() => [] as number[]),
     dailyEventSeriesSince(storefront.slug, 'cart_add', 30).catch(() => [] as number[]),
+    dailyEventSeriesSince(storefront.slug, 'cart_add', 30, 30).catch(() => [] as number[]),
     dailyEventSeriesSince(storefront.slug, 'page_view', 30).catch(() => [] as number[]),
     dailyEventSeriesSince(storefront.slug, 'product_view', 30).catch(() => [] as number[]),
     eventCountSince(storefront.slug, 'product_view', 30),
@@ -165,31 +188,38 @@ export default async function AccountHomePage({
     realtimeAnalyticsSnapshot(storefront.slug).catch(() => ({ liveVisitors: 0, activeCarts: 0 })),
     topProductsByOrders(storefront.slug, 30, 5).catch(() => []),
   ]);
-  const setupItems = [
-    {
-      label: t.setupAddProducts,
-      done: products.length > 0,
-      href: `/account/products${storeParam}`,
-    },
-    {
-      label: t.setupConfigureCheckout,
-      done: storefront.checkout.paymentMethods.length > 0,
-      href: `/account/settings/checkout${storeParam}`,
-    },
-    {
-      label: t.setupPublishStorefront,
-      done: storefront.isPublished,
-      href: `/account/builder${storeParam}`,
-    },
-    {
-      label: t.setupInstallApps,
-      done: installedApps.length > 0,
-      href: `/account/apps${storeParam}`,
-    },
-  ];
-  const setupProgress = Math.round(
-    (setupItems.filter((item) => item.done).length / setupItems.length) * 100,
+  const setup = evaluateSetupCompletion({
+    storefront,
+    products,
+    productsCount: products.length,
+    installedAppIds: installedApps.map((app) => app.appId),
+  });
+  const setupItems = setup.tasks;
+  const setupProgress = setup.pct;
+  const filledRevenueSeries = fillRevenueSeries(revenueSeries, 30);
+  const previousFilledRevenueSeries = fillRevenueSeries(previousRevenueSeries, 30, 30);
+  const dailyRevenue = filledRevenueSeries.map((point) => point.revenueQar);
+  const dailyPaidOrders = filledRevenueSeries.map((point) => point.paidOrders);
+  const dailyUnpaidOrders = filledRevenueSeries.map((point) => point.unpaidOrders);
+  const previousDailyRevenue = previousFilledRevenueSeries.map((point) => point.revenueQar);
+  const previousDailyPaidOrders = previousFilledRevenueSeries.map((point) => point.paidOrders);
+  const previousDailyUnpaidOrders = previousFilledRevenueSeries.map((point) => point.unpaidOrders);
+  const previousOrdersTrend = previousFilledRevenueSeries.map((point) => point.ordersCount);
+  const revenueTrend = cumulativeTrend(dailyRevenue);
+  const paidOrderTrend = cumulativeTrend(dailyPaidOrders);
+  const unpaidOrderTrend = cumulativeTrend(dailyUnpaidOrders);
+  const aovTrend = cumulativeRatioTrend(dailyRevenue, dailyPaidOrders);
+  const conversionTrend = cumulativeRatioTrend(ordersTrend, visitorTrend, 100);
+  const previousRevenueTrend = cumulativeTrend(previousDailyRevenue);
+  const previousPaidOrderTrend = cumulativeTrend(previousDailyPaidOrders);
+  const previousUnpaidOrderTrend = cumulativeTrend(previousDailyUnpaidOrders);
+  const previousAovTrend = cumulativeRatioTrend(previousDailyRevenue, previousDailyPaidOrders);
+  const previousConversionTrend = cumulativeRatioTrend(
+    previousOrdersTrend,
+    previousVisitorTrend,
+    100,
   );
+  const previousCartAddSeries = cumulativeTrend(previousCartAddTrend);
   const dashboardMetrics = getDashboardMetricSnapshot({
     storefrontSlug: storefront.slug,
     orderStats,
@@ -197,8 +227,19 @@ export default async function AccountHomePage({
     pageViews30,
     carts30,
     productViews30,
+    revenueTrend,
+    paidOrderTrend,
+    unpaidOrderTrend,
+    aovTrend,
+    conversionTrend,
+    previousRevenueTrend,
+    previousPaidOrderTrend,
+    previousUnpaidOrderTrend,
+    previousAovTrend,
+    previousConversionTrend,
+    previousCartAddTrend: previousCartAddSeries,
     ordersTrend,
-    cartAddTrend,
+    cartAddTrend: cumulativeTrend(cartAddTrend),
     pageViewTrend,
     productViewTrend,
     topReferrers,
@@ -211,71 +252,106 @@ export default async function AccountHomePage({
       ? (dashboardStats.totalOrders / dashboardMetrics.visitors30) * 100
       : 0;
   const paidOrderShare =
-    dashboardStats.totalOrders > 0 ? (dashboardStats.paidOrders / dashboardStats.totalOrders) * 100 : 0;
+    dashboardStats.totalOrders > 0
+      ? (dashboardStats.paidOrders / dashboardStats.totalOrders) * 100
+      : 0;
+  const attentionOrders = dashboardStats.unpaidOrders + dashboardStats.pendingOrders;
+  const productsNeedingReview = products.filter(
+    (product) =>
+      product.status !== 'active' ||
+      !product.imageUrl ||
+      product.priceQar == null ||
+      !product.category,
+  ).length;
 
   const revenueDisplay = formatCurrency(dashboardStats.revenueQar, storefront.checkout.currency);
+  const commerceMetrics: CommerceChartMetric[] = [
+    {
+      id: 'revenue',
+      label: t.revenue,
+      value: revenueDisplay,
+      hint: t.paidOrdersHint(dashboardStats.paidOrders),
+      badge: t.lastThirtyDays,
+      tone: 'success',
+      format: 'currency',
+      series: dashboardMetrics.revenueTrend,
+      previousSeries: dashboardMetrics.previousRevenueTrend,
+      icon: 'receipt',
+    },
+    {
+      id: 'conversion',
+      label: t.conversionRate,
+      value: formatPercent(conversionRate, locale),
+      hint: t.ordersFromVisitors(dashboardStats.totalOrders, dashboardMetrics.visitors30),
+      badge: t.checkoutSignal,
+      tone: 'info',
+      format: 'percent',
+      series: dashboardMetrics.conversionTrend,
+      previousSeries: dashboardMetrics.previousConversionTrend,
+      icon: 'gauge',
+    },
+    {
+      id: 'aov',
+      label: t.aov,
+      value: formatCurrency(dashboardStats.averageOrderQar, storefront.checkout.currency),
+      hint: t.aovHint,
+      badge: t.average,
+      tone: 'success',
+      format: 'currency',
+      series: dashboardMetrics.aovTrend,
+      previousSeries: dashboardMetrics.previousAovTrend,
+      icon: 'bag',
+    },
+    {
+      id: 'paid-orders',
+      label: t.paidOrders,
+      value: formatNumber(dashboardStats.paidOrders, locale),
+      hint: `${formatPercent(paidOrderShare, locale)} ${t.ofOrdersPaid}`,
+      badge: t.settled,
+      tone: dashboardStats.paidOrders > 0 ? 'success' : 'neutral',
+      format: 'number',
+      series: dashboardMetrics.paidOrderTrend,
+      previousSeries: dashboardMetrics.previousPaidOrderTrend,
+      icon: 'card',
+    },
+    {
+      id: 'unpaid',
+      label: t.unpaid,
+      value: formatNumber(dashboardStats.unpaidOrders, locale),
+      hint: t.unpaidHint,
+      badge: dashboardStats.unpaidOrders > 0 ? t.needsAction : t.clear,
+      tone: dashboardStats.unpaidOrders > 0 ? 'critical' : 'neutral',
+      format: 'number',
+      series: dashboardMetrics.unpaidOrderTrend,
+      previousSeries: dashboardMetrics.previousUnpaidOrderTrend,
+      icon: 'alert',
+    },
+    {
+      id: 'cart-adds',
+      label: t.cartAdds,
+      value: formatNumber(dashboardMetrics.carts30, locale),
+      hint: t.cartAddsHint,
+      badge: t.intent,
+      tone: dashboardMetrics.carts30 > 0 ? 'info' : 'neutral',
+      format: 'number',
+      series: dashboardMetrics.cartAddTrend,
+      previousSeries: dashboardMetrics.previousCartAddTrend,
+      icon: 'cart',
+    },
+  ];
   const metricsSlot = (
-    <CommerceMetricGrid>
-      <CommerceMetricCard
-        label={t.revenue}
-        value={revenueDisplay}
-        hint={t.paidOrdersHint(dashboardStats.paidOrders)}
-        badge={t.lastThirtyDays}
-        tone="success"
-        trend={dashboardMetrics.ordersTrend}
-        chart="bar"
-        icon={ReceiptText}
-        tooltip={`${formatNumber(dashboardMetrics.pageViews30, locale)} ${t.pageViewsHint}`}
-      />
-      <CommerceMetricCard
-        label={t.conversionRate}
-        value={formatPercent(conversionRate, locale)}
-        hint={t.ordersFromVisitors(dashboardStats.totalOrders, dashboardMetrics.visitors30)}
-        badge={t.checkoutSignal}
-        tone="info"
-        trend={dashboardMetrics.ordersTrend}
-        icon={Gauge}
-        tooltip={t.conversionTooltip}
-      />
-      <CommerceMetricCard
-        label={t.aov}
-        value={formatCurrency(dashboardStats.averageOrderQar, storefront.checkout.currency)}
-        hint={t.aovHint}
-        badge={t.average}
-        tone="success"
-        trend={dashboardMetrics.ordersTrend}
-        chart="bar"
-        icon={ShoppingBag}
-      />
-      <CommerceMetricCard
-        label={t.paidOrders}
-        value={formatNumber(dashboardStats.paidOrders, locale)}
-        hint={`${formatPercent(paidOrderShare, locale)} ${t.ofOrdersPaid}`}
-        badge={t.settled}
-        tone={dashboardStats.paidOrders > 0 ? 'success' : 'neutral'}
-        trend={dashboardMetrics.ordersTrend}
-        chart="bar"
-        icon={CreditCard}
-      />
-      <CommerceMetricCard
-        label={t.unpaid}
-        value={formatNumber(dashboardStats.unpaidOrders, locale)}
-        hint={t.unpaidHint}
-        badge={dashboardStats.unpaidOrders > 0 ? t.needsAction : t.clear}
-        tone={dashboardStats.unpaidOrders > 0 ? 'critical' : 'neutral'}
-        icon={AlertCircle}
-      />
-      <CommerceMetricCard
-        label={t.cartAdds}
-        value={formatNumber(dashboardMetrics.carts30, locale)}
-        hint={t.cartAddsHint}
-        badge={t.intent}
-        tone={dashboardMetrics.carts30 > 0 ? 'info' : 'neutral'}
-        trend={dashboardMetrics.cartAddTrend}
-        chart="bar"
-        icon={ShoppingCart}
-      />
-    </CommerceMetricGrid>
+    <CommerceMetricChartGroup
+      locale={locale}
+      currency={storefront.checkout.currency}
+      title={t.metricGroupTitle}
+      subtitle={t.metricGroupSubtitle}
+      currentLabel={t.currentPeriod}
+      previousLabel={t.previousPeriod}
+      lineLabel={t.lineView}
+      ditherLabel={t.ditherView}
+      selectLabel={t.selectMetric}
+      metrics={commerceMetrics}
+    />
   );
 
   return (
@@ -283,44 +359,41 @@ export default async function AccountHomePage({
       <AccountHomeHero
         storefront={storefront}
         setupProgress={setupProgress}
-        productsCount={products.length}
-        customersTotal={customersTotal}
-        ordersTotal={dashboardStats.totalOrders}
+        attentionOrders={attentionOrders}
+        productsNeedingReview={productsNeedingReview}
         revenue={revenueDisplay}
         builderHref={`/account/builder${storeParam}`}
+        ordersHref={`/account/orders${storeParam}`}
+        productsHref={`/account/products${storeParam}`}
         souqyPortalHref={souqyPortalHref}
         labels={t}
         locale={locale}
       />
       <div className="souqna-dashboard5-home" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
         {metricsSlot}
-        <div className="souqna-dashboard5-primary-grid">
-          <Dashboard5CommerceFlowCard
-            title={t.ordersTrendTitle}
-            subtitle={`${formatNumber(
-              dashboardMetrics.ordersTrend.reduce((a, b) => a + b, 0),
-              locale,
-            )} ${t.ordersTrendSuffix}`}
-            ordersTrend={dashboardMetrics.ordersTrend}
-            cartAddTrend={dashboardMetrics.cartAddTrend}
-            ordersLabel={t.orders}
-            cartAddsLabel={t.cartAdds}
-            thirtyDaysAgo={t.thirtyDaysAgo}
-            today={t.today}
-            windowLabel={t.lastThirtyDays}
-            ariaLabel={t.ordersBarAria}
+        <Dashboard5CommerceFlowCard
+          title={t.ordersTrendTitle}
+          subtitle={`${formatNumber(
+            dashboardMetrics.ordersTrend.reduce((a, b) => a + b, 0),
+            locale,
+          )} ${t.ordersTrendSuffix}`}
+          ordersTrend={dashboardMetrics.ordersTrend}
+          cartAddTrend={dashboardMetrics.cartAddTrend}
+          ordersLabel={t.orders}
+          cartAddsLabel={t.cartAdds}
+          thirtyDaysAgo={t.thirtyDaysAgo}
+          today={t.today}
+          windowLabel={t.lastThirtyDays}
+          ariaLabel={t.ordersBarAria}
+        />
+        <div className="souqna-dashboard5-support-grid">
+          <Dashboard5OrderMixCard stats={dashboardStats} labels={t} locale={locale} />
+          <Dashboard5SetupCard
+            setupProgress={setupProgress}
+            setupItems={setupItems}
+            labels={t}
+            locale={locale}
           />
-          <div className="souqna-dashboard5-side-stack">
-            <Dashboard5OrderMixCard stats={dashboardStats} labels={t} locale={locale} />
-            <Dashboard5SetupCard
-              setupProgress={setupProgress}
-              setupItems={setupItems}
-              orderStats={dashboardStats}
-              carts30={dashboardMetrics.carts30}
-              currency={storefront.checkout.currency}
-              labels={t}
-            />
-          </div>
         </div>
         <Dashboard5WebsiteAnalyticsCard
           pageViews={dashboardMetrics.pageViews30}
@@ -335,18 +408,20 @@ export default async function AccountHomePage({
           locale={locale}
         />
         <div className="souqna-dashboard5-secondary-grid">
-          <Dashboard5TopProductsCard
-            rows={topProductsRows}
-            storeParam={storeParam}
-            currency={storefront.checkout.currency}
-            labels={t}
-          />
-          <Dashboard5RecentOrdersCard
-            orders={ordersPage.orders}
-            storeParam={storeParam}
-            labels={t}
-            phrase={p}
-          />
+          <div className="souqna-dashboard5-secondary-stack">
+            <Dashboard5TopProductsCard
+              rows={topProductsRows}
+              storeParam={storeParam}
+              currency={storefront.checkout.currency}
+              labels={t}
+            />
+            <Dashboard5RecentOrdersCard
+              orders={ordersPage.orders}
+              storeParam={storeParam}
+              labels={t}
+              phrase={p}
+            />
+          </div>
           <Dashboard5ActivityCard
             entries={activity}
             href={`/account/settings/activity-log${storeParam}`}
@@ -362,16 +437,11 @@ export default async function AccountHomePage({
           margin-bottom: 32px;
         }
 
-        .souqna-dashboard5-primary-grid {
+        .souqna-dashboard5-support-grid {
           display: grid;
-          grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.82fr);
+          grid-template-columns: minmax(0, 1fr);
           gap: 18px;
           align-items: start;
-        }
-
-        .souqna-dashboard5-side-stack {
-          display: grid;
-          gap: 18px;
         }
 
         .souqna-dashboard5-website-grid {
@@ -383,13 +453,18 @@ export default async function AccountHomePage({
 
         .souqna-dashboard5-secondary-grid {
           display: grid;
-          grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.25fr) minmax(280px, 0.8fr);
+          grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.78fr);
+          gap: 18px;
+          align-items: start;
+        }
+
+        .souqna-dashboard5-secondary-stack {
+          display: grid;
           gap: 18px;
           align-items: start;
         }
 
         @media (max-width: 1180px) {
-          .souqna-dashboard5-primary-grid,
           .souqna-dashboard5-website-grid,
           .souqna-dashboard5-secondary-grid {
             grid-template-columns: 1fr !important;
@@ -404,26 +479,30 @@ export default async function AccountHomePage({
 function AccountHomeHero({
   storefront,
   setupProgress,
-  productsCount,
-  customersTotal,
-  ordersTotal,
+  attentionOrders,
+  productsNeedingReview,
   revenue,
   builderHref,
+  ordersHref,
+  productsHref,
   souqyPortalHref,
   labels,
   locale,
 }: {
   storefront: StorefrontForHome;
   setupProgress: number;
-  productsCount: number;
-  customersTotal: number;
-  ordersTotal: number;
+  attentionOrders: number;
+  productsNeedingReview: number;
   revenue: string;
   builderHref: string;
+  ordersHref: string;
+  productsHref: string;
   souqyPortalHref: string;
   labels: (typeof HOME_STRINGS)[Locale];
   locale: Locale;
 }) {
+  const attentionDisplay = formatNumber(attentionOrders);
+  const reviewDisplay = formatNumber(productsNeedingReview);
   return (
     <Surface
       className="souqna-dashboard-dither"
@@ -440,7 +519,7 @@ function AccountHomeHero({
         dir={locale === 'ar' ? 'rtl' : 'ltr'}
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) auto',
+          gridTemplateColumns: 'minmax(0, 1fr)',
           gap: 20,
           alignItems: 'start',
           padding: '24px clamp(18px, 3vw, 28px)',
@@ -469,6 +548,21 @@ function AccountHomeHero({
             >
               {labels.workspace}
             </span>
+            <span
+              dir="auto"
+              style={{
+                minWidth: 0,
+                color: 'var(--ink-faint)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10.5,
+                fontWeight: 600,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                unicodeBidi: 'plaintext',
+              }}
+            >
+              {storefront.businessName}
+            </span>
             <StatusBadge tone={storefront.isPublished ? 'info' : 'neutral'}>
               {storefront.isPublished ? labels.live : labels.draft}
             </StatusBadge>
@@ -480,10 +574,10 @@ function AccountHomeHero({
             dir="auto"
             style={{
               margin: 0,
-              maxWidth: 780,
+              maxWidth: 920,
               color: 'var(--ink-strong)',
               fontFamily: 'var(--font-sans)',
-              fontSize: 'clamp(28px, 4vw, 44px)',
+              fontSize: 'clamp(28px, 3.4vw, 42px)',
               fontWeight: 650,
               lineHeight: 1.05,
               letterSpacing: 0,
@@ -491,7 +585,7 @@ function AccountHomeHero({
               unicodeBidi: 'plaintext',
             }}
           >
-            {storefront.businessName}
+            {labels.heroActionSummary(revenue, attentionDisplay, reviewDisplay)}
           </h1>
           <p
             style={{
@@ -528,29 +622,94 @@ function AccountHomeHero({
           </div>
         </div>
 
-        <dl
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, minmax(120px, 1fr))',
-            gap: 10,
-            minWidth: 280,
-            margin: 0,
-          }}
-          className="souqna-account-hero-signals"
-        >
-          <Signal label={labels.orders} value={ordersTotal} />
-          <Signal label={labels.products} value={productsCount} />
-          <Signal label={labels.customers} value={customersTotal} />
-          <Signal label={labels.revenue} value={revenue} />
-        </dl>
+        <div className="souqna-account-action-grid" aria-label={labels.heroActions}>
+          <ActionSignal
+            label={labels.revenueAction}
+            value={revenue}
+            body={labels.revenueActionHint}
+            href={`/account/analytics?store=${encodeURIComponent(storefront.slug)}`}
+          />
+          <ActionSignal
+            label={labels.ordersAttention}
+            value={attentionDisplay}
+            body={labels.ordersAttentionHint}
+            href={ordersHref}
+          />
+          <ActionSignal
+            label={labels.productsReview}
+            value={reviewDisplay}
+            body={labels.productsReviewHint}
+            href={productsHref}
+          />
+        </div>
       </div>
       <style>{`
+        .souqna-account-action-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .souqna-account-action-card {
+          display: grid;
+          min-height: 112px;
+          gap: 8px;
+          align-content: space-between;
+          border: 1px solid var(--dash-rule);
+          border-radius: var(--dash-radius);
+          background: color-mix(in srgb, var(--dash-panel-strong) 82%, transparent);
+          color: var(--ink-strong);
+          padding: 14px;
+          text-decoration: none;
+          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--dash-panel-strong) 58%, transparent);
+          transition:
+            border-color 160ms ease,
+            background-color 160ms ease,
+            transform 160ms ease;
+        }
+
+        .souqna-account-action-card:hover {
+          transform: translateY(-1px);
+          border-color: color-mix(in srgb, var(--dash-important) 42%, transparent);
+          background: color-mix(in srgb, var(--dash-important) 10%, var(--dash-panel-strong));
+        }
+
+        .souqna-account-action-label {
+          display: flex;
+          min-width: 0;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          color: var(--ink-muted);
+          font-family: var(--font-mono);
+          font-size: 10.5px;
+          font-weight: 650;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+        }
+
+        .souqna-account-action-value {
+          color: var(--ink-strong);
+          font-size: 22px;
+          font-weight: 700;
+          line-height: 1;
+          tab-size: 4;
+        }
+
+        .souqna-account-action-body {
+          margin: 0;
+          color: var(--ink-muted);
+          font-size: 12.5px;
+          line-height: 1.45;
+        }
+
         @media (max-width: 820px) {
           .souqna-account-hero {
             grid-template-columns: 1fr !important;
           }
-          .souqna-account-hero-signals {
-            min-width: 0 !important;
+
+          .souqna-account-action-grid {
+            grid-template-columns: 1fr;
           }
         }
       `}</style>
@@ -582,7 +741,7 @@ function Dashboard5CommerceFlowCard({
   ariaLabel: string;
 }) {
   return (
-    <Card className="souqna-dashboard-card overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
+    <Card className="souqna-dashboard-card h-fit self-start overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
       <CardHeader className="border-b border-border/80 px-5 py-4">
         <div>
           <CardTitle className="text-base">{title}</CardTitle>
@@ -735,8 +894,7 @@ function Dashboard5WebsiteAnalyticsCard({
               <ol className="grid gap-3">
                 {referrers.map((referrer) => {
                   const pct = Math.max(4, Math.round((referrer.count / maxReferrerCount) * 100));
-                  const host =
-                    referrer.host === 'direct' ? labels.directTraffic : referrer.host;
+                  const host = referrer.host === 'direct' ? labels.directTraffic : referrer.host;
                   return (
                     <li key={referrer.host} className="grid gap-2">
                       <div className="flex items-center justify-between gap-3 text-sm">
@@ -875,24 +1033,25 @@ function PaidShareRing({ paid, total, locale }: { paid: number; total: number; l
 function Dashboard5SetupCard({
   setupProgress,
   setupItems,
-  orderStats,
-  carts30,
-  currency,
   labels,
+  locale,
 }: {
   setupProgress: number;
-  setupItems: Array<{ label: string; done: boolean; href: string }>;
-  orderStats: HomeOrderStats;
-  carts30: number;
-  currency: string;
+  setupItems: AccountSetupTask[];
   labels: HomeLabels;
+  locale: Locale;
 }) {
+  const completed = setupItems.filter((item) => item.done).length;
+  const nextItem = setupItems.find((item) => !item.done) ?? null;
+
   return (
     <Card className="souqna-dashboard-card overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
       <CardHeader className="border-b border-border/80 px-5 py-4">
         <div>
           <CardTitle className="text-base">{labels.setupTitle}</CardTitle>
-          <CardDescription className="mt-1">{labels.setupProgress(setupProgress)}</CardDescription>
+          <CardDescription className="mt-1">
+            {labels.setupCompleted(completed, setupItems.length)}
+          </CardDescription>
         </div>
         <CardAction>
           <StatusBadge tone={setupProgress === 100 ? 'info' : 'warning'}>
@@ -900,28 +1059,74 @@ function Dashboard5SetupCard({
           </StatusBadge>
         </CardAction>
       </CardHeader>
-      <CardContent className="px-5 pb-5 pt-4">
-        <Progress value={setupProgress} className="h-2" />
-        <div className="mt-4 grid gap-2">
+      <CardContent className="grid gap-5 px-5 pb-5 pt-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(220px,0.65fr)]">
+        <div className="grid gap-2">
           {setupItems.map((item) => (
             <Link
-              key={item.label}
+              key={item.id}
               href={item.href}
-              className="flex items-center justify-between gap-3 rounded-md border border-border/80 bg-muted/35 px-3 py-2 text-sm text-foreground transition hover:bg-accent hover:text-accent-foreground"
+              className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-border/80 bg-muted/30 px-3 py-3 text-sm text-foreground transition hover:border-[var(--dash-info)] hover:bg-accent hover:text-accent-foreground"
             >
-              <span className="truncate">{item.label}</span>
-              <span className="font-mono text-xs text-muted-foreground">
+              <span
+                className={[
+                  'grid size-8 place-items-center rounded-md border',
+                  item.done
+                    ? 'border-[var(--dash-success)]/45 bg-[var(--dash-success)]/12 text-[var(--dash-success)]'
+                    : 'border-[var(--dash-warning)]/45 bg-[var(--dash-warning)]/12 text-[var(--dash-warning)]',
+                ].join(' ')}
+                aria-hidden
+              >
+                {item.done ? <CheckCircle2 className="size-4" /> : <Clock3 className="size-4" />}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate font-medium">
+                  {locale === 'ar' ? item.arTitle : item.title}
+                </span>
+                <span className="mt-1 line-clamp-2 block text-xs leading-5 text-muted-foreground">
+                  {locale === 'ar' ? item.arBody : item.body}
+                </span>
+              </span>
+              <span className="rounded-full border border-border/80 px-2 py-1 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                 {item.done ? labels.done : labels.open}
               </span>
             </Link>
           ))}
         </div>
-        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <Signal label={labels.cartAdds} value={carts30} />
-          <Signal label={labels.aov} value={formatCurrency(orderStats.averageOrderQar, currency)} />
-          <Signal label={labels.pending} value={orderStats.pendingOrders} />
-          <Signal label={labels.unpaid} value={orderStats.unpaidOrders} />
-        </dl>
+        <div className="rounded-md border border-border/80 bg-muted/25 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                {nextItem ? labels.setupNext : labels.ready}
+              </p>
+              <p className="mt-2 text-sm font-medium">
+                {nextItem
+                  ? locale === 'ar'
+                    ? nextItem.arTitle
+                    : nextItem.title
+                  : labels.setupAllSet}
+              </p>
+            </div>
+            <div
+              className="grid size-16 shrink-0 place-items-center rounded-full"
+              style={{
+                background: `conic-gradient(var(--dash-info) 0 ${setupProgress}%, color-mix(in srgb, var(--muted) 78%, transparent) ${setupProgress}% 100%)`,
+              }}
+            >
+              <div className="grid size-12 place-items-center rounded-full bg-card font-mono text-xs font-semibold tabular-nums">
+                {formatPercent(setupProgress, locale)}
+              </div>
+            </div>
+          </div>
+          <Progress value={setupProgress} className="mt-4 h-1.5" />
+          {nextItem ? (
+            <Button asChild variant="outline" size="sm" className="mt-4 w-full">
+              <Link href={nextItem.href}>
+                {labels.open}
+                <ArrowUpRight className="size-3.5" aria-hidden />
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </CardContent>
     </Card>
   );
@@ -1196,12 +1401,28 @@ function InlineEmpty({
   );
 }
 
-function Signal({ label, value }: { label: string; value: React.ReactNode }) {
+function ActionSignal({
+  label,
+  value,
+  body,
+  href,
+}: {
+  label: string;
+  value: React.ReactNode;
+  body: string;
+  href: string;
+}) {
   return (
-    <div className="souqna-dashboard-signal rounded-md border border-border bg-muted px-3 py-2">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-sm font-semibold text-foreground">{value}</dd>
-    </div>
+    <Link href={href} className="souqna-account-action-card">
+      <span className="souqna-account-action-label">
+        <span>{label}</span>
+        <ArrowUpRight className="size-3.5" aria-hidden />
+      </span>
+      <span className="souqna-account-action-value" dir="ltr">
+        {value}
+      </span>
+      <p className="souqna-account-action-body">{body}</p>
+    </Link>
   );
 }
 
@@ -1211,10 +1432,70 @@ function initialsFor(name: string): string {
   return letters.toUpperCase();
 }
 
-function getDashboardMetricSnapshot(metrics: DashboardMetricSnapshot & { storefrontSlug: string }): DashboardMetricSnapshot {
+function getDashboardMetricSnapshot(
+  metrics: DashboardMetricSnapshot & { storefrontSlug: string },
+): DashboardMetricSnapshot {
   if (process.env.NODE_ENV !== 'development' || metrics.storefrontSlug !== 'components') {
     return metrics;
   }
+
+  const orderWeights = [
+    0.78, 0.82, 0.74, 0.9, 0.88, 0.95, 0.84, 0.92, 1.02, 0.98, 1.08, 1.04, 0.96, 1.12, 1.18, 1.06,
+    1.14, 1.22, 1.09, 1.2, 1.28, 1.16, 1.24, 1.32, 1.18, 1.36, 1.3, 1.42, 1.34, 1.48,
+  ];
+  const pageViewWeights = [
+    0.62, 0.7, 0.66, 0.78, 0.74, 0.82, 0.86, 0.84, 0.9, 0.96, 0.92, 1.02, 1.06, 1, 1.08, 1.12, 1.1,
+    1.2, 1.16, 1.24, 1.28, 1.22, 1.32, 1.36, 1.3, 1.42, 1.38, 1.5, 1.46, 1.58,
+  ];
+  const revenueWeights = [
+    0.7, 0.76, 0.72, 0.86, 0.9, 0.88, 0.96, 0.93, 1.04, 1.02, 1.08, 1.14, 1.03, 1.18, 1.22, 1.12,
+    1.2, 1.26, 1.17, 1.3, 1.36, 1.24, 1.32, 1.4, 1.29, 1.45, 1.38, 1.5, 1.47, 1.58,
+  ];
+  const paidWeights = [
+    0.76, 0.8, 0.73, 0.88, 0.86, 0.93, 0.82, 0.9, 1, 0.97, 1.06, 1.02, 0.95, 1.1, 1.16, 1.04, 1.12,
+    1.2, 1.08, 1.18, 1.26, 1.14, 1.22, 1.3, 1.16, 1.34, 1.28, 1.4, 1.32, 1.46,
+  ];
+  const unpaidWeights = [
+    1.38, 1.18, 1.28, 1.12, 1.2, 1.06, 1.14, 0.98, 1.08, 0.94, 1.02, 0.9, 0.96, 0.84, 0.9, 0.78,
+    0.86, 0.72, 0.8, 0.68, 0.74, 0.62, 0.7, 0.58, 0.66, 0.52, 0.6, 0.48, 0.54, 0.44,
+  ];
+  const cartWeights = [
+    0.68, 0.74, 0.72, 0.82, 0.8, 0.86, 0.9, 0.94, 0.88, 1.02, 0.96, 1.04, 1.08, 1, 1.12, 1.16, 1.1,
+    1.18, 1.2, 1.15, 1.24, 1.28, 1.22, 1.32, 1.36, 1.3, 1.42, 1.38, 1.48, 1.54,
+  ];
+  const productWeights = [
+    0.58, 0.64, 0.62, 0.72, 0.76, 0.8, 0.78, 0.86, 0.9, 0.88, 0.96, 1.02, 1, 1.08, 1.12, 1.06, 1.18,
+    1.14, 1.22, 1.26, 1.2, 1.3, 1.34, 1.28, 1.38, 1.42, 1.36, 1.48, 1.52, 1.6,
+  ];
+  const ordersTrend = spreadSeries(2468, orderWeights);
+  const previousOrdersTrend = spreadSeries(2180, orderWeights);
+  const visitorTrend = spreadSeries(38640, pageViewWeights);
+  const previousVisitorTrend = spreadSeries(35900, pageViewWeights);
+  const pageViewTrend = spreadSeries(184920, pageViewWeights);
+  const revenueDaily = spreadSeries(842500, revenueWeights);
+  const previousRevenueDaily = spreadSeries(754200, revenueWeights);
+  const paidDaily = spreadSeries(2396, paidWeights);
+  const previousPaidDaily = spreadSeries(2215, paidWeights);
+  const unpaidDaily = spreadSeries(72, unpaidWeights);
+  const previousUnpaidDaily = spreadSeries(92, unpaidWeights);
+  const cartDaily = spreadSeries(12880, cartWeights);
+  const previousCartDaily = spreadSeries(11195, cartWeights);
+  const aovValues = [
+    394, 398, 391, 404, 408, 406, 412, 410, 418, 416, 421, 424, 418, 427, 431, 425, 430, 433, 426,
+    435, 438, 431, 437, 441, 433, 444, 439, 447, 443, 448,
+  ];
+  const previousAovValues = [
+    380, 384, 377, 390, 392, 391, 398, 395, 402, 400, 405, 408, 401, 412, 414, 407, 413, 417, 409,
+    419, 422, 414, 421, 425, 416, 428, 423, 431, 426, 432,
+  ];
+  const aovTrend = cumulativeRatioTrend(
+    paidDaily.map((orders, index) => orders * (aovValues[index] ?? 425)),
+    paidDaily,
+  );
+  const previousAovTrend = cumulativeRatioTrend(
+    previousPaidDaily.map((orders, index) => orders * (previousAovValues[index] ?? 408)),
+    previousPaidDaily,
+  );
 
   return {
     orderStats: {
@@ -1229,26 +1510,21 @@ function getDashboardMetricSnapshot(metrics: DashboardMetricSnapshot & { storefr
     pageViews30: 184920,
     carts30: 12880,
     productViews30: 76240,
-    ordersTrend: spreadSeries(2468, [
-      0.78, 0.82, 0.74, 0.9, 0.88, 0.95, 0.84, 0.92, 1.02, 0.98,
-      1.08, 1.04, 0.96, 1.12, 1.18, 1.06, 1.14, 1.22, 1.09, 1.2,
-      1.28, 1.16, 1.24, 1.32, 1.18, 1.36, 1.3, 1.42, 1.34, 1.48,
-    ]),
-    cartAddTrend: spreadSeries(12880, [
-      0.68, 0.74, 0.72, 0.82, 0.8, 0.86, 0.9, 0.94, 0.88, 1.02,
-      0.96, 1.04, 1.08, 1, 1.12, 1.16, 1.1, 1.18, 1.2, 1.15,
-      1.24, 1.28, 1.22, 1.32, 1.36, 1.3, 1.42, 1.38, 1.48, 1.54,
-    ]),
-    pageViewTrend: spreadSeries(184920, [
-      0.62, 0.7, 0.66, 0.78, 0.74, 0.82, 0.86, 0.84, 0.9, 0.96,
-      0.92, 1.02, 1.06, 1, 1.08, 1.12, 1.1, 1.2, 1.16, 1.24,
-      1.28, 1.22, 1.32, 1.36, 1.3, 1.42, 1.38, 1.5, 1.46, 1.58,
-    ]),
-    productViewTrend: spreadSeries(76240, [
-      0.58, 0.64, 0.62, 0.72, 0.76, 0.8, 0.78, 0.86, 0.9, 0.88,
-      0.96, 1.02, 1, 1.08, 1.12, 1.06, 1.18, 1.14, 1.22, 1.26,
-      1.2, 1.3, 1.34, 1.28, 1.38, 1.42, 1.36, 1.48, 1.52, 1.6,
-    ]),
+    revenueTrend: cumulativeTrend(revenueDaily),
+    paidOrderTrend: cumulativeTrend(paidDaily),
+    unpaidOrderTrend: cumulativeTrend(unpaidDaily),
+    aovTrend,
+    conversionTrend: cumulativeRatioTrend(ordersTrend, visitorTrend, 100),
+    previousRevenueTrend: cumulativeTrend(previousRevenueDaily),
+    previousPaidOrderTrend: cumulativeTrend(previousPaidDaily),
+    previousUnpaidOrderTrend: cumulativeTrend(previousUnpaidDaily),
+    previousAovTrend,
+    previousConversionTrend: cumulativeRatioTrend(previousOrdersTrend, previousVisitorTrend, 100),
+    previousCartAddTrend: cumulativeTrend(previousCartDaily),
+    ordersTrend,
+    cartAddTrend: cumulativeTrend(cartDaily),
+    pageViewTrend,
+    productViewTrend: spreadSeries(76240, productWeights),
     topReferrers: [
       { host: 'direct', count: 102500 },
       { host: 'instagram.com', count: 32800 },
@@ -1283,22 +1559,75 @@ function spreadSeries(total: number, weights: number[]): number[] {
   return series;
 }
 
+function fillRevenueSeries(
+  points: RevenueSeriesPoint[],
+  sinceDays: number,
+  offsetDays = 0,
+): RevenueSeriesPoint[] {
+  const byDay = new Map(points.map((point) => [point.label, point] as const));
+  const out: RevenueSeriesPoint[] = [];
+  const today = new Date();
+
+  for (let index = 0; index < sinceDays; index += 1) {
+    const day = new Date(today);
+    day.setUTCHours(0, 0, 0, 0);
+    day.setUTCDate(day.getUTCDate() - offsetDays - (sinceDays - 1 - index));
+    const label = day.toISOString().slice(0, 10);
+    const point = byDay.get(label);
+    out.push({
+      label,
+      revenueQar: point?.revenueQar ?? 0,
+      ordersCount: point?.ordersCount ?? 0,
+      paidOrders: point?.paidOrders ?? 0,
+      unpaidOrders: point?.unpaidOrders ?? 0,
+    });
+  }
+
+  return out;
+}
+
+function cumulativeTrend(values: number[]): number[] {
+  let total = 0;
+  return values.map((value) => {
+    total += Math.max(0, value);
+    return total;
+  });
+}
+
+function cumulativeRatioTrend(
+  numerator: number[],
+  denominator: number[],
+  multiplier = 1,
+): number[] {
+  const length = Math.max(numerator.length, denominator.length, 1);
+  let numeratorTotal = 0;
+  let denominatorTotal = 0;
+  return Array.from({ length }, (_, index) => {
+    numeratorTotal += Math.max(0, numerator[index] ?? 0);
+    denominatorTotal += Math.max(0, denominator[index] ?? 0);
+    if (denominatorTotal <= 0) return 0;
+    return (numeratorTotal / denominatorTotal) * multiplier;
+  });
+}
+
 function formatCurrency(value: number, currency: string): string {
   return `${currency} ${Intl.NumberFormat('en-GB').format(value)}`;
 }
 
 function formatNumber(value: number, locale?: Locale): string {
-  return Intl.NumberFormat(locale === 'ar' ? 'ar-QA' : 'en-US').format(value);
+  void locale;
+  return Intl.NumberFormat('en-US').format(value);
 }
 
 function formatPercent(value: number, locale?: Locale): string {
-  return `${Intl.NumberFormat(locale === 'ar' ? 'ar-QA' : 'en-US', {
+  void locale;
+  return `${Intl.NumberFormat('en-US', {
     maximumFractionDigits: value > 0 && value < 10 ? 1 : 0,
   }).format(value)}%`;
 }
 
 function formatDate(value: string | Date, locale: Locale = 'en'): string {
-  return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-QA' : 'en-GB', {
+  return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-QA-u-nu-latn' : 'en-GB', {
     day: 'numeric',
     month: 'short',
     hour: '2-digit',
@@ -1322,10 +1651,26 @@ const HOME_STRINGS = {
     live: 'live',
     draft: 'draft',
     setup: 'setup',
-    heroSubtitle:
-      'A quieter control room for orders, products, customers, and the storefront you are building.',
+    heroSubtitle: 'Clear payments, review the catalogue, and keep the storefront moving from here.',
+    heroActionSummary: (revenue: string, orders: string, products: string) =>
+      `You made ${revenue}, ${orders} orders need attention, ${products} products need review.`,
+    heroActions: 'Storefront action summary',
+    revenueAction: 'Profit view',
+    revenueActionHint: 'Open the deeper traffic and sales readout.',
+    ordersAttention: 'Needs attention',
+    ordersAttentionHint: 'Unpaid and pending orders to clear next.',
+    productsReview: 'Review products',
+    productsReviewHint: 'Drafts or incomplete listings to finish.',
     openBuilder: 'Open builder',
     viewStore: 'Souqy Portal',
+    metricGroupTitle: 'Sales overview',
+    metricGroupSubtitle:
+      'Click a KPI to switch the big chart and compare the last 30 days with the previous period.',
+    selectMetric: 'Metric focus',
+    currentPeriod: 'Current period',
+    previousPeriod: 'Previous period',
+    lineView: 'Line',
+    ditherView: 'Dither',
     orders: 'Orders',
     revenue: 'Revenue',
     visitors: 'Visitors',
@@ -1407,6 +1752,9 @@ const HOME_STRINGS = {
     noActivityBody: 'Saved changes, app installs, and order actions will build this log.',
     setupTitle: 'Setup',
     setupProgress: (n: number) => `${n}% complete for this storefront.`,
+    setupCompleted: (done: number, total: number) => `${done}/${total} complete`,
+    setupNext: 'Next task',
+    setupAllSet: 'All setup tasks are complete.',
     ready: 'ready',
     progress: 'progress',
     done: 'done',
@@ -1421,9 +1769,25 @@ const HOME_STRINGS = {
     live: 'مباشر',
     draft: 'مسودة',
     setup: 'إعداد',
-    heroSubtitle: 'غرفة تحكم أهدأ للطلبات والمنتجات والعملاء والمتجر الذي تبنيه.',
+    heroSubtitle: 'صف المدفوعات وراجع الكتالوج وحرّك واجهة المتجر من هنا.',
+    heroActionSummary: (revenue: string, orders: string, products: string) =>
+      `حققت ${revenue}، ${orders} طلبات تحتاج انتباه، و${products} منتجات تحتاج مراجعة.`,
+    heroActions: 'ملخص إجراءات المتجر',
+    revenueAction: 'عرض الأرباح',
+    revenueActionHint: 'افتح قراءة أعمق للزيارات والمبيعات.',
+    ordersAttention: 'تحتاج انتباه',
+    ordersAttentionHint: 'طلبات غير مدفوعة أو قيد الانتظار.',
+    productsReview: 'مراجعة المنتجات',
+    productsReviewHint: 'مسودات أو منتجات ناقصة تحتاج إكمال.',
     openBuilder: 'افتح المصمم',
     viewStore: 'Souqy Portal',
+    metricGroupTitle: 'نظرة عامة على المبيعات',
+    metricGroupSubtitle: 'اختر أي مؤشر لتغيير الرسم الكبير ومقارنة آخر 30 يوماً بالفترة السابقة.',
+    selectMetric: 'تركيز المؤشر',
+    currentPeriod: 'الفترة الحالية',
+    previousPeriod: 'الفترة السابقة',
+    lineView: 'خطي',
+    ditherView: 'تنقيط',
     orders: 'الطلبات',
     revenue: 'الإيرادات',
     visitors: 'الزوّار',
@@ -1435,19 +1799,19 @@ const HOME_STRINGS = {
     total: 'الإجمالي',
     revenueHint: 'إجمالي الطلبات',
     paidOrdersHint: (n: number) =>
-      `${n.toLocaleString('ar-QA')} ${n === 1 ? 'طلب مدفوع' : 'طلبات مدفوعة'}`,
+      `${n.toLocaleString('en-US')} ${n === 1 ? 'طلب مدفوع' : 'طلبات مدفوعة'}`,
     pageViewsHint: 'مشاهدات صفحة في نفس الفترة',
-    lastThirtyDays: '٣٠ يوم',
+    lastThirtyDays: '30 يوم',
     checkoutSignal: 'الدفع',
-    conversionTooltip: 'الطلبات مقسومة على الزوار الفريدين خلال آخر ٣٠ يوماً.',
+    conversionTooltip: 'الطلبات مقسومة على الزوار الفريدين خلال آخر 30 يوماً.',
     ordersFromVisitors: (orders: number, visits: number) =>
-      `${orders.toLocaleString('ar-QA')} ${orders === 1 ? 'طلب' : 'طلبات'} من ${visits.toLocaleString('ar-QA')} زيارة`,
-    visitorsHint: 'آخر ٣٠ يوماً',
+      `${orders.toLocaleString('en-US')} ${orders === 1 ? 'طلب' : 'طلبات'} من ${visits.toLocaleString('en-US')} زيارة`,
+    visitorsHint: 'آخر 30 يوماً',
     productsHint: 'منتجات منشورة ومسوّدات',
     customersHint: 'سجلات العملاء',
-    revenueTrendAria: 'منحنى الإيرادات خلال آخر ٣٠ يوماً',
-    visitorTrendAria: 'منحنى الزوّار خلال آخر ٣٠ يوماً',
-    ordersBarAria: 'عدد الطلبات اليومي خلال آخر ٣٠ يوماً',
+    revenueTrendAria: 'منحنى الإيرادات خلال آخر 30 يوماً',
+    visitorTrendAria: 'منحنى الزوّار خلال آخر 30 يوماً',
+    ordersBarAria: 'عدد الطلبات اليومي خلال آخر 30 يوماً',
     websiteAnalyticsTitle: 'تحليلات الموقع',
     websiteAnalyticsDescription: 'الزيارات واهتمام المشترين من واجهة المتجر العامة.',
     openAnalytics: 'افتح التحليلات',
@@ -1464,7 +1828,7 @@ const HOME_STRINGS = {
     noSourcesYet: 'لا توجد مصادر زيارات بعد.',
     productDepth: 'عمق التصفح',
     productDepthHint: 'مشاهدات المنتجات مقارنة بمشاهدات الصفحات.',
-    websiteTrendAria: 'منحنى زيارات الموقع خلال آخر ٣٠ يوماً',
+    websiteTrendAria: 'منحنى زيارات الموقع خلال آخر 30 يوماً',
     topProductsTitle: 'أكثر المنتجات مبيعاً',
     topProductsViewAll: 'عرض الكل',
     topProductsEmpty:
@@ -1472,8 +1836,8 @@ const HOME_STRINGS = {
     topProductsEmptyCta: 'إدارة الكتالوج',
     topProductsOrdersSuffix: 'طلبات',
     ordersTrendTitle: 'منحنى الطلبات',
-    ordersTrendSuffix: 'طلبات · آخر ٣٠ يوماً',
-    thirtyDaysAgo: 'قبل ٣٠ يوماً',
+    ordersTrendSuffix: 'طلبات · آخر 30 يوماً',
+    thirtyDaysAgo: 'قبل 30 يوماً',
     today: 'اليوم',
     quickActionsTitle: 'إجراءات سريعة',
     quickActionsAddProduct: 'إضافة منتج',
@@ -1506,6 +1870,9 @@ const HOME_STRINGS = {
     noActivityBody: 'ستظهر التغييرات المحفوظة وتثبيت التطبيقات وإجراءات الطلبات في هذا السجل.',
     setupTitle: 'الإعداد',
     setupProgress: (n: number) => `اكتمل ${n}% من إعداد هذا المتجر.`,
+    setupCompleted: (done: number, total: number) => `${done}/${total} مكتمل`,
+    setupNext: 'المهمة التالية',
+    setupAllSet: 'كل مهام الإعداد مكتملة.',
     ready: 'جاهز',
     progress: 'قيد التقدم',
     done: 'مكتمل',
@@ -1517,5 +1884,11 @@ const HOME_STRINGS = {
   },
 } as const satisfies Record<
   Locale,
-  Record<string, string | ((n: number) => string) | ((a: number, b: number) => string)>
+  Record<
+    string,
+    | string
+    | ((n: number) => string)
+    | ((a: number, b: number) => string)
+    | ((revenue: string, orders: string, products: string) => string)
+  >
 >;

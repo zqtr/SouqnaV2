@@ -31,7 +31,7 @@ export function InteractiveDitheredTrendChart({
   const [hoverIndex, setHoverIndex] = React.useState<number | null>(null);
   const chartRef = React.useRef<HTMLDivElement>(null);
   const isRtl = hasRtlText([primaryLabel, secondaryLabel, thirtyDaysAgo, today, ariaLabel]);
-  const numberLocale = isRtl ? 'ar-QA' : 'en-US';
+  const numberLocale = 'en-US';
   const signalLabel = isRtl ? 'إشارة مرئية' : 'Dither signal';
   const stackedLabel = isRtl ? 'متراكم' : 'stacked';
   const pointLabel = isRtl ? 'النقطة' : 'Point';

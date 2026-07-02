@@ -23,6 +23,7 @@ import {
   SidebarMenuSubItem,
   SidebarRail,
   SidebarSeparator,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { StoreSwitcher } from './StoreSwitcher';
 import { SETTINGS_NAV_SECTIONS } from './settingsNav';
@@ -107,6 +108,7 @@ export function AdminSidebar({
   const searchParams = useSearchParams();
   const store = searchParams?.get('store');
   const [pendingTarget, setPendingTarget] = useState<string | null>(null);
+  const { isMobile, setOpen } = useSidebar();
 
   useEffect(() => {
     if (!pendingTarget) return;
@@ -123,6 +125,19 @@ export function AdminSidebar({
     }
     return undefined;
   }, [pathname, pendingTarget]);
+
+  useEffect(() => {
+    if (isMobile) return;
+
+    const compactDesktop = window.matchMedia('(min-width: 768px) and (max-width: 1120px)');
+    const applyCompactState = () => {
+      if (compactDesktop.matches) setOpen(false);
+    };
+
+    applyCompactState();
+    compactDesktop.addEventListener('change', applyCompactState);
+    return () => compactDesktop.removeEventListener('change', applyCompactState);
+  }, [isMobile, setOpen]);
 
   const hrefFor = (href: string) =>
     store && isStoreScopedNavHref(href) ? `${href}?store=${encodeURIComponent(store)}` : href;

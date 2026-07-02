@@ -56,15 +56,18 @@ export async function dailyEventCounts(
   storefrontSlug: string,
   kind: string,
   sinceDays: number,
+  offsetDays = 0,
 ): Promise<DailyMetric[]> {
   noStore();
+  const windowDays = sinceDays + offsetDays;
   const rows = (await db()`
     select to_char(date_trunc('day', occurred_at), 'YYYY-MM-DD') as day,
            count(*)::int as n
     from analytics_events
     where storefront_slug = ${storefrontSlug}
       and kind = ${kind}
-      and occurred_at >= now() - (${sinceDays}::int * interval '1 day')
+      and occurred_at >= now() - (${windowDays}::int * interval '1 day')
+      and (${offsetDays}::int = 0 or occurred_at < now() - (${offsetDays}::int * interval '1 day'))
     group by 1
     order by 1
   `) as unknown as { day: string; n: number }[];
@@ -141,28 +144,32 @@ export async function topProductsSince(
 export async function dailyVisitorsSince(
   storefrontSlug: string,
   sinceDays: number,
+  offsetDays = 0,
 ): Promise<number[]> {
   noStore();
+  const windowDays = sinceDays + offsetDays;
   const rows = (await db()`
     select to_char(date_trunc('day', occurred_at), 'YYYY-MM-DD') as day,
            count(distinct visitor_id)::int as n
     from analytics_events
     where storefront_slug = ${storefrontSlug}
       and visitor_id is not null
-      and occurred_at >= now() - (${sinceDays}::int * interval '1 day')
+      and occurred_at >= now() - (${windowDays}::int * interval '1 day')
+      and (${offsetDays}::int = 0 or occurred_at < now() - (${offsetDays}::int * interval '1 day'))
     group by 1
     order by 1
   `) as unknown as { day: string; n: number }[];
-  return fillDailySeries(rows, sinceDays);
+  return fillDailySeries(rows, sinceDays, offsetDays);
 }
 
 export async function dailyEventSeriesSince(
   storefrontSlug: string,
   kind: string,
   sinceDays: number,
+  offsetDays = 0,
 ): Promise<number[]> {
-  const rows = await dailyEventCounts(storefrontSlug, kind, sinceDays);
-  return fillDailySeries(rows, sinceDays);
+  const rows = await dailyEventCounts(storefrontSlug, kind, sinceDays, offsetDays);
+  return fillDailySeries(rows, sinceDays, offsetDays);
 }
 
 /**
@@ -173,24 +180,28 @@ export async function dailyEventSeriesSince(
 export async function dailyOrdersSince(
   storefrontSlug: string,
   sinceDays: number,
+  offsetDays = 0,
 ): Promise<number[]> {
   noStore();
+  const windowDays = sinceDays + offsetDays;
   const rows = (await db()`
     select to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day,
            count(*)::int as n
     from checkout_orders
     where storefront_slug = ${storefrontSlug}
-      and created_at >= now() - (${sinceDays}::int * interval '1 day')
+      and created_at >= now() - (${windowDays}::int * interval '1 day')
+      and (${offsetDays}::int = 0 or created_at < now() - (${offsetDays}::int * interval '1 day'))
       and order_status <> 'cancelled'
     group by 1
     order by 1
   `) as unknown as { day: string; n: number }[];
-  return fillDailySeries(rows, sinceDays);
+  return fillDailySeries(rows, sinceDays, offsetDays);
 }
 
 function fillDailySeries(
   rows: { day: string; n: number }[],
   sinceDays: number,
+  offsetDays = 0,
 ): number[] {
   const byDay = new Map(rows.map((r) => [r.day, r.n] as const));
   const out = new Array(sinceDays).fill(0);
@@ -198,7 +209,7 @@ function fillDailySeries(
   for (let i = 0; i < sinceDays; i++) {
     const d = new Date(today);
     d.setUTCHours(0, 0, 0, 0);
-    d.setUTCDate(d.getUTCDate() - (sinceDays - 1 - i));
+    d.setUTCDate(d.getUTCDate() - offsetDays - (sinceDays - 1 - i));
     const key = d.toISOString().slice(0, 10);
     out[i] = byDay.get(key) ?? 0;
   }

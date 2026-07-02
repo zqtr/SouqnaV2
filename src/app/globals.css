@@ -748,6 +748,7 @@ body.souqna-admin-shell::before {
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  display: none;
   opacity: 0.34;
   background-image:
     radial-gradient(
@@ -871,6 +872,7 @@ body.souqna-admin-shell::before {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  display: none;
   opacity: 0.22;
   background-image: radial-gradient(
     circle,
@@ -964,6 +966,7 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
   position: absolute;
   inset: -55% -18%;
   pointer-events: none;
+  display: none;
   background: linear-gradient(
     105deg,
     transparent 30%,
@@ -1041,9 +1044,18 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
   --chart-ink: var(--dash-black);
 }
 
+.souqna-metric-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+}
+
 .souqna-dashboard-card,
 .souqna-metric-card {
   isolation: isolate;
+}
+
+.souqna-dashboard-card::after,
+.souqna-metric-card::after {
+  display: none;
 }
 
 .souqna-dashboard-card:hover,
@@ -1260,14 +1272,17 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
 }
 
 .souqna-admin-dock-wrap {
-  position: fixed;
-  inset-inline: 0;
-  bottom: calc(14px + env(safe-area-inset-bottom));
-  z-index: 60;
+  position: sticky;
+  top: 56px;
+  z-index: 45;
   display: flex;
   justify-content: center;
-  padding-inline: 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dash-black) 7%, transparent);
+  background: color-mix(in srgb, var(--surface-bg) 88%, transparent);
   pointer-events: none;
+  backdrop-filter: blur(16px) saturate(1.04);
+  -webkit-backdrop-filter: blur(16px) saturate(1.04);
 }
 
 .souqna-admin-dock-wrap.is-window-open {
@@ -1276,7 +1291,7 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
 }
 
 .souqna-admin-dock-wrap.is-collapsed {
-  bottom: calc(16px + env(safe-area-inset-bottom));
+  padding-block: 8px;
 }
 
 .souqna-admin-dock {
@@ -1340,6 +1355,7 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  display: none;
   opacity: 0.12;
   background-image:
     radial-gradient(circle, var(--dash-black) 0.58px, transparent 0.72px),
@@ -1381,6 +1397,7 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
   z-index: 0;
   border-radius: inherit;
   pointer-events: none;
+  display: none;
   opacity: 0.12;
   background-image:
     radial-gradient(circle, var(--dash-black) 0.58px, transparent 0.72px),
@@ -1401,6 +1418,7 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
   inset: -80% -24%;
   z-index: 0;
   pointer-events: none;
+  display: none;
   opacity: 0.42;
   background: linear-gradient(
     105deg,
@@ -1481,6 +1499,7 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
   position: absolute;
   inset: 0;
   z-index: -1;
+  display: none;
   opacity: 0.12;
   background-image:
     radial-gradient(circle, var(--dash-black) 0.58px, transparent 0.72px),

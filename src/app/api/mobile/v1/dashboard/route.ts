@@ -59,8 +59,8 @@ export async function GET(req: Request): Promise<Response> {
   const productsForStore = products.filter((p) => p.storefrontSlug === storefront.slug);
   const setup = evaluateSetupCompletion({
     storefront,
+    products: productsForStore,
     productsCount: productsForStore.length,
-    customerCount,
     installedAppIds: installedApps.map((app) => app.appId),
   });
 

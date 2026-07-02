@@ -8,6 +8,8 @@ type Props = {
   height?: number;
   accent?: string;
   ariaLabel?: string;
+  fluid?: boolean;
+  variant?: 'line' | 'panel' | 'ribbon';
 };
 
 type Rgb = {
@@ -38,6 +40,8 @@ export function Sparkline({
   height = 32,
   accent = '#B89A52',
   ariaLabel,
+  fluid = false,
+  variant = 'line',
 }: Props) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const serializedData = React.useMemo(
@@ -62,7 +66,7 @@ export function Sparkline({
         canAnimate && !reducedMotion.matches
           ? (timestamp % EDGE_SPARK_DURATION_MS) / EDGE_SPARK_DURATION_MS
           : null;
-      drawSparkline(canvas, values, width, height, accentColor, phase);
+      drawSparkline(canvas, values, width, height, accentColor, phase, variant, fluid);
 
       if (canAnimate && !reducedMotion.matches) {
         frameId = window.requestAnimationFrame(render);
@@ -83,7 +87,7 @@ export function Sparkline({
       if (frameId) window.cancelAnimationFrame(frameId);
       reducedMotion.removeEventListener('change', handleMotionChange);
     };
-  }, [accent, height, serializedData, width]);
+  }, [accent, fluid, height, serializedData, variant, width]);
 
   return (
     <canvas
@@ -92,7 +96,11 @@ export function Sparkline({
       aria-label={ariaLabel ?? 'Trend over time'}
       width={width}
       height={height}
-      style={{ display: 'block', width, height }}
+      style={{
+        display: 'block',
+        width: fluid ? '100%' : width,
+        height: fluid ? '100%' : height,
+      }}
     />
   );
 }
@@ -104,12 +112,18 @@ function drawSparkline(
   height: number,
   accent: Rgb,
   edgeSparkPhase: number | null = null,
+  variant: 'line' | 'panel' | 'ribbon' = 'line',
+  fluid = false,
 ) {
+  const panel = variant === 'panel';
+  const ribbon = variant === 'ribbon';
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   canvas.width = Math.max(1, Math.round(width * dpr));
   canvas.height = Math.max(1, Math.round(height * dpr));
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
+  if (!fluid) {
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+  }
 
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -122,14 +136,19 @@ function drawSparkline(
   const nonZero = values
     .map((value, index) => ({ value, index }))
     .filter((point) => point.value > 0);
-  const padX = 3;
-  const padTop = 4;
-  const padBottom = 5;
+  const padX = panel ? 8 : ribbon ? 2 : 3;
+  const padTop = panel ? 10 : ribbon ? Math.max(12, height * 0.24) : 4;
+  const padBottom = panel ? 10 : ribbon ? 6 : 5;
   const innerW = Math.max(1, width - padX * 2);
   const innerH = Math.max(1, height - padTop - padBottom);
   const baselineY = height - padBottom;
-  const peakH = innerH * 0.78;
+  const peakH = innerH * (panel ? 0.86 : ribbon ? 0.58 : 0.78);
   const maxValue = Math.max(...values, 1);
+  const primaryColor = panel
+    ? mixRgb(accent, { r: 245, g: 239, b: 227 }, 0.58)
+    : ribbon
+      ? mixRgb(accent, { r: 245, g: 239, b: 227 }, 0.12)
+      : accent;
   const pointAt = (index: number): SparkPoint => {
     const value = values[index] ?? 0;
     return {
@@ -140,13 +159,17 @@ function drawSparkline(
     };
   };
 
-  drawBaseline(ctx, padX, width - padX, baselineY, accent);
+  if (panel) {
+    drawPanelGrid(ctx, padX, width - padX, padTop, baselineY, accent);
+  }
+
+  drawBaseline(ctx, padX, width - padX, baselineY, accent, panel, ribbon);
 
   if (nonZero.length === 0) return;
 
   if (nonZero.length === 1) {
     const point = pointAt(nonZero[0]!.index);
-    drawDot(ctx, point, accent);
+    drawDot(ctx, point, primaryColor, panel);
     return;
   }
 
@@ -157,23 +180,34 @@ function drawSparkline(
       .slice(firstIndex, lastIndex + 1)
       .map((_, offset) => pointAt(firstIndex + offset));
     const lineAtX = makeLinearSampler(sparsePoints, baselineY, padTop);
-    drawDitherFill(ctx, width, height, accent, baselineY, lineAtX, {
-      fromX: sparsePoints[0]!.x,
-      toX: sparsePoints[sparsePoints.length - 1]!.x,
-    });
-    drawPolyline(ctx, sparsePoints, accent);
+    drawDitherFill(
+      ctx,
+      width,
+      height,
+      primaryColor,
+      baselineY,
+      lineAtX,
+      {
+        fromX: sparsePoints[0]!.x,
+        toX: sparsePoints[sparsePoints.length - 1]!.x,
+      },
+      panel,
+      ribbon ? 0.54 : 1,
+    );
+    drawPolyline(ctx, sparsePoints, primaryColor, panel, ribbon);
     drawDots(
       ctx,
       sparsePoints.filter((point) => point.value > 0),
-      accent,
+      primaryColor,
+      panel,
     );
-    if (edgeSparkPhase !== null) {
+    if (edgeSparkPhase !== null && !ribbon) {
       drawMovingEdgeSpark(
         ctx,
         lineAtX,
         sparsePoints[0]!.x,
         sparsePoints[sparsePoints.length - 1]!.x,
-        accent,
+        primaryColor,
         edgeSparkPhase,
       );
     }
@@ -188,14 +222,78 @@ function drawSparkline(
     baselineY,
     padTop,
   );
-  drawDitherFill(ctx, width, height, accent, baselineY, lineAtX, {
-    fromX: padX,
-    toX: width - padX,
-  });
-  drawSampledLine(ctx, lineAtX, padX, width - padX, accent);
-  if (edgeSparkPhase !== null) {
-    drawMovingEdgeSpark(ctx, lineAtX, padX, width - padX, accent, edgeSparkPhase);
+  drawDitherFill(
+    ctx,
+    width,
+    height,
+    primaryColor,
+    baselineY,
+    lineAtX,
+    {
+      fromX: padX,
+      toX: width - padX,
+    },
+    panel,
+    ribbon ? 0.54 : 1,
+  );
+  drawSampledLine(ctx, lineAtX, padX, width - padX, primaryColor, panel, ribbon ? 0.7 : 0.9);
+  if (panel) {
+    const floorValues = values.map((value) =>
+      value > 0 ? Math.max(maxValue * 0.035, value * 0.2) : 0,
+    );
+    const floorYs = floorValues.map((value) =>
+      yForValue(value, maxValue, baselineY, peakH, padTop),
+    );
+    const floorAtX = makeMonotoneSampler(floorYs, padX, innerW, baselineY, padTop);
+    drawDitherFill(
+      ctx,
+      width,
+      height,
+      accent,
+      baselineY,
+      floorAtX,
+      {
+        fromX: padX,
+        toX: width - padX,
+      },
+      true,
+      0.72,
+    );
+    drawSampledLine(ctx, floorAtX, padX, width - padX, accent, panel, 0.76);
   }
+  if (edgeSparkPhase !== null && !ribbon) {
+    drawMovingEdgeSpark(ctx, lineAtX, padX, width - padX, primaryColor, edgeSparkPhase);
+  }
+}
+
+function drawPanelGrid(
+  ctx: CanvasRenderingContext2D,
+  fromX: number,
+  toX: number,
+  topY: number,
+  baselineY: number,
+  accent: Rgb,
+) {
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(245, 239, 227, 0.12)';
+  ctx.setLineDash([4, 8]);
+  for (const ratio of [0.34, 0.66]) {
+    const y = topY + (baselineY - topY) * ratio;
+    ctx.beginPath();
+    ctx.moveTo(fromX, Math.round(y) + 0.5);
+    ctx.lineTo(toX, Math.round(y) + 0.5);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.strokeStyle = rgba(accent, 0.12);
+  for (let x = Math.ceil(fromX); x <= toX; x += 16) {
+    ctx.beginPath();
+    ctx.moveTo(x + 0.5, topY);
+    ctx.lineTo(x + 0.5, baselineY);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawBaseline(
@@ -204,12 +302,18 @@ function drawBaseline(
   toX: number,
   y: number,
   accent: Rgb,
+  panel = false,
+  ribbon = false,
 ) {
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(fromX, y + 0.5);
   ctx.lineTo(toX, y + 0.5);
-  ctx.strokeStyle = rgba(accent, 0.18);
+  ctx.strokeStyle = panel
+    ? 'rgba(245, 239, 227, 0.22)'
+    : ribbon
+      ? rgba(accent, 0.12)
+      : rgba(accent, 0.18);
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.restore();
@@ -223,6 +327,8 @@ function drawDitherFill(
   baselineY: number,
   lineAtX: (x: number) => number,
   bounds: { fromX: number; toX: number },
+  rich = false,
+  alphaScale = 1,
 ) {
   const lowW = Math.max(1, Math.round(width * 0.48));
   const lowH = Math.max(1, Math.round(height * 0.48));
@@ -244,7 +350,7 @@ function drawDitherFill(
 
       const fillHeight = Math.max(1, baselineY - lineY);
       const depth = clamp01((baselineY - y) / fillHeight);
-      const density = 0.1 + depth * 0.34;
+      const density = rich ? 0.2 + depth * 0.58 : 0.1 + depth * 0.34;
       const threshold = (BAYER_8[(py % 8) * 8 + (px % 8)]! + 0.5) / 64;
       if (threshold > density) continue;
 
@@ -252,7 +358,8 @@ function drawDitherFill(
       image.data[offset] = accent.r;
       image.data[offset + 1] = accent.g;
       image.data[offset + 2] = accent.b;
-      image.data[offset + 3] = Math.round(42 + depth * 60);
+      const alpha = rich ? 88 + depth * 132 : 42 + depth * 60;
+      image.data[offset + 3] = Math.round(alpha * alphaScale);
     }
   }
 
@@ -263,7 +370,13 @@ function drawDitherFill(
   ctx.restore();
 }
 
-function drawPolyline(ctx: CanvasRenderingContext2D, points: SparkPoint[], accent: Rgb) {
+function drawPolyline(
+  ctx: CanvasRenderingContext2D,
+  points: SparkPoint[],
+  accent: Rgb,
+  panel = false,
+  ribbon = false,
+) {
   if (points.length === 0) return;
   ctx.save();
   ctx.beginPath();
@@ -274,8 +387,12 @@ function drawPolyline(ctx: CanvasRenderingContext2D, points: SparkPoint[], accen
       ctx.lineTo(point.x, point.y);
     }
   });
-  ctx.strokeStyle = rgba(accent, 0.92);
-  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = rgba(accent, panel ? 0.98 : ribbon ? 0.72 : 0.92);
+  ctx.lineWidth = panel ? 2.4 : ribbon ? 1.45 : 1.6;
+  if (panel) {
+    ctx.shadowColor = rgba(accent, 0.46);
+    ctx.shadowBlur = 9;
+  }
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.stroke();
@@ -288,6 +405,8 @@ function drawSampledLine(
   fromX: number,
   toX: number,
   accent: Rgb,
+  panel = false,
+  alpha = 0.9,
 ) {
   ctx.save();
   ctx.beginPath();
@@ -301,10 +420,14 @@ function drawSampledLine(
       ctx.lineTo(x, y);
     }
   }
-  ctx.strokeStyle = rgba(accent, 0.9);
-  ctx.lineWidth = 1.65;
+  ctx.strokeStyle = rgba(accent, alpha);
+  ctx.lineWidth = panel ? 2.35 : 1.65;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
+  if (panel) {
+    ctx.shadowColor = rgba(accent, 0.42);
+    ctx.shadowBlur = 8;
+  }
   ctx.stroke();
   ctx.restore();
 }
@@ -371,15 +494,19 @@ function drawSampledPath(
   }
 }
 
-function drawDots(ctx: CanvasRenderingContext2D, points: SparkPoint[], accent: Rgb) {
-  points.forEach((point) => drawDot(ctx, point, accent));
+function drawDots(ctx: CanvasRenderingContext2D, points: SparkPoint[], accent: Rgb, panel = false) {
+  points.forEach((point) => drawDot(ctx, point, accent, panel));
 }
 
-function drawDot(ctx: CanvasRenderingContext2D, point: SparkPoint, accent: Rgb) {
+function drawDot(ctx: CanvasRenderingContext2D, point: SparkPoint, accent: Rgb, panel = false) {
   ctx.save();
   ctx.beginPath();
-  ctx.arc(point.x, point.y, 2.25, 0, Math.PI * 2);
+  ctx.arc(point.x, point.y, panel ? 3.2 : 2.25, 0, Math.PI * 2);
   ctx.fillStyle = rgba(mixRgb(accent, { r: 245, g: 239, b: 227 }, 0.22), 0.96);
+  if (panel) {
+    ctx.shadowColor = rgba(accent, 0.58);
+    ctx.shadowBlur = 10;
+  }
   ctx.fill();
   ctx.lineWidth = 1;
   ctx.strokeStyle = rgba(accent, 0.76);
