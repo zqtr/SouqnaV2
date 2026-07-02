@@ -351,6 +351,7 @@ export default async function AccountHomePage({
             entries={activity}
             href={`/account/settings/activity-log${storeParam}`}
             labels={t}
+            locale={locale}
           />
         </div>
       </div>
@@ -1094,11 +1095,15 @@ function Dashboard5ActivityCard({
   entries,
   href,
   labels,
+  locale,
 }: {
   entries: HomeActivity;
   href: string;
   labels: HomeLabels;
+  locale: Locale;
 }) {
+  const isRtl = locale === 'ar';
+
   return (
     <Card className="souqna-dashboard-card overflow-hidden border-border/80 bg-card/92 py-0 shadow-sm">
       <CardHeader className="border-b border-border/80 px-5 py-4">
@@ -1122,16 +1127,27 @@ function Dashboard5ActivityCard({
               <li
                 key={entry.id}
                 className="flex gap-3 rounded-lg border border-border/70 bg-muted/30 p-3"
+                dir={isRtl ? 'rtl' : 'ltr'}
               >
                 <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border bg-card text-muted-foreground">
                   <Bell className="size-4" aria-hidden />
                 </span>
                 <div className="min-w-0">
-                  <p className="m-0 line-clamp-2 text-sm text-foreground">
+                  <p
+                    className="m-0 line-clamp-2 text-sm text-foreground"
+                    dir="auto"
+                    style={{ unicodeBidi: 'plaintext' }}
+                  >
                     {entry.summary ?? entry.targetId ?? labels.recordedActivity}
                   </p>
-                  <p className="m-0 mt-1 font-mono text-[11px] text-muted-foreground">
-                    {entry.action} · {formatDate(entry.occurredAt)}
+                  <p
+                    className="m-0 mt-1 font-mono text-[11px] text-muted-foreground"
+                    dir={isRtl ? 'rtl' : 'ltr'}
+                    style={{ unicodeBidi: 'isolate' }}
+                  >
+                    <bdi dir="ltr">{entry.action}</bdi>
+                    <span aria-hidden> · </span>
+                    <bdi dir={isRtl ? 'rtl' : 'ltr'}>{formatDate(entry.occurredAt, locale)}</bdi>
                   </p>
                 </div>
               </li>
@@ -1281,8 +1297,8 @@ function formatPercent(value: number, locale?: Locale): string {
   }).format(value)}%`;
 }
 
-function formatDate(value: string | Date): string {
-  return new Intl.DateTimeFormat('en-GB', {
+function formatDate(value: string | Date, locale: Locale = 'en'): string {
+  return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-QA' : 'en-GB', {
     day: 'numeric',
     month: 'short',
     hour: '2-digit',

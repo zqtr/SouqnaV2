@@ -28,10 +28,10 @@ const typeLabels: Record<'en' | 'ar', Record<AccountUpdateView['type'], string>>
     warning: 'Important',
   },
   ar: {
-    feature: 'Ù…ÙŠØ²Ø©',
-    billing: 'Ø§Ù„ÙÙˆØªØ±Ø©',
-    system: 'Ø§Ù„Ù†Ø¸Ø§Ù…',
-    warning: 'Ù…Ù‡Ù…',
+    feature: 'ميزة',
+    billing: 'الفوترة',
+    system: 'النظام',
+    warning: 'مهم',
   },
 };
 
@@ -47,14 +47,14 @@ const cardCopy = {
     account: 'Account inbox',
   },
   ar: {
-    unread: 'ØºÙŠØ± Ù…Ù‚Ø±ÙˆØ¡',
+    unread: 'غير مقروء',
     read: 'مقروء',
-    preview: 'Ù…Ø¹Ø§ÙŠÙ†Ø© Ø³ÙˆÙ‚Ù†Ø§',
-    builder: 'Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø§Ù„Ø¨Ù†Ø§Ø¡',
-    products: 'Ø®ÙŠØ§Ø±Ø§Øª Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª',
-    plans: 'Ø£Ø¯ÙˆØ§Øª Ø§Ù„Ù†Ù…Ùˆ',
-    push: 'ØªØ­Ø¯ÙŠØ« Ø³ÙˆÙ‚Ù†Ø§',
-    account: 'ØµÙ†Ø¯ÙˆÙ‚ Ø§Ù„Ø­Ø³Ø§Ø¨',
+    preview: 'معاينة سوقنا',
+    builder: 'إجراءات البناء',
+    products: 'خيارات المنتجات',
+    plans: 'أدوات النمو',
+    push: 'تحديث سوقنا',
+    account: 'صندوق الحساب',
   },
 } as const;
 
@@ -210,9 +210,9 @@ function ScreenshotFrame({ src, alt }: { src: string; alt: string }) {
 function BuilderMenuVisual({ locale }: { locale: 'en' | 'ar' }) {
   const isAr = locale === 'ar';
   const menuItems = isAr
-    ? ['Ø¹Ø±Ø¶ Ø§Ù„Ù…ØªØ¬Ø± â†—', 'Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª', 'Ù…Ù„Ù Ø§Ù„Ù…ØªØ¬Ø±', 'Ø¥Ø±Ø¬Ø§Ø¹ Ø§Ù„Ù‚Ø§Ù„Ø¨ Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠ', 'Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ù…Ø³ÙˆØ¯Ù‘Ø©']
+    ? ['عرض المتجر ↗', 'المنتجات', 'ملف المتجر', 'إرجاع القالب الافتراضي', 'إلغاء المسودة']
     : [
-        'View live â†—',
+        'View live ↗',
         'Products',
         'Storefront profile',
         'Reset to template defaults',
@@ -281,7 +281,7 @@ function ProductOptionsVisual({ locale }: { locale: 'en' | 'ar' }) {
           <div className="flex flex-col justify-end gap-4" dir={isAr ? 'rtl' : 'ltr'}>
             <div>
               <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b6259]">
-                {isAr ? 'Ù…Ù†ØªØ¬' : 'Product'}
+                {isAr ? 'منتج' : 'Product'}
               </span>
               <div className="mt-2 h-6 w-36 rounded-full bg-[#471d24]" />
             </div>
@@ -289,13 +289,13 @@ function ProductOptionsVisual({ locale }: { locale: 'en' | 'ar' }) {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7b6259]">
-                    {isAr ? 'Ø§Ù„Ù…Ù‚Ø§Ø³' : 'Size'}
+                    {isAr ? 'المقاس' : 'Size'}
                   </span>
                   <div className="mt-1 h-9 rounded-lg border border-[#d8b56b] bg-white" />
                 </div>
                 <div>
                   <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7b6259]">
-                    {isAr ? 'Ø§Ù„Ø·ÙˆÙ„' : 'Height'}
+                    {isAr ? 'الطول' : 'Height'}
                   </span>
                   <div className="mt-1 h-9 rounded-lg border border-[#d8b56b] bg-white" />
                 </div>
@@ -324,7 +324,7 @@ function StorageVisual({ locale }: { locale: 'en' | 'ar' }) {
         <div className="flex flex-col justify-between rounded-lg border border-[#d8b56b]/25 bg-[#171619] p-4">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#d8b56b]">
-              {isAr ? 'ØªØ®Ø²ÙŠÙ† Ø³ÙˆÙ‚Ù†Ø§' : 'Souqna Storage'}
+              {isAr ? 'تخزين سوقنا' : 'Souqna Storage'}
             </div>
             <div className="mt-3 text-2xl font-semibold text-[#f8efdf]">1GB</div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#2b272c]">
@@ -345,10 +345,10 @@ function StorageVisual({ locale }: { locale: 'en' | 'ar' }) {
             +
           </div>
           <div className="text-center text-xs font-semibold uppercase tracking-[0.22em] text-[#d8b56b]">
-            {isAr ? 'ØµÙˆØ± Ù…Ø®ØµØµØ©' : 'Custom pictures'}
+            {isAr ? 'صور مخصصة' : 'Custom pictures'}
           </div>
           <div className="mx-auto mt-3 max-w-sm text-center text-xl font-semibold text-[#f8efdf]">
-            {isAr ? 'Ø§Ø±ÙØ¹ Ø§Ù„ØµÙˆØ± ÙˆØ§Ø³ØªØ®Ø¯Ù…Ù‡Ø§ ÙÙŠ Ø§Ù„Ø¨Ù†Ù‘Ø§Ø¡' : 'Upload once and reuse in Builder'}
+            {isAr ? 'ارفع الصور واستخدمها في البناء' : 'Upload once and reuse in Builder'}
           </div>
         </div>
       </div>
@@ -382,7 +382,7 @@ function SouqnaUpdateVisual({
           >
             <div className="mx-auto mb-4 h-12 w-12 rounded-2xl border border-[#d8b56b]/35 bg-[#d8b56b]/10" />
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-[#d8b56b]">
-              {locale === 'ar' ? 'ØªØ­Ø¯ÙŠØ« Ø³ÙˆÙ‚Ù†Ø§' : 'Souqna update'}
+              {locale === 'ar' ? 'تحديث سوقنا' : 'Souqna update'}
             </div>
             <div dir="auto" className="mx-auto mt-3 max-w-sm text-xl font-semibold text-[#f8efdf]">
               {update.badge ?? update.title}

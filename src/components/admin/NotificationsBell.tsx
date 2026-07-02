@@ -355,6 +355,7 @@ export function NotificationsBell() {
             id={panelId}
             role="menu"
             aria-label={isAr ? 'التنبيهات' : 'Notifications'}
+            dir={isAr ? 'rtl' : 'ltr'}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
@@ -589,6 +590,7 @@ function Row({
     <Alert
       role="menuitem"
       tabIndex={0}
+      dir={isAr ? 'rtl' : 'ltr'}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={alertStyle}
@@ -613,6 +615,7 @@ function Row({
           }}
         >
           <AlertTitle
+            dir="auto"
             style={{
               fontSize: 12.5,
               fontWeight: 600,
@@ -620,6 +623,8 @@ function Row({
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              textAlign: isAr ? 'right' : 'left',
+              unicodeBidi: 'plaintext',
             }}
           >
             {title}
@@ -628,6 +633,7 @@ function Row({
         </div>
         {body ? (
           <AlertDescription
+            dir="auto"
             style={{
               fontSize: 11.5,
               color: 'var(--ink-muted)',
@@ -637,6 +643,8 @@ function Row({
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
+              textAlign: isAr ? 'right' : 'left',
+              unicodeBidi: 'plaintext',
             }}
           >
             {body}
@@ -709,12 +717,14 @@ function RelativeTime({ iso, isAr }: { iso: string; isAr: boolean }) {
   const label = formatRelative(iso, isAr ? 'ar-QA' : 'en');
   return (
     <span
+      dir={isAr ? 'rtl' : 'ltr'}
       style={{
         fontSize: 10.5,
         color: 'var(--ink-muted)',
         whiteSpace: 'nowrap',
         flexShrink: 0,
         fontFamily: 'var(--font-mono)',
+        unicodeBidi: 'isolate',
       }}
     >
       {label}

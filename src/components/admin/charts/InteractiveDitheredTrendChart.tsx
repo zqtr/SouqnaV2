@@ -30,6 +30,11 @@ export function InteractiveDitheredTrendChart({
   const [stacked, setStacked] = React.useState(true);
   const [hoverIndex, setHoverIndex] = React.useState<number | null>(null);
   const chartRef = React.useRef<HTMLDivElement>(null);
+  const isRtl = hasRtlText([primaryLabel, secondaryLabel, thirtyDaysAgo, today, ariaLabel]);
+  const numberLocale = isRtl ? 'ar-QA' : 'en-US';
+  const signalLabel = isRtl ? 'إشارة مرئية' : 'Dither signal';
+  const stackedLabel = isRtl ? 'متراكم' : 'stacked';
+  const pointLabel = isRtl ? 'النقطة' : 'Point';
   const charts = React.useMemo(
     () => ({
       primary: {
@@ -84,14 +89,19 @@ export function InteractiveDitheredTrendChart({
   }
 
   return (
-    <div className="souqna-dashboard-chart rounded-lg border border-border/80 bg-muted/40">
+    <div
+      className="souqna-dashboard-chart rounded-lg border border-border/80 bg-muted/40"
+      dir={isRtl ? 'rtl' : 'ltr'}
+    >
       <div className="grid border-b border-border/80 sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="flex min-w-0 flex-col justify-center gap-1 px-4 py-3">
           <div className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             {ariaLabel}
           </div>
-          <div className="text-xs text-muted-foreground">
-            {thirtyDaysAgo} - {today}
+          <div className="text-xs text-muted-foreground" style={{ unicodeBidi: 'plaintext' }}>
+            <bdi dir={isRtl ? 'rtl' : 'ltr'}>{thirtyDaysAgo}</bdi>
+            <span aria-hidden> - </span>
+            <bdi dir={isRtl ? 'rtl' : 'ltr'}>{today}</bdi>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:min-w-72">
@@ -110,9 +120,15 @@ export function InteractiveDitheredTrendChart({
                 )}
                 onClick={() => setActiveChart(key)}
               >
-                <span className="truncate text-xs text-muted-foreground">{chart.label}</span>
+                <span
+                  className="truncate text-xs text-muted-foreground"
+                  dir="auto"
+                  style={{ unicodeBidi: 'plaintext' }}
+                >
+                  {chart.label}
+                </span>
                 <span className="font-mono text-lg font-semibold leading-none tabular-nums sm:text-2xl">
-                  {chart.total.toLocaleString('en-US')}
+                  {chart.total.toLocaleString(numberLocale)}
                 </span>
               </button>
             );
@@ -122,7 +138,7 @@ export function InteractiveDitheredTrendChart({
       <div className="p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="font-mono text-[10.5px] text-muted-foreground">
-            Dither signal
+            {signalLabel}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -137,13 +153,14 @@ export function InteractiveDitheredTrendChart({
               onClick={() => setStacked((value) => !value)}
             >
               <Layers2 className="size-3.5" aria-hidden />
-              stacked
+              {stackedLabel}
             </button>
           </div>
         </div>
         <div
           ref={chartRef}
           className="relative h-[240px] w-full touch-none"
+          dir="ltr"
           onPointerMove={handlePointerMove}
           onPointerLeave={() => setHoverIndex(null)}
         >
@@ -162,21 +179,28 @@ export function InteractiveDitheredTrendChart({
           {hoverIndex != null ? (
             <div
               className="pointer-events-none absolute inset-y-0 w-px bg-foreground/36 shadow-[0_0_18px_color-mix(in_srgb,var(--chart-primary)_36%,transparent)]"
-              style={{ insetInlineStart: `${hoverPct}%` }}
+              style={{ left: `${hoverPct}%` }}
               aria-hidden
             >
-              <div className="absolute top-2 -translate-x-1/2 rounded-md border border-border/80 bg-popover px-2.5 py-2 text-xs text-popover-foreground shadow-[0_18px_42px_color-mix(in_srgb,var(--chart-primary)_18%,transparent),var(--shadow-popover)]">
+              <div
+                className="absolute top-2 -translate-x-1/2 rounded-md border border-border/80 bg-popover px-2.5 py-2 text-xs text-popover-foreground shadow-[0_18px_42px_color-mix(in_srgb,var(--chart-primary)_18%,transparent),var(--shadow-popover)]"
+                dir={isRtl ? 'rtl' : 'ltr'}
+              >
                 <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                  Point {hoverIndex + 1}
+                  {pointLabel} {(hoverIndex + 1).toLocaleString(numberLocale)}
                 </div>
                 <div className="grid gap-1 whitespace-nowrap font-mono tabular-nums">
-                  <span className="inline-flex items-center gap-2">
+                  <span className="inline-flex items-center gap-2" style={{ unicodeBidi: 'isolate' }}>
                     <span className="size-2 rounded-sm bg-[var(--chart-primary)]" />
-                    {primaryLabel}: {hoverPrimary?.toLocaleString('en-US')}
+                    <bdi dir={isRtl ? 'rtl' : 'ltr'}>{primaryLabel}</bdi>
+                    <span aria-hidden>:</span>
+                    <bdi dir="ltr">{hoverPrimary?.toLocaleString(numberLocale)}</bdi>
                   </span>
-                  <span className="inline-flex items-center gap-2">
+                  <span className="inline-flex items-center gap-2" style={{ unicodeBidi: 'isolate' }}>
                     <span className="size-2 rounded-sm bg-[var(--chart-secondary)]" />
-                    {secondaryLabel}: {hoverSecondary?.toLocaleString('en-US')}
+                    <bdi dir={isRtl ? 'rtl' : 'ltr'}>{secondaryLabel}</bdi>
+                    <span aria-hidden>:</span>
+                    <bdi dir="ltr">{hoverSecondary?.toLocaleString(numberLocale)}</bdi>
                   </span>
                 </div>
               </div>
@@ -186,14 +210,18 @@ export function InteractiveDitheredTrendChart({
         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-[var(--chart-primary)]" />
-            {primaryLabel}
+            <bdi dir={isRtl ? 'rtl' : 'ltr'}>{primaryLabel}</bdi>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-[var(--chart-secondary)]" />
-            {secondaryLabel}
+            <bdi dir={isRtl ? 'rtl' : 'ltr'}>{secondaryLabel}</bdi>
           </span>
         </div>
       </div>
     </div>
   );
+}
+
+function hasRtlText(values: string[]): boolean {
+  return values.some((value) => /[\u0590-\u08ff]/.test(value));
 }

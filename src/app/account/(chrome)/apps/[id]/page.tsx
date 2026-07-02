@@ -208,7 +208,7 @@ export default async function AppDetailPage({
           color: 'var(--ink-muted)',
         }}
       >
-        Installed only for this storefront. Uninstall anytime â€” your settings stay until you do.
+        Installed only for this storefront. Uninstall anytime - your settings stay until you do.
       </p>
 
       <style>{`
