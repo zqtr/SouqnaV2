@@ -18,6 +18,7 @@ import { SpacerBlock } from '@/components/storefront/blocks/SpacerBlock';
 import { DividerBlock } from '@/components/storefront/blocks/DividerBlock';
 import { DepthShowcaseBlock } from '@/components/storefront/blocks/DepthShowcaseBlock';
 import { AuroraRibbonBlock } from '@/components/storefront/blocks/AuroraRibbonBlock';
+import { PortalHeroBlock } from '@/components/storefront/blocks/PortalHeroBlock';
 import type {
   HeroProps,
   BannerProps,
@@ -38,6 +39,7 @@ import type {
   BlockType,
   DepthShowcaseProps,
   AuroraRibbonProps,
+  PortalHeroProps,
 } from '@/lib/blocks/types';
 
 /**
@@ -147,4 +149,9 @@ export function DepthShowcase(props: DepthShowcaseProps) {
 export function AuroraRibbon(props: AuroraRibbonProps) {
   const ctx = useSouqyContext();
   return <AuroraRibbonBlock block={wrap('auroraRibbon', props)} ctx={ctx} />;
+}
+
+export function PortalHero(props: PortalHeroProps) {
+  const ctx = useSouqyContext();
+  return <PortalHeroBlock block={wrap('portalHero', props)} ctx={ctx} />;
 }

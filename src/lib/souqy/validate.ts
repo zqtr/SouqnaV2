@@ -174,6 +174,14 @@ function validateFile(filename: string, source: string): ValidationIssue[] {
           '`index.tsx` must default-export a function called `Storefront` (e.g. `export default function Storefront() { … }`).',
       });
     }
+
+    const portalHeroCount = countJsxElements(ast, 'PortalHero');
+    if (portalHeroCount > 1) {
+      issues.push({
+        file: filename,
+        message: '`PortalHero` may appear at most once per Souqy storefront.',
+      });
+    }
   }
 
   // theme.ts must export a const literal `theme`.
@@ -262,6 +270,16 @@ function validateFile(filename: string, source: string): ValidationIssue[] {
   });
 
   return issues;
+}
+
+function countJsxElements(ast: File, componentName: string): number {
+  let count = 0;
+  walk(ast, (node) => {
+    if (node.type !== 'JSXOpeningElement') return;
+    const name = node.name;
+    if (name.type === 'JSXIdentifier' && name.name === componentName) count += 1;
+  });
+  return count;
 }
 
 function issue(file: string, node: Node, message: string): ValidationIssue {

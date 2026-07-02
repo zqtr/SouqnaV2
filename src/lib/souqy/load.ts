@@ -75,6 +75,7 @@ const SDK_COMPONENT_EXPORTS = [
   'Divider',
   'DepthShowcase',
   'AuroraRibbon',
+  'PortalHero',
   'Section',
   'Stack',
   'Grid',

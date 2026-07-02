@@ -56,6 +56,7 @@ export {
   Divider,
   DepthShowcase,
   AuroraRibbon,
+  PortalHero,
 } from './components';
 
 export {
@@ -92,6 +93,7 @@ export type {
   DividerProps,
   DepthShowcaseProps,
   AuroraRibbonProps,
+  PortalHeroProps,
   ThemeOverrides,
   Cta,
   GalleryItem,

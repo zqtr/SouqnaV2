@@ -101,24 +101,27 @@ export function CommerceMetricChartGroup({
   const activeAccent = accentForTone(activeMetric.tone);
   const activeStyle = {
     '--metric-accent': activeAccent,
-    '--metric-chart-bg': '#090908',
-    '--metric-chart-ink': '#F5EFE3',
-    '--metric-chart-muted': 'rgba(245, 239, 227, 0.64)',
-    '--metric-chart-faint': 'rgba(245, 239, 227, 0.42)',
-    '--metric-tooltip-bg': '#F5EFE3',
-    '--metric-tooltip-ink': '#090908',
+    '--metric-chart-bg': 'var(--surface-elevated, var(--card))',
+    '--metric-chart-panel': 'var(--surface-overlay, var(--card))',
+    '--metric-chart-sunken': 'var(--surface-sunken, var(--muted))',
+    '--metric-chart-ink': 'var(--ink-strong, var(--foreground))',
+    '--metric-chart-muted': 'var(--ink-muted, var(--muted-foreground))',
+    '--metric-chart-faint': 'var(--ink-faint, var(--muted-foreground))',
+    '--metric-tooltip-bg': 'var(--popover, var(--surface-overlay))',
+    '--metric-tooltip-ink': 'var(--popover-foreground, var(--ink-strong))',
   } as React.CSSProperties;
   const curveType = 'monotone' as const;
 
   return (
     <section
-      className="souqna-dashboard-card souqna-dashboard-dither border p-4 text-[color:var(--metric-chart-ink)] shadow-[var(--dash-shadow)] sm:p-5 lg:p-6"
+      className="souqna-dashboard-card souqna-commerce-chart-group border p-4 text-[color:var(--metric-chart-ink)] shadow-[var(--dash-shadow)] sm:p-5 lg:p-6"
       dir="ltr"
       style={{
         ...activeStyle,
-        borderColor: 'color-mix(in srgb, var(--dash-important) 26%, transparent)',
+        borderColor:
+          'color-mix(in srgb, var(--metric-accent) 24%, var(--surface-rule-strong, var(--border)))',
         background:
-          'linear-gradient(135deg, color-mix(in srgb, var(--metric-chart-bg) 96%, var(--metric-accent) 4%), color-mix(in srgb, var(--metric-chart-bg) 88%, var(--metric-accent) 12%))',
+          'linear-gradient(135deg, color-mix(in srgb, var(--metric-chart-bg) 92%, var(--metric-accent) 8%), color-mix(in srgb, var(--metric-chart-panel) 90%, var(--metric-accent) 10%))',
       }}
     >
       <div
@@ -169,7 +172,7 @@ export function CommerceMetricChartGroup({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-        <div className="min-h-[430px] rounded-[var(--dash-radius)] border border-[color:color-mix(in_srgb,var(--metric-chart-ink)_10%,transparent)] bg-[color:color-mix(in_srgb,var(--metric-chart-bg)_78%,transparent)] p-4 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--metric-chart-ink)_7%,transparent)] sm:p-5">
+        <div className="min-h-[430px] rounded-[var(--dash-radius)] border border-[color:color-mix(in_srgb,var(--metric-chart-ink)_10%,transparent)] bg-[color:color-mix(in_srgb,var(--metric-chart-panel)_84%,var(--metric-chart-sunken))] p-4 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--metric-chart-ink)_7%,transparent)] sm:p-5">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div dir={isRtl ? 'rtl' : 'ltr'}>
               <p className="text-sm font-medium text-[color:var(--metric-chart-muted)]">
@@ -498,8 +501,10 @@ function formatMetricValue(value: number, metric: CommerceChartMetric, currency:
 
 function accentForTone(tone: CommerceChartMetric['tone']): string {
   if (tone === 'critical') return 'var(--chart-danger)';
-  if (tone === 'success') return 'var(--chart-success)';
+  if (tone === 'success') {
+    return 'color-mix(in srgb, var(--chart-success) 76%, var(--admin-accent) 24%)';
+  }
   if (tone === 'info') return 'var(--chart-primary)';
   if (tone === 'warning') return 'var(--chart-primary)';
-  return 'var(--chart-ink)';
+  return 'var(--chart-secondary, var(--chart-ink))';
 }

@@ -6636,6 +6636,20 @@ function createBlock(
           brightness: 0.85,
         },
       };
+    case 'portalHero':
+      return {
+        id,
+        type,
+        props: {
+          eyebrow: 'Souqy Portal',
+          title: 'A storefront that opens with a signature moment.',
+          subtitle: 'Use once as the opening hero, then let product and service sections do the selling.',
+          layout: 'compact',
+          tone: 'ink',
+          brightness: 0.82,
+          cta: { label: 'Explore products', href: '/products' },
+        },
+      };
     case 'curvedLoop':
       return {
         id,

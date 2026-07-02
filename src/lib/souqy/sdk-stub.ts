@@ -205,6 +205,15 @@ export type AuroraRibbonProps = {
   heightPx?: number;
   brightness?: number;
 };
+export type PortalHeroProps = {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  cta?: Cta;
+  layout?: 'compact' | 'immersive';
+  tone?: 'cream' | 'ink' | 'gold';
+  brightness?: number;
+};
 
 /** Mirrors \`ThemeOverrides\` in \`src/lib/blocks/types.ts\` for theme.ts — enums relaxed to \`string\` where Zod lists are huge. */
 export type ThemeOverrides = {
@@ -324,6 +333,7 @@ const COMPONENT_DECLS = [
   'Divider',
   'DepthShowcase',
   'AuroraRibbon',
+  'PortalHero',
 ]
   .map((name) => `export declare function ${name}(props: ${name}Props): JSX.Element;`)
   .join('\n');

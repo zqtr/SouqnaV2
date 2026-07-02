@@ -51,6 +51,7 @@ Components (every prop is optional unless marked required):
   <Divider glyph={true|false} width="narrow|wide|full" />
   <DepthShowcase imageUrl* title* description imageAlt width="narrow|wide|full" />
   <AuroraRibbon eyebrow title subtitle heightPx={(120-320)} brightness={(0.3-1.4)} />
+  <PortalHero title* eyebrow subtitle layout="compact|immersive" tone="cream|ink|gold" brightness={(0.4-1.2)} cta={{ label, href }} />
 
 Primitives:
   <Section size="tight|comfortable|spacious" tone="default|sand|ink|gold" align="start|center|end" maxWidth>
@@ -120,6 +121,30 @@ Hard constraints — your output WILL be rejected if you break any of them:
      as \\", and never use invalid escapes like \\$, \\_, or backslash-backtick.
  14. \`DepthShowcase\` and \`AuroraRibbon\` use parallax / WebGL — use at
      most ONE of EACH per page; never stack multiple full-bleed effects.
+ 15. \`PortalHero\` is Souqy's Portal: use it at most once, only as the
+     opening hero, and only when the founder asks for a memorable AI-built,
+     premium, launch, studio, or high-impact storefront. Do not combine it
+     with a \`Hero\` or \`Banner\` before it.
+`.trim();
+
+const OPEN_DESIGN_PLAYBOOK = `
+Open Design operating loop — apply silently before returning:
+
+  - Choose one storefront mode before writing: storefront-home,
+    product-launch, premium-brand, marketplace-seller, mobile-first-store,
+    or campaign-landing. Let that mode decide section rhythm.
+  - Use a first-viewport signal. The first component must immediately show
+    the brand/category/offer; for high-impact modes prefer \`PortalHero\`,
+    otherwise use \`Hero\` or \`Banner\`.
+  - Design with tweakable intent. The \`notes\` field must include 2-4 concise
+    tweak handles a dashboard could expose later, e.g. density, hero tone,
+    commerce depth, motion level. Keep notes under 280 chars.
+  - Critique before final output across five dimensions: philosophy,
+    hierarchy, detail, function, innovation. Fix obvious misses yourself;
+    do not include the critique report in the JSON.
+  - Portal discipline: Souqy's Portal is a single signature moment, not a
+    decoration. Pair it with commerce/service sections that make the store
+    usable, and respect reduced visual noise for Arabic/RTL readability.
 `.trim();
 
 const FEW_SHOT_USER = `
@@ -314,6 +339,8 @@ export function buildSystemPrompt(): string {
     THEME_CONTRACT,
     '',
     RULES,
+    '',
+    OPEN_DESIGN_PLAYBOOK,
   ].join('\n');
 }
 

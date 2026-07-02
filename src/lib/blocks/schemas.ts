@@ -526,6 +526,18 @@ const auroraRibbonProps = z
   })
   .strict();
 
+const portalHeroProps = z
+  .object({
+    eyebrow: z.string().trim().max(80).optional(),
+    title: z.string().trim().min(1).max(200),
+    subtitle: z.string().trim().max(420).optional(),
+    cta: ctaSchema.optional(),
+    layout: z.enum(['compact', 'immersive']).optional(),
+    tone: z.enum(['cream', 'ink', 'gold']).optional(),
+    brightness: z.number().min(0.4).max(1.2).optional(),
+  })
+  .strict();
+
 const curvedLoopProps = z
   .object({
     marqueeText: z.string().trim().min(1).max(260).default('Add Text Here'),
@@ -983,6 +995,7 @@ export const blockPropsByType = {
   taqim: taqimProps,
   depthShowcase: depthShowcaseProps,
   auroraRibbon: auroraRibbonProps,
+  portalHero: portalHeroProps,
   curvedLoop: curvedLoopProps,
   showcase1: showcase1Props,
   showcase2: showcase2Props,
@@ -1061,6 +1074,11 @@ export const blockSchema = z.discriminatedUnion('type', [
     ...baseBlock,
     type: z.literal('auroraRibbon'),
     props: auroraRibbonProps,
+  }),
+  z.object({
+    ...baseBlock,
+    type: z.literal('portalHero'),
+    props: portalHeroProps,
   }),
   z.object({
     ...baseBlock,

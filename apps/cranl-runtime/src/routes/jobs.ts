@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { AiChatJobSchema, ImageGenerationJobSchema } from '../jobs/types';
+import { env } from '../config';
 import { getQueue } from '../queues';
 import { QueueName, queueNames, type QueueName as QueueNameValue } from '../queues/names';
 import { requireCranlAuth } from './auth';
@@ -85,6 +86,6 @@ function withDefaultProvider(input: unknown): Record<string, unknown> {
   if (payload.provider) return payload;
   return {
     ...payload,
-    provider: 'openai',
+    provider: env.CRANL_DEFAULT_PROVIDER,
   };
 }

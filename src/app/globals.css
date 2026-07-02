@@ -1041,7 +1041,7 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
 .souqna-dashboard5-home {
   --chart-success: var(--dash-green);
   --chart-danger: var(--dash-red);
-  --chart-ink: var(--dash-black);
+  --chart-ink: var(--ink-strong);
 }
 
 .souqna-metric-grid {
@@ -1090,6 +1090,37 @@ html[dir='rtl'] .souqna-admin-shell [data-slot='sidebar-menu-sub-button']:hover 
 }
 
 .souqna-dashboard-dither > * {
+  position: relative;
+  z-index: 1;
+}
+
+.souqna-commerce-chart-group {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.souqna-commerce-chart-group::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  background-image:
+    radial-gradient(circle, var(--metric-chart-ink) 0.62px, transparent 0.78px),
+    radial-gradient(circle, var(--metric-accent) 0.56px, transparent 0.72px);
+  background-size:
+    8px 8px,
+    13px 13px;
+  background-position:
+    0 0,
+    7px 5px;
+  animation: souqna-dashboard-dither 18s linear infinite;
+  mask-image: linear-gradient(180deg, black, transparent 78%);
+}
+
+.souqna-commerce-chart-group > * {
   position: relative;
   z-index: 1;
 }
@@ -1813,6 +1844,7 @@ body.souqna-admin-shell [data-slot='drawer-overlay'] {
   .shimmer,
   body.souqna-admin-shell::before,
   .souqna-dashboard-dither::before,
+  .souqna-commerce-chart-group::before,
   .souqna-admin-search-trigger::after,
   .souqna-admin-dock::before,
   .souqna-admin-dock::after,

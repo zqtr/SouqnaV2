@@ -13,6 +13,7 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.string().default('info'),
   CRANL_API_KEY: OptionalSecretSchema,
+  CRANL_DEFAULT_PROVIDER: z.enum(['openai', 'ollama', 'huggingface', 'mock']).default('openai'),
   REDIS_URL: z.string().url().default('redis://127.0.0.1:6379'),
   OPENAI_API_KEY: z.string().optional(),
   OLLAMA_URL: z.string().url().default('http://127.0.0.1:11434'),

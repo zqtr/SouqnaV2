@@ -59,6 +59,8 @@ export const BLOCK_TYPES = [
   'depthShowcase',
   /** Narrow aurora gradient ribbon — use sparingly. */
   'auroraRibbon',
+  /** Souqy portal hero — constrained WebGL opener for AI-built storefronts. */
+  'portalHero',
   /** Curved loop marquee text. */
   'curvedLoop',
   /** Premium compact active-image showcase switcher. */
@@ -1166,6 +1168,19 @@ export type AuroraRibbonProps = {
   brightness?: number;
 };
 
+export type PortalHeroProps = {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  cta?: Cta;
+  /** Compact keeps the portal as an editorial medallion; immersive fills more of the first viewport. */
+  layout?: 'compact' | 'immersive';
+  /** Souqna-owned colourway. Avoids arbitrary neon palettes in generated storefronts. */
+  tone?: 'cream' | 'ink' | 'gold';
+  /** Master brightness 0.4-1.2. */
+  brightness?: number;
+};
+
 export type CurvedLoopProps = {
   /** Text rendered repeatedly along the animated curve. */
   marqueeText: string;
@@ -1223,6 +1238,7 @@ export type BlockPropsByType = {
   taqim: TaqimBlockProps;
   depthShowcase: DepthShowcaseProps;
   auroraRibbon: AuroraRibbonProps;
+  portalHero: PortalHeroProps;
   curvedLoop: CurvedLoopProps;
   showcase1: Showcase1Props;
   showcase2: Showcase2Props;

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { env } from '@/lib/env';
 
 const ProviderSchema = z.enum(['openai', 'ollama', 'huggingface', 'mock']);
+const DEFAULT_PROVIDER = ProviderSchema.parse(env.CRANL_DEFAULT_PROVIDER);
 
 export const CranlQueueSchema = z.enum([
   'image-generation',
@@ -15,7 +16,7 @@ export const CranlQueueSchema = z.enum([
 
 export const CranlImageGenerationRequestSchema = z.object({
   prompt: z.string().trim().min(1).max(5_000),
-  provider: ProviderSchema.default('openai'),
+  provider: ProviderSchema.default(DEFAULT_PROVIDER),
   model: z.string().trim().min(1).max(120).optional(),
   size: z.string().trim().min(3).max(40).default('1024x1024'),
   count: z.coerce.number().int().min(1).max(4).default(1),
@@ -29,7 +30,7 @@ const CranlChatMessageSchema = z.object({
 
 export const CranlAiChatRequestSchema = z.object({
   messages: z.array(CranlChatMessageSchema).min(1).max(32),
-  provider: ProviderSchema.default('openai'),
+  provider: ProviderSchema.default(DEFAULT_PROVIDER),
   model: z.string().trim().min(1).max(120).optional(),
   temperature: z.coerce.number().min(0).max(2).default(0.7),
   metadata: z.record(z.unknown()).default({}),
