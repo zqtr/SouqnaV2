@@ -174,7 +174,11 @@ function DitherHalftoneSystem({
     if (!finalPause || !containerRef.current) return;
 
     const observer = new IntersectionObserver(
-      ([entry]) => setIsVisible(entry.isIntersecting),
+      ([entry]) => {
+        if (entry) {
+          setIsVisible(entry.isIntersecting);
+        }
+      },
       { threshold: 0.05, rootMargin: "200px" }
     );
     observer.observe(containerRef.current);

@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import type { Locale } from '@/i18n/locales';
 import DitherWave from '@/components/dither-wave';
-import { DitherHalftoneSystem } from '@/components/souqna-motion/DitherHalftoneSystem';
 import { souqyDesignStorefront } from '@/app/actions/souqy';
 import {
   estimateSouqyStudioModelCost,
@@ -765,7 +764,6 @@ export function StudioShell({ locale }: Props) {
     <section className={shellClassName} data-theme="dark" dir={isRtl ? 'rtl' : 'ltr'}>
       <style suppressHydrationWarning dangerouslySetInnerHTML={{ __html: studioTheme }} />
       <div className="sqs-atmosphere" aria-hidden>
-        {/* Existing DitherWave (kept for compatibility) */}
         <DitherWave
           className="sqs-dither"
           width="100%"
@@ -782,17 +780,6 @@ export function StudioShell({ locale }: Props) {
           maxFPS={45}
           pauseWhenOffscreen
         />
-
-        {/* New unified DitherHalftoneSystem - Signature IDE treatment */}
-        <DitherHalftoneSystem
-          mode="background"
-          className="sqs-dither"
-          intensity={0.18}
-          speed={1.3}
-          quality="medium"
-          pauseWhenOffscreen
-        />
-
         <div className="sqs-pixel-layer" />
         <div className="sqs-scanlines" />
         <div className="sqs-vignette" />
