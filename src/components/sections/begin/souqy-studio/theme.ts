@@ -344,6 +344,51 @@ body:has(.sqs-shell) [data-homepage-blank] { display: none !important; }
 .sqs-hero p { margin: 0; font-size: 13.5px; color: var(--sqs-muted); }
 .sqs-hero.is-exiting { opacity: 0; visibility: hidden; }
 
+/* Empty-state starter prompts (chat tab) */
+.sqs-starters {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  pointer-events: auto;
+}
+.sqs-starters > small {
+  font-family: var(--sqs-font-mono);
+  font-size: 9.5px;
+  letter-spacing: .28em;
+  text-transform: uppercase;
+  color: var(--sqs-faint);
+}
+.sqs-starter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 220px));
+  gap: 8px;
+}
+.sqs-starter-grid button {
+  padding: 10px 14px;
+  font-size: 12.5px;
+  text-align: start;
+  color: var(--sqs-muted);
+  background: var(--sqs-panel-soft);
+  border: 1px solid var(--sqs-line);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease, background .18s ease, transform .18s ease;
+}
+.sqs-starter-grid button:hover {
+  color: var(--sqs-ink);
+  border-color: var(--sqs-line-strong);
+  background: var(--sqs-panel-strong);
+  transform: translateY(-1px);
+}
+@media (max-width: 640px) {
+  .sqs-starter-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.sqs-hero.is-exiting .sqs-starters { pointer-events: none; }
+
+/* Streamed assistant text keeps its paragraph breaks */
+.sqs-msg-bubble > p { white-space: pre-wrap; }
+
 /* ------------------------------------------------------------------ */
 /* Agent thread                                                        */
 /* ------------------------------------------------------------------ */

@@ -7,6 +7,7 @@ import {
   type FanarChatMessage,
 } from '@/lib/fanar/provider';
 import { estimateFanarChatCost } from '@/lib/souqy-studio/modelCatalog';
+import { toSouqyIdeError } from '@/lib/souqy-ide/errors';
 import { requireCranlUserAccess } from '../../_access';
 import { cranlErrorResponse } from '../../_errors';
 
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
     isSouqyStudioFanarEnabled()
   ) {
     try {
-      return await createFanarStudioStream(parsed.data.messages);
+      return await createFanarStudioStream(parsed.data.messages, request.signal);
     } catch (error) {
       console.warn('[souqy-studio-chat] Fanar stream failed before start', summarizeFanarError(error));
     }
@@ -50,7 +51,10 @@ export async function POST(request: Request) {
   }
 }
 
-async function createFanarStudioStream(messages: FanarChatMessage[]): Promise<Response> {
+async function createFanarStudioStream(
+  messages: FanarChatMessage[],
+  clientSignal: AbortSignal,
+): Promise<Response> {
   const completion = await fanarChatCompletion({
     messages,
     useCase: 'chat-completions',
@@ -86,13 +90,23 @@ async function createFanarStudioStream(messages: FanarChatMessage[]): Promise<Re
         cost: initialCost,
       });
 
+      const reader = fanarStream.getReader();
+      // Client gone → stop paying RunPod for tokens nobody will read.
+      const onClientAbort = () => {
+        completion.abort?.();
+        void reader.cancel().catch(() => {});
+      };
+      if (clientSignal.aborted) onClientAbort();
+      else clientSignal.addEventListener('abort', onClientAbort, { once: true });
+
       try {
-        const reader = fanarStream.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
 
         while (true) {
-          const { done, value } = await reader.read();
+          const { done, value } = await readWithIdleTimeout(reader, () => {
+            completion.abort?.();
+          });
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split(/\r?\n/u);
@@ -121,8 +135,11 @@ async function createFanarStudioStream(messages: FanarChatMessage[]): Promise<Re
         });
         controller.close();
       } catch (error) {
-        enqueue('error', { message: summarizeFanarError(error) });
+        console.warn('[souqy-studio-chat] Fanar stream failed mid-flight', summarizeFanarError(error));
+        enqueue('error', { ...toSouqyIdeError(error), partialText: outputText });
         controller.close();
+      } finally {
+        clientSignal.removeEventListener('abort', onClientAbort);
       }
     },
   });
@@ -135,6 +152,26 @@ async function createFanarStudioStream(messages: FanarChatMessage[]): Promise<Re
       'X-Souqy-Chat-Provider': 'fanar-runpod',
     },
   });
+}
+
+async function readWithIdleTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  onIdle: () => void,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) => {
+        idleTimer = setTimeout(() => {
+          onIdle();
+          reject(new DOMException('Fanar stream idle timeout.', 'TimeoutError'));
+        }, env.FANAR_STREAM_IDLE_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(idleTimer);
+  }
 }
 
 function extractOpenAiStreamDelta(line: string): string {

@@ -43,6 +43,12 @@ export type FanarChatCompletionResult = {
   text: string;
   raw: unknown;
   latencyMs?: number;
+  /**
+   * Stream mode only: aborts the underlying request. Callers that consume
+   * `raw` as a ReadableStream must call this on client disconnect so the
+   * upstream RunPod request is not left running.
+   */
+  abort?: () => void;
 };
 
 export class FanarConfigurationError extends Error {
@@ -88,23 +94,43 @@ export async function fanarChatCompletion(
   const model = input.model ?? env.FANAR_MODEL;
   const start = Date.now();
   const stream = input.stream ?? false;
-  const response = await fetch(fanarChatCompletionUrl(), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.FANAR_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: input.messages,
-      temperature: input.temperature ?? 0.35,
-      max_tokens: input.maxOutputTokens ?? 1024,
-      stream,
-    }),
-    signal: AbortSignal.timeout(input.timeoutMs ?? env.FANAR_TIMEOUT_MS),
-  });
+  const timeoutMs = input.timeoutMs ?? env.FANAR_TIMEOUT_MS;
+
+  // Non-stream: the timeout may cap the whole request including body read.
+  // Stream: the timeout must only cover the connect phase — a healthy long
+  // stream can legitimately outlive it, so the timer is cleared once headers
+  // arrive and idle-detection becomes the consumer's job (see ai-chat route).
+  const controller = new AbortController();
+  const connectTimer = setTimeout(
+    () => controller.abort(new DOMException('Fanar request timed out.', 'TimeoutError')),
+    timeoutMs,
+  );
+
+  let response: Response;
+  try {
+    response = await fetch(fanarChatCompletionUrl(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.FANAR_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: input.messages,
+        temperature: input.temperature ?? 0.35,
+        max_tokens: input.maxOutputTokens ?? 1024,
+        stream,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(connectTimer);
+    throw error;
+  }
+  if (stream) clearTimeout(connectTimer);
 
   if (!response.ok) {
+    clearTimeout(connectTimer);
     const body = await response.text().catch(() => '');
     throw new FanarRequestError(
       body || `Fanar request failed (${response.status}).`,
@@ -123,10 +149,12 @@ export async function fanarChatCompletion(
       text: '[stream]',
       raw: response.body,
       latencyMs,
+      abort: () => controller.abort(new DOMException('Fanar stream aborted.', 'AbortError')),
     };
   }
 
   const raw = (await response.json().catch(() => null)) as unknown;
+  clearTimeout(connectTimer);
   const text = extractChatText(raw);
   if (!text) {
     throw new FanarRequestError('Fanar returned no assistant text.', response.status);

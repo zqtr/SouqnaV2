@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import type { Locale } from '@/i18n/locales';
-import DitherWave from '@/components/dither-wave';
 import DitherHalftoneSystem from '@/components/souqna-motion/DitherHalftoneSystem';
-import { DitherBorderBeam } from '@/components/souqna-motion/DitherBorderBeam';
+import { fromHttpStatus, souqyIdeErrorMessage } from '@/lib/souqy-ide/errors';
+import { consumeSseResponse, isEventStreamResponse } from '@/lib/souqy-ide/sse';
 import { souqyDesignStorefront } from '@/app/actions/souqy';
 import {
   estimateSouqyStudioModelCost,
@@ -59,11 +59,12 @@ import type {
 
 type Props = {
   locale: Locale;
+  initialTab?: StudioTab;
 };
 
-export function StudioShell({ locale }: Props) {
+export function StudioShell({ locale, initialTab }: Props) {
   const isRtl = locale === 'ar';
-  const [activeTab, setActiveTab] = useState<StudioTab>('create');
+  const [activeTab, setActiveTab] = useState<StudioTab>(initialTab ?? 'create');
   const [project, setProject] = useState<SouqyStudioProject | null>(null);
   const [projectSummaries, setProjectSummaries] = useState<StudioProjectSummary[]>([]);
   const [newProjectName, setNewProjectName] = useState('');
@@ -100,6 +101,7 @@ export function StudioShell({ locale }: Props) {
   const [isWebDesigning, setIsWebDesigning] = useState(false);
   const referencesRef = useRef<ReferenceImage[]>([]);
   const threadRef = useRef<HTMLElement>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
 
   const copy = studioCopy(isRtl);
   const visibleProducts = selectedStorefrontSlug
@@ -200,7 +202,7 @@ export function StudioShell({ locale }: Props) {
         if (!cancelled) {
           setStatus({
             tone: 'error',
-            message: error instanceof Error ? error.message : copy.libraryError,
+            message: souqyIdeErrorMessage(error, isRtl ? 'ar' : 'en'),
           });
         }
       })
@@ -217,7 +219,7 @@ export function StudioShell({ locale }: Props) {
         if (!cancelled) {
           setStatus({
             tone: 'error',
-            message: error instanceof Error ? error.message : copy.projectsError,
+            message: souqyIdeErrorMessage(error, isRtl ? 'ar' : 'en'),
           });
         }
       })
@@ -265,7 +267,7 @@ export function StudioShell({ locale }: Props) {
     } catch (error) {
       setStatus({
         tone: 'error',
-        message: error instanceof Error ? error.message : copy.libraryError,
+        message: souqyIdeErrorMessage(error, isRtl ? 'ar' : 'en'),
       });
     } finally {
       setIsLibraryLoading(false);
@@ -285,7 +287,7 @@ export function StudioShell({ locale }: Props) {
     } catch (error) {
       setStatus({
         tone: 'error',
-        message: error instanceof Error ? error.message : copy.projectsError,
+        message: souqyIdeErrorMessage(error, isRtl ? 'ar' : 'en'),
       });
     } finally {
       setIsProjectsLoading(false);
@@ -433,7 +435,7 @@ export function StudioShell({ locale }: Props) {
       });
       void refreshProjects();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Souqy Studio generation failed.';
+      const message = souqyIdeErrorMessage(err, isRtl ? 'ar' : 'en');
       setGenerationProgress(0);
       setStatus({ tone: 'error', message });
       markAssistantMessage({
@@ -496,18 +498,104 @@ export function StudioShell({ locale }: Props) {
       );
     };
 
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
+    let streamedText = '';
+
     try {
-      const submission = await postSouqyStudio<CranlJobSubmissionState>('/api/cranl/jobs/ai-chat', {
-        messages: [
-          { role: 'system', content: copy.chatSystemPrompt },
-          ...history,
-          { role: 'user', content: cleanPrompt },
-        ],
-        metadata: {
-          surface: 'souqy-studio',
-          tab: 'chat',
+      const response = await fetch('/api/cranl/jobs/ai-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
         },
+        signal: controller.signal,
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: copy.chatSystemPrompt },
+            ...history,
+            { role: 'user', content: cleanPrompt },
+          ],
+          metadata: {
+            surface: 'souqy-studio',
+            tab: 'chat',
+          },
+        }),
       });
+
+      // Primary path: Fanar SSE stream — tokens render as they arrive.
+      if (response.ok && isEventStreamResponse(response)) {
+        let settled = false;
+        await consumeSseResponse(response, (frame) => {
+          if (frame.event === 'delta') {
+            const text = (frame.data as { text?: unknown })?.text;
+            if (typeof text !== 'string') return;
+            streamedText += text;
+            markAssistantMessage({
+              content: streamedText,
+              status: 'creating',
+              templateLabel: copy.modeLabels.chat,
+              formatLabel: 'AI',
+            });
+            return;
+          }
+          if (frame.event === 'done') {
+            settled = true;
+            const finalText = (frame.data as { text?: unknown })?.text;
+            markAssistantMessage({
+              content:
+                (typeof finalText === 'string' && finalText) ||
+                streamedText ||
+                copy.chatEmptyResult,
+              status: 'done',
+              templateLabel: copy.modeLabels.chat,
+              formatLabel: 'AI',
+            });
+            setStatus({ tone: 'done', message: copy.chatReady });
+            return;
+          }
+          if (frame.event === 'error') {
+            settled = true;
+            const data = frame.data as { message?: { en?: string; ar?: string } } | null;
+            const message = (isRtl ? data?.message?.ar : data?.message?.en) ?? copy.chatFailed;
+            setStatus({ tone: 'error', message });
+            markAssistantMessage({
+              content: streamedText ? `${streamedText}\n\n${message}` : message,
+              status: 'error',
+              templateLabel: copy.modeLabels.chat,
+            });
+          }
+        });
+        if (!settled) {
+          // Stream closed without a terminal event — keep whatever arrived.
+          markAssistantMessage({
+            content: streamedText || copy.chatEmptyResult,
+            status: streamedText ? 'done' : 'error',
+            templateLabel: copy.modeLabels.chat,
+            formatLabel: 'AI',
+          });
+          setStatus(
+            streamedText
+              ? { tone: 'done', message: copy.chatReady }
+              : { tone: 'error', message: copy.chatFailed },
+          );
+        }
+        return;
+      }
+
+      if (!response.ok) {
+        const message = fromHttpStatus(response.status).message[isRtl ? 'ar' : 'en'];
+        setStatus({ tone: 'error', message });
+        markAssistantMessage({
+          content: message,
+          status: 'error',
+          templateLabel: copy.modeLabels.chat,
+        });
+        return;
+      }
+
+      // Fallback path: CranL job queue (non-streaming) — designed wait state.
+      const submission = (await response.json()) as CranlJobSubmissionState;
       if (!submission.ok) {
         const message = cranlErrorLabel(submission.error);
         setStatus({ tone: 'error', message });
@@ -564,7 +652,18 @@ export function StudioShell({ locale }: Props) {
         templateLabel: copy.modeLabels.chat,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : copy.chatFailed;
+      if (controller.signal.aborted) {
+        // Founder pressed Stop — keep the partial answer, no error styling.
+        markAssistantMessage({
+          content: streamedText || copy.chatStopped,
+          status: streamedText ? 'done' : 'error',
+          templateLabel: copy.modeLabels.chat,
+          formatLabel: 'AI',
+        });
+        setStatus({ tone: 'idle', message: copy.chatStopped });
+        return;
+      }
+      const message = souqyIdeErrorMessage(error, isRtl ? 'ar' : 'en');
       setStatus({ tone: 'error', message });
       markAssistantMessage({
         content: message,
@@ -572,8 +671,13 @@ export function StudioShell({ locale }: Props) {
         templateLabel: copy.modeLabels.chat,
       });
     } finally {
+      chatAbortRef.current = null;
       setIsChatBusy(false);
     }
+  }
+
+  function stopTextChat() {
+    chatAbortRef.current?.abort();
   }
 
   function submitComposer() {
@@ -611,7 +715,7 @@ export function StudioShell({ locale }: Props) {
       setWebStatusMessage(copy.webDesignReady);
       setWebPreviewKey((current) => current + 1);
     } catch (error) {
-      setWebStatusMessage(error instanceof Error ? error.message : copy.webDesignFailed);
+      setWebStatusMessage(souqyIdeErrorMessage(error, isRtl ? 'ar' : 'en'));
     } finally {
       setIsWebDesigning(false);
     }
@@ -641,7 +745,7 @@ export function StudioShell({ locale }: Props) {
     } catch (error) {
       setStatus({
         tone: 'error',
-        message: error instanceof Error ? error.message : copy.projectsError,
+        message: souqyIdeErrorMessage(error, isRtl ? 'ar' : 'en'),
       });
     } finally {
       setIsProjectsLoading(false);
@@ -664,7 +768,7 @@ export function StudioShell({ locale }: Props) {
     } catch (error) {
       setStatus({
         tone: 'error',
-        message: error instanceof Error ? error.message : copy.projectsError,
+        message: souqyIdeErrorMessage(error, isRtl ? 'ar' : 'en'),
       });
     } finally {
       setIsProjectsLoading(false);
@@ -701,7 +805,7 @@ export function StudioShell({ locale }: Props) {
     } catch (error) {
       setStatus({
         tone: 'error',
-        message: error instanceof Error ? error.message : copy.editReferenceFailed,
+        message: souqyIdeErrorMessage(error, isRtl ? 'ar' : 'en'),
       });
     }
   }
@@ -768,23 +872,13 @@ export function StudioShell({ locale }: Props) {
       <style suppressHydrationWarning dangerouslySetInnerHTML={{ __html: studioTheme }} />
       <div className="sqs-atmosphere" aria-hidden>
         <DitherHalftoneSystem
-          mode="background"
+          mode={isBusy || isChatBusy || isWebDesigning ? 'loading' : 'background'}
           className="sqs-dither"
-          intensity={0.12}
+          intensity={isBusy || isChatBusy || isWebDesigning ? 0.18 : 0.12}
           speed={1.3}
           quality="medium"
           pauseWhenOffscreen
         />
-
-        {/* DitherBorderBeam on selection states */}
-        {selectedAsset && (
-          <DitherBorderBeam
-            className="absolute inset-0 pointer-events-none z-10"
-            variant="pulse"
-            intensity={0.45}
-            speed={2.6}
-          />
-        )}
 
         <div className="sqs-pixel-layer" />
         <div className="sqs-scanlines" />
@@ -827,6 +921,18 @@ export function StudioShell({ locale }: Props) {
                 <small>{copy.eyebrow}</small>
                 <h2>{copy.heroTitle}</h2>
                 <p>{copy.heroBody}</p>
+                {activeTab === 'chat' ? (
+                  <div className="sqs-starters" aria-label={copy.chatStartersTitle}>
+                    <small>{copy.chatStartersTitle}</small>
+                    <div className="sqs-starter-grid">
+                      {copy.chatStarters.map((starter) => (
+                        <button key={starter} type="button" onClick={() => setPrompt(starter)}>
+                          {starter}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
               <AgentThread
                 activeTab={activeTab}
@@ -891,6 +997,7 @@ export function StudioShell({ locale }: Props) {
             onPromptChange={setPrompt}
             onSubmit={submitComposer}
             busy={composerBusy}
+            onStop={activeTab === 'chat' && isChatBusy ? stopTextChat : undefined}
             generationProgress={generationProgress}
             status={status}
             formatSize={currentFormat.size}

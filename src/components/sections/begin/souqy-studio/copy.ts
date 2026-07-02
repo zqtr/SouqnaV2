@@ -17,6 +17,15 @@ export function studioCopy(isRtl: boolean) {
         chatFailed: 'تعذر على المساعد الذكي إكمال الطلب.',
         chatPlaceholder: 'اسأل سوقي عن أفكار الحملات أو البرومبتات أو نصائح المتجر...',
         chatReady: 'وصل رد سوقي.',
+        chatStarters: [
+          'خطط حملة رمضان لقائمة منتجاتي',
+          'اكتب وصفا جذابا لأفضل منتج عندي',
+          'اقترح أفكار بوستات انستغرام لهذا الأسبوع',
+          'كيف أحسن صفحة متجري لزيادة المبيعات؟',
+        ],
+        chatStartersTitle: 'جرب تسأل سوقي',
+        chatStopped: 'أوقفت الرد.',
+        stop: 'إيقاف',
         chatSystemPrompt:
           'You are Souqy Studio, a practical AI assistant for storefront owners creating ads, posters, product visuals, and launch campaigns. Keep answers concise, specific, and ready to use.',
         chatThinking: 'سوقي يفكر...',
@@ -129,6 +138,15 @@ export function studioCopy(isRtl: boolean) {
         chatFailed: 'The AI assistant failed.',
         chatPlaceholder: 'Ask Souqy for campaign ideas, prompts, or storefront advice...',
         chatReady: 'AI replied.',
+        chatStarters: [
+          'Plan a Ramadan campaign for my product lineup',
+          'Write a compelling description for my best seller',
+          'Suggest Instagram post ideas for this week',
+          'How do I improve my storefront to sell more?',
+        ],
+        chatStartersTitle: 'Try asking Souqy',
+        chatStopped: 'Stopped the response.',
+        stop: 'Stop',
         chatSystemPrompt:
           'You are Souqy Studio, a practical AI assistant for storefront owners creating ads, posters, product visuals, and launch campaigns. Keep answers concise, specific, and ready to use.',
         chatThinking: 'Souqy is thinking...',
