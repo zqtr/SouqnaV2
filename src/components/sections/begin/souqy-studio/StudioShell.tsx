@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import type { Locale } from '@/i18n/locales';
-import DitherHalftoneSystem, {
-  type DitherMode,
-} from '@/components/souqna-motion/DitherHalftoneSystem';
+import DitherWave from '@/components/dither-wave';
+import DitherHalftoneSystem from '@/components/souqna-motion/DitherHalftoneSystem';
+import { DitherBorderBeam } from '@/components/souqna-motion/DitherBorderBeam';
 import { souqyDesignStorefront } from '@/app/actions/souqy';
 import {
   estimateSouqyStudioModelCost,
@@ -46,9 +46,6 @@ import type {
   ProjectsState,
   ReferenceImage,
   SouqyStudioAsset,
-  SouqyStudioChatCost,
-  SouqyStudioChatStreamDone,
-  SouqyStudioChatStreamMeta,
   SouqyStudioProject,
   StudioChatMessage,
   StudioFormatKey,
@@ -63,126 +60,6 @@ import type {
 type Props = {
   locale: Locale;
 };
-
-type StudioChatPayload = {
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-  metadata: {
-    surface: 'souqy-studio';
-    tab: 'chat';
-  };
-};
-
-const SOUQY_DITHER_V1_STORAGE_KEY = 'souqy-dither-v1';
-const SOUQY_DITHER_V1_DEFAULT = true;
-
-async function streamSouqyStudioChat(
-  payload: StudioChatPayload,
-  callbacks: {
-    onMeta: (meta: SouqyStudioChatStreamMeta) => void;
-    onDelta: (text: string) => void;
-    onDone: (done: SouqyStudioChatStreamDone) => void;
-    onError: (message: string) => void;
-  },
-): Promise<CranlJobSubmissionState | null> {
-  const response = await fetch('/api/cranl/jobs/ai-chat', {
-    method: 'POST',
-    headers: {
-      Accept: 'text/event-stream',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const contentType = response.headers.get('content-type') ?? '';
-  if (!contentType.includes('text/event-stream')) {
-    const text = await response.text();
-    if (!text) {
-      return { ok: false, error: response.ok ? 'empty_ai_chat_job' : 'cranl_request_failed' };
-    }
-    return JSON.parse(text) as CranlJobSubmissionState;
-  }
-  if (!response.ok || !response.body) {
-    callbacks.onError('souqy_studio_chat_stream_failed');
-    return null;
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let finalEventSeen = false;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    const events = buffer.split(/\n\n/u);
-    buffer = events.pop() ?? '';
-    for (const eventText of events) {
-      const event = parseSouqyStudioSseEvent(eventText);
-      if (!event) continue;
-
-      if (event.event === 'meta') {
-        callbacks.onMeta(event.data as SouqyStudioChatStreamMeta);
-      } else if (event.event === 'delta') {
-        const data = event.data as { text?: unknown };
-        if (typeof data.text === 'string') callbacks.onDelta(data.text);
-      } else if (event.event === 'done') {
-        finalEventSeen = true;
-        callbacks.onDone(event.data as SouqyStudioChatStreamDone);
-      } else if (event.event === 'error') {
-        finalEventSeen = true;
-        const data = event.data as { message?: unknown };
-        callbacks.onError(
-          typeof data.message === 'string' ? data.message : 'souqy_studio_chat_error',
-        );
-      }
-    }
-  }
-
-  if (!finalEventSeen) callbacks.onError('souqy_studio_chat_stream_interrupted');
-  return null;
-}
-
-function parseSouqyStudioSseEvent(eventText: string): { event: string; data: unknown } | null {
-  let event = 'message';
-  let data = '';
-
-  for (const line of eventText.split(/\r?\n/u)) {
-    if (line.startsWith('event:')) {
-      event = line.slice(6).trim();
-    } else if (line.startsWith('data:')) {
-      data += line.slice(5).trim();
-    }
-  }
-
-  if (!data) return null;
-  try {
-    return { event, data: JSON.parse(data) };
-  } catch {
-    return null;
-  }
-}
-
-function chatStreamLabel(meta: SouqyStudioChatStreamMeta): string {
-  const model = meta.provider === 'fanar' ? 'Fanar RunPod' : (meta.model ?? 'AI');
-  return meta.cost ? `${model} / ${meta.cost.credits} credits` : model;
-}
-
-function chatCostLabel(cost: SouqyStudioChatCost): string {
-  return `${cost.credits} credits`;
-}
-
-function chatRuntimeErrorLabel(message: string, fallback: string): string {
-  if (!message) return fallback;
-  if (/configuration|configured/i.test(message)) {
-    return 'Fanar is not configured for Studio chat in this environment.';
-  }
-  if (/request|stream|interrupted|unexpected|fanar/i.test(message)) {
-    return 'Fanar Studio chat failed. Try again or disable the Fanar flag to use the queued runtime.';
-  }
-  return message.replace(/CranL/giu, 'AI runtime').replace(/cranl/giu, 'AI runtime');
-}
 
 export function StudioShell({ locale }: Props) {
   const isRtl = locale === 'ar';
@@ -221,7 +98,6 @@ export function StudioShell({ locale }: Props) {
   const [webPrompt, setWebPrompt] = useState('');
   const [webStatusMessage, setWebStatusMessage] = useState('');
   const [isWebDesigning, setIsWebDesigning] = useState(false);
-  const [isDitherV1Enabled, setIsDitherV1Enabled] = useState(SOUQY_DITHER_V1_DEFAULT);
   const referencesRef = useRef<ReferenceImage[]>([]);
   const threadRef = useRef<HTMLElement>(null);
 
@@ -257,12 +133,6 @@ export function StudioShell({ locale }: Props) {
   const activeMode = STUDIO_MODES.find((mode) => mode.id === activeTab) ?? STUDIO_MODES[1]!;
   const isThreadMode = activeMode.kind === 'thread';
   const composerBusy = activeTab === 'chat' ? isChatBusy : isBusy;
-  const isStudioLoading = composerBusy || isWebDesigning || isLibraryLoading || isProjectsLoading;
-  const atmosphereDitherMode: DitherMode = isStudioLoading
-    ? 'loading'
-    : selectedAsset || isContextOpen
-      ? 'selection'
-      : 'background';
 
   useEffect(() => {
     if (!isBusy) return;
@@ -278,16 +148,6 @@ export function StudioShell({ locale }: Props) {
     }, 850);
     return () => window.clearInterval(interval);
   }, [isBusy]);
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(SOUQY_DITHER_V1_STORAGE_KEY);
-      if (stored === '0') setIsDitherV1Enabled(false);
-      if (stored === '1') setIsDitherV1Enabled(true);
-    } catch {
-      setIsDitherV1Enabled(SOUQY_DITHER_V1_DEFAULT);
-    }
-  }, []);
 
   useEffect(() => {
     referencesRef.current = references;
@@ -636,19 +496,18 @@ export function StudioShell({ locale }: Props) {
       );
     };
 
-    const payload: StudioChatPayload = {
-      messages: [
-        { role: 'system', content: copy.chatSystemPrompt },
-        ...history,
-        { role: 'user', content: cleanPrompt },
-      ],
-      metadata: {
-        surface: 'souqy-studio',
-        tab: 'chat',
-      },
-    };
-
-    const runQueuedChat = async (submission: CranlJobSubmissionState) => {
+    try {
+      const submission = await postSouqyStudio<CranlJobSubmissionState>('/api/cranl/jobs/ai-chat', {
+        messages: [
+          { role: 'system', content: copy.chatSystemPrompt },
+          ...history,
+          { role: 'user', content: cleanPrompt },
+        ],
+        metadata: {
+          surface: 'souqy-studio',
+          tab: 'chat',
+        },
+      });
       if (!submission.ok) {
         const message = cranlErrorLabel(submission.error);
         setStatus({ tone: 'error', message });
@@ -681,6 +540,7 @@ export function StudioShell({ locale }: Props) {
             content: answer || copy.chatEmptyResult,
             status: 'done',
             templateLabel: copy.modeLabels.chat,
+            formatLabel: 'AI',
           });
           setStatus({ tone: 'done', message: copy.chatReady });
           return;
@@ -703,64 +563,6 @@ export function StudioShell({ locale }: Props) {
         status: 'error',
         templateLabel: copy.modeLabels.chat,
       });
-    };
-
-    try {
-      const fallbackSubmission = await streamSouqyStudioChat(payload, {
-        onMeta(meta) {
-          markAssistantMessage({
-            content: copy.chatThinking,
-            status: 'creating',
-            templateLabel: copy.modeLabels.chat,
-            formatLabel: 'AI',
-            modelLabel: chatStreamLabel(meta),
-          });
-        },
-        onDelta(text) {
-          setTextChatMessages((current) =>
-            current.map((item) =>
-              item.id === assistantMessageId
-                ? {
-                    ...item,
-                    content:
-                      item.status === 'creating' && item.content === copy.chatThinking
-                        ? text
-                        : `${item.content}${text}`,
-                    status: 'creating',
-                    role: 'assistant',
-                  }
-                : item,
-            ),
-          );
-        },
-        onDone(done) {
-          const answer = done.text?.trim();
-          markAssistantMessage({
-            content: answer || copy.chatEmptyResult,
-            status: 'done',
-            templateLabel: copy.modeLabels.chat,
-            formatLabel: 'AI',
-            modelLabel: chatStreamLabel(done),
-          });
-          setStatus({
-            tone: 'done',
-            message: done.cost ? `${copy.chatReady} ${chatCostLabel(done.cost)}` : copy.chatReady,
-          });
-        },
-        onError(message) {
-          const cleanMessage = chatRuntimeErrorLabel(message, copy.chatFailed);
-          setStatus({ tone: 'error', message: cleanMessage });
-          markAssistantMessage({
-            content: cleanMessage,
-            status: 'error',
-            templateLabel: copy.modeLabels.chat,
-            formatLabel: 'AI',
-          });
-        },
-      });
-
-      if (!fallbackSubmission) return;
-      await runQueuedChat(fallbackSubmission);
     } catch (error) {
       const message = error instanceof Error ? error.message : copy.chatFailed;
       setStatus({ tone: 'error', message });
@@ -965,46 +767,25 @@ export function StudioShell({ locale }: Props) {
     <section className={shellClassName} data-theme="dark" dir={isRtl ? 'rtl' : 'ltr'}>
       <style suppressHydrationWarning dangerouslySetInnerHTML={{ __html: studioTheme }} />
       <div className="sqs-atmosphere" aria-hidden>
-        {isDitherV1Enabled ? (
-          <>
-            <DitherHalftoneSystem
-              className="sqs-dither"
-              mode={atmosphereDitherMode}
-              width="100%"
-              height="100%"
-              intensity={atmosphereDitherMode === 'loading' ? 0.34 : 0.12}
-              quality={atmosphereDitherMode === 'loading' ? 'low' : 'medium'}
-              maxFPS={atmosphereDitherMode === 'loading' ? 28 : 38}
-              pauseWhenOffscreen={atmosphereDitherMode !== 'loading'}
-              data-state={atmosphereDitherMode}
-            />
-            {isStudioLoading ? (
-              <DitherHalftoneSystem
-                className="sqs-dither-loading"
-                mode="loading"
-                width="100%"
-                height="100%"
-                intensity={0.18}
-                quality="low"
-                maxFPS={24}
-                data-state="loading"
-              />
-            ) : null}
-            {selectedAsset && !isStudioLoading ? (
-              <DitherHalftoneSystem
-                className="sqs-selection-dither-layer"
-                mode="selection"
-                width="100%"
-                height="100%"
-                intensity={0.16}
-                quality="low"
-                maxFPS={24}
-                pauseWhenOffscreen
-                data-state="selection"
-              />
-            ) : null}
-          </>
-        ) : null}
+        <DitherHalftoneSystem
+          mode="background"
+          className="sqs-dither"
+          intensity={0.12}
+          speed={1.3}
+          quality="medium"
+          pauseWhenOffscreen
+        />
+
+        {/* DitherBorderBeam on selection states */}
+        {selectedAsset && (
+          <DitherBorderBeam
+            className="absolute inset-0 pointer-events-none z-10"
+            variant="pulse"
+            intensity={0.45}
+            speed={2.6}
+          />
+        )}
+
         <div className="sqs-pixel-layer" />
         <div className="sqs-scanlines" />
         <div className="sqs-vignette" />
