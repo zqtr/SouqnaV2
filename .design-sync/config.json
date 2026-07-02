@@ -1,0 +1,88 @@
+{
+  "projectId": "e159e787-2e64-4fb4-9029-c3d6624aba66",
+  "pkg": "souqna",
+  "globalName": "Souqna",
+  "shape": "package",
+  "srcDir": "src/components/ui",
+  "tsconfig": "tsconfig.json",
+  "buildCmd": "npx --prefix .ds-sync tailwindcss -i .design-sync/tailwind-entry.css -o .design-sync/.cache/ds-tailwind.css",
+  "cssEntry": ".design-sync/.cache/ds-tailwind.css",
+  "extraFonts": [
+    ".design-sync/fonts.css"
+  ],
+  "componentSrcMap": {
+    "Accordion": "src/components/ui/accordion.tsx",
+    "AlertDialog": "src/components/ui/alert-dialog.tsx",
+    "Alert": "src/components/ui/alert.tsx",
+    "AspectRatio": "src/components/ui/aspect-ratio.tsx",
+    "Avatar": "src/components/ui/avatar.tsx",
+    "Badge": "src/components/ui/badge.tsx",
+    "Breadcrumb": "src/components/ui/breadcrumb.tsx",
+    "ButtonGroup": "src/components/ui/button-group.tsx",
+    "Button": "src/components/ui/button.tsx",
+    "Card": "src/components/ui/card.tsx",
+    "Carousel": "src/components/ui/carousel.tsx",
+    "Collapsible": "src/components/ui/collapsible.tsx",
+    "Command": "src/components/ui/command.tsx",
+    "ContextMenu": "src/components/ui/context-menu.tsx",
+    "Dialog": "src/components/ui/dialog.tsx",
+    "Drawer": "src/components/ui/drawer.tsx",
+    "DropdownMenu": "src/components/ui/dropdown-menu.tsx",
+    "Field": "src/components/ui/field.tsx",
+    "InputGroup": "src/components/ui/input-group.tsx",
+    "Input": "src/components/ui/input.tsx",
+    "Label": "src/components/ui/label.tsx",
+    "Loader": "src/components/ui/loader.tsx",
+    "NavigationMenu": "src/components/ui/navigation-menu.tsx",
+    "Progress": "src/components/ui/progress.tsx",
+    "PromptInput": "src/components/ui/prompt-input.tsx",
+    "RadioGroup": "src/components/ui/radio-group.tsx",
+    "ScrollArea": "src/components/ui/scroll-area.tsx",
+    "Select": "src/components/ui/select.tsx",
+    "Separator": "src/components/ui/separator.tsx",
+    "Sheet": "src/components/ui/sheet.tsx",
+    "Sidebar": "src/components/ui/sidebar.tsx",
+    "Skeleton": "src/components/ui/skeleton.tsx",
+    "Spinner": "src/components/ui/spinner.tsx",
+    "Table": "src/components/ui/table.tsx",
+    "Tabs": "src/components/ui/tabs.tsx",
+    "TextShimmer": "src/components/ui/text-shimmer.tsx",
+    "Textarea": "src/components/ui/textarea.tsx",
+    "Tooltip": "src/components/ui/tooltip.tsx",
+    "SouqyLogo": "src/components/admin/SouqyLogo.tsx",
+    "DitherWave": "src/components/dither-wave.tsx"
+  },
+  "entry": ".design-sync/ds-entry.tsx",
+  "overrides": {
+    "Dialog": {
+      "cardMode": "single",
+      "viewport": "640x560"
+    },
+    "Sheet": {
+      "cardMode": "single",
+      "viewport": "640x560"
+    },
+    "DropdownMenu": {
+      "cardMode": "single",
+      "viewport": "480x460"
+    },
+    "Select": {
+      "cardMode": "single",
+      "viewport": "480x460"
+    },
+    "Tooltip": {
+      "cardMode": "single",
+      "viewport": "420x260"
+    },
+    "Table": {
+      "cardMode": "column"
+    },
+    "PromptInput": {
+      "cardMode": "column"
+    },
+    "Sidebar": {
+      "cardMode": "column"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}

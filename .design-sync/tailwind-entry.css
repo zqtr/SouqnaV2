@@ -1,0 +1,6 @@
+/* Tailwind v4 compile entry for the Claude Design bundle.
+   Pulls the app's real theme + tokens (globals.css) and the brand
+   @font-face set, compiled by @tailwindcss/cli with repo-wide source
+   scanning so every utility class the components use exists. */
+@import './fonts.css';
+@import '../src/app/globals.css';

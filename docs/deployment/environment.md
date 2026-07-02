@@ -66,6 +66,21 @@ Configure production values in Vercel or the relevant runtime secret store.
 - `HUGGINGFACE_ALLOWED_CHAT_MODELS`
 - `OLLAMA_URL`
 
+Fanar is optional and is used by Arabic-first Souqy Chat flows when both
+`FANAR_API_URL` and `FANAR_API_KEY` are present. The URL is treated as
+OpenAI-compatible: a value ending in `/chat/completions` is used as-is, a value
+ending in `/v1` receives `/chat/completions`, and any other base URL receives
+`/v1/chat/completions`. RunPod vLLM endpoints commonly use:
+
+```text
+FANAR_API_URL=https://api.runpod.ai/v2/<endpoint-id>/openai/v1
+FANAR_API_KEY=<runpod-api-key>
+FANAR_MODEL=QCRI/Fanar-1-9B-Instruct
+FANAR_TIMEOUT_MS=180000
+```
+
+`FANAR_TIMEOUT_MS` defaults to `90000` and is capped at `180000`.
+
 ## Souqy
 
 - `SOUQY_ADMIN_TOKEN`
@@ -117,10 +132,11 @@ Configure production values in Vercel or the relevant runtime secret store.
 - `XAPI_KEY`
 - `XAPI_ACTION_HOST`
 
-## Souqna Source and Cranl runtime
+## CranL runtime, source jobs, and operator companions
 
 - `CRANL_API_KEY`
 - `CRANL_RUNTIME_URL`
+- `CRANL_DEFAULT_PROVIDER`
 - `CRON_SECRET`
 - `SOUQNASOURCE_INDEX_CRON_SECRET`
 - `SOUQNASOURCE_SYNC_CRON_SECRET`
@@ -134,6 +150,17 @@ Configure production values in Vercel or the relevant runtime secret store.
 - `PULSE_IP_SALT`
 - `WORKER_CONCURRENCY`
 - `LOG_LEVEL`
+
+`CRANL_RUNTIME_URL` and `CRANL_API_KEY` are read by the Vercel frontend when it
+proxies jobs to the separately deployed CranL runtime. The same
+`CRANL_API_KEY` must be present in the CranL deployment. `CRANL_DEFAULT_PROVIDER`
+controls AI job routing and accepts `openai`, `ollama`, `huggingface`, or
+`mock`; it defaults to `openai` in both the web app and CranL runtime.
+
+The SouqnaSource variables remain listed for compatibility with existing
+runtime stubs and cron routes. The old SouqnaSource implementation plans were
+archived/removed from living docs and should not be treated as current product
+direction.
 
 ## Optional storefront controls
 

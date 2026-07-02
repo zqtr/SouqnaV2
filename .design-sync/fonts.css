@@ -1,0 +1,95 @@
+/* Brand @font-face set for the Claude Design bundle.
+   The app loads these via next/font (src/lib/fonts.ts) which injects
+   CSS variables at runtime; the bundle has no next/font, so this file
+   declares the families and binds the same --font-* variables. */
+
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 300;
+  src: url('../src/assets/fonts/exo2/exo-2-latin-300-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 400;
+  src: url('../src/assets/fonts/exo2/exo-2-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 500;
+  src: url('../src/assets/fonts/exo2/exo-2-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 600;
+  src: url('../src/assets/fonts/exo2/exo-2-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 700;
+  src: url('../src/assets/fonts/exo2/exo-2-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  src: url('../src/assets/fonts/jetbrains-mono/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  src: url('../src/assets/fonts/jetbrains-mono/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Thmanyah Sans';
+  font-style: normal;
+  font-weight: 400;
+  src: url('../src/assets/fonts/thmanyah/thmanyahsans/thmanyahsans-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Thmanyah Sans';
+  font-style: normal;
+  font-weight: 500;
+  src: url('../src/assets/fonts/thmanyah/thmanyahsans/thmanyahsans-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Thmanyah Sans';
+  font-style: normal;
+  font-weight: 700;
+  src: url('../src/assets/fonts/thmanyah/thmanyahsans/thmanyahsans-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Thmanyah Serif Display';
+  font-style: normal;
+  font-weight: 400;
+  src: url('../src/assets/fonts/thmanyah/thmanyahserifdisplay/thmanyahserifdisplay-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Thmanyah Serif Display';
+  font-style: normal;
+  font-weight: 700;
+  src: url('../src/assets/fonts/thmanyah/thmanyahserifdisplay/thmanyahserifdisplay-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Thmanyah Serif Text';
+  font-style: normal;
+  font-weight: 400;
+  src: url('../src/assets/fonts/thmanyah/thmanyahseriftext/thmanyahseriftext-Regular.woff2') format('woff2');
+}
+
+/* next/font variable bindings — same names src/lib/fonts.ts injects. */
+:root {
+  --font-exo-2: 'Exo 2';
+  --font-jetbrains-mono: 'JetBrains Mono';
+  --font-thmanyah-sans: 'Thmanyah Sans';
+  --font-thmanyah-serif-display: 'Thmanyah Serif Display';
+  --font-thmanyah-serif-text: 'Thmanyah Serif Text';
+  --font-inter: 'Exo 2';
+  --font-studio-inter-tight: 'Exo 2';
+  --font-studio-instrument-serif: 'Thmanyah Serif Display';
+}

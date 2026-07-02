@@ -25,7 +25,9 @@ Detailed conventions for contributors: [AGENTS.md](AGENTS.md).
 | Apps marketplace descriptors | `src/lib/apps/registry.ts` |
 | Souqy generation / validation | `src/lib/souqy/` |
 | Souqy server actions | `src/app/actions/souqy.ts` |
+| Souqy Studio workspace | `src/app/begin/souqy/page.tsx`, `src/app/[locale]/begin/souqy/page.tsx`, `src/components/sections/begin/souqy-studio/` |
 | Builder UI | `src/components/builder/BuilderShell.tsx`, `src/app/account/builder/page.tsx` |
+| Souqy Portal hero block | `src/components/storefront/blocks/PortalHeroBlock.tsx`, `src/lib/blocks/types.ts`, `src/sdk/components.tsx` |
 | Live storefront | `src/app/brief/[slug]/[[...path]]/page.tsx` |
 | Draft preview (builder iframe) | `src/app/account/[slug]/preview/page.tsx` |
 | Marketing home (`/`, `/ar`, …) | `src/app/[locale]/page.tsx`, `src/components/souqna/SouqnaHomeExperience.tsx`, route-owned header and footer |
@@ -51,13 +53,9 @@ If the dev server throws `Cannot find module './vendor-chunks/@vercel.js'` (or o
 
 This repo is the Souqna web frontend for the `souqna` Vercel project. It must not be used as the Flutter/mobile app root, and mobile app folders must not be bundled into the web deployment for `souqna.qa`.
 
-Use the guarded commands:
+Current package scripts are `dev`, `migrate`, `build`, `start`, `lint`, `typecheck`, `format`, and `test`. Production deploys should still verify the package name, Git origin, Vercel project id, protected branch, clean production tree, and mobile exclusions manually or through the deployment system in use. Local Git hooks are stored in `.githooks`; enable them with `git config core.hooksPath .githooks`.
 
-- `npm run guard:commit` before manual commits.
-- `npm run deploy:preview` for preview deployments.
-- `npm run deploy:prod` for production deployments.
-
-The guard verifies the package name, Git origin, Vercel project id, protected branch, clean production tree, and `.vercelignore` mobile exclusions. Local Git hooks are stored in `.githooks`; enable them with `git config core.hooksPath .githooks`.
+For local production verification, prefer `npx next build` when you only need to check Next.js output. `npm run build` runs `node scripts/migrate.mjs` first, so it requires migration dependencies and database access.
 
 ## Related repo apps
 
@@ -72,6 +70,8 @@ The guard verifies the package name, Git origin, Vercel project id, protected br
 
 The Vercel frontend talks to CranL through server-side API routes under `/api/cranl/*`.
 Set `CRANL_RUNTIME_URL` and `CRANL_API_KEY` in Vercel, and set the same
-`CRANL_API_KEY` in the CranL deployment.
+`CRANL_API_KEY` in the CranL deployment. `CRANL_DEFAULT_PROVIDER` controls AI job routing and accepts `openai`, `ollama`, `huggingface`, or `mock`.
 
-**Souqna Pulse** — optional macOS companion that streams dashboard events. See [apps/pulse/README.md](apps/pulse/README.md). Uses `PULSE_ADMIN_TOKEN` from env (see `src/lib/env.ts`).
+**Fanar / RunPod** - Souqy Chat can use a private OpenAI-compatible Fanar endpoint. Set `FANAR_API_URL`, `FANAR_API_KEY`, `FANAR_MODEL`, and `FANAR_TIMEOUT_MS`; RunPod vLLM endpoints usually use a base URL ending in `/openai/v1`.
+
+**Souqna Pulse** - Pulse scripts still exist in `package.json`, but `apps/pulse/` is not present in this checkout. Do not document or run Pulse as a supported local app until that source tree is restored.

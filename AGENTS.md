@@ -18,7 +18,8 @@ this short; treat it as a contract, not a spec.
 ## Conventions
 
 - All env access goes through `src/lib/env.ts`. Add new keys to the zod
-  schema + `.env.local.example` in the same PR.
+  schema and update `docs/deployment/environment.md` in the same PR
+  (`.env.local.example` only if that file is restored).
 - Server actions live in `src/app/actions/*` and must validate input with
   zod, check Clerk auth, then assert storefront ownership via
   `assertStorefrontOwner` before touching the DB.
@@ -58,6 +59,7 @@ this short; treat it as a contract, not a spec.
 - **Homepage motion** — the hero is a living grayscale/cream halftone field; integration rows use monochrome SVG marquees; text animation should be subtle and respect `prefers-reduced-motion`.
 - **Account / dashboard chrome** — `/account/*` routes under the `(chrome)` layout; products, orders, settings, Apps marketplace.
 - **Builder** — `/account/builder` full-bleed editor ([`src/app/account/builder/page.tsx`](src/app/account/builder/page.tsx), [`src/components/builder/BuilderShell.tsx`](src/components/builder/BuilderShell.tsx)); draft preview loads in an iframe from `/account/[slug]/preview`.
+- **Souqy Studio** — `/begin/souqy` and `/[locale]/begin/souqy` are Clerk + Atelier-Pro gated creative workspaces. The route renders [`SouqyStudioIntro`](src/components/sections/begin/SouqyStudioIntro.tsx), which re-exports the agent workspace under [`src/components/sections/begin/souqy-studio/`](src/components/sections/begin/souqy-studio/). Keep `/api/souqy-studio/*`, `/api/cranl/jobs/ai-chat`, `src/app/actions/souqyStudio.ts`, `src/lib/souqy-studio/modelCatalog.ts`, and `gateAtelierPro` contracts stable unless explicitly changing Studio behavior.
 - **Public storefront** — `/brief/[slug]` (and paths) for the live buyer-facing site.
 - Narrative docs for founders: [`docs/founder/product-overview.md`](docs/founder/product-overview.md).
 
@@ -65,3 +67,4 @@ this short; treat it as a contract, not a spec.
 
 - **Marketplace** — descriptors in [`src/lib/apps/registry.ts`](src/lib/apps/registry.ts); installs in [`src/lib/apps/installed.ts`](src/lib/apps/installed.ts); snippet-style scripts via [`src/components/storefront/AppScripts.tsx`](src/components/storefront/AppScripts.tsx); per-app HTTP under `src/app/api/apps/**`; shared actions in [`src/app/actions/apps.ts`](src/app/actions/apps.ts). Integration matrix: [`docs/founder/integration-matrix.md`](docs/founder/integration-matrix.md). Extension checklist: [`docs/founder/extending-integrations.md`](docs/founder/extending-integrations.md).
 - **Souqy** — model pipeline in [`src/lib/souqy/generate.ts`](src/lib/souqy/generate.ts) (plus `validate`, `build`, `load`, `prompt` in the same folder); dashboard actions in [`src/app/actions/souqy.ts`](src/app/actions/souqy.ts). When a storefront has a published Souqy revision and the route is not passing draft `overrideBlocks`, the storefront prefers Souqy over the JSON block pipeline ([`src/components/storefront/Storefront.tsx`](src/components/storefront/Storefront.tsx)).
+- **Souqy Portal / PortalHero** — `PortalHero` is Souqy's signature first-viewport block, rendered by [`PortalHeroBlock`](src/components/storefront/blocks/PortalHeroBlock.tsx), typed in [`src/lib/blocks/types.ts`](src/lib/blocks/types.ts), and exposed through [`src/sdk/components.tsx`](src/sdk/components.tsx). Use it at most once, only as the opening hero, and do not stack it before another hero/banner.

@@ -19,6 +19,7 @@
 | المستند | الغرض |
 |---------|--------|
 | [product-overview.ar.md](founder/product-overview.ar.md) | مسارات الواجهة، البنّاء مقابل الموقع الحي، نموذج السوق، الفوترة |
+| [souqy-studio.md](founder/souqy-studio.md) | حالة Souqy Studio الحالية، عقود التشغيل، علاقة PortalHero، وقائمة التحقق |
 | [integration-matrix.ar.md](founder/integration-matrix.ar.md) | جدول التطبيقات (مرآة لـ `APP_REGISTRY` + قاعدة الصيانة) |
 | [extending-integrations.ar.md](founder/extending-integrations.ar.md) | قائمة تحقق لإضافة التكاملات |
 

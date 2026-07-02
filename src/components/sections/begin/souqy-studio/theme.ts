@@ -1448,5 +1448,90 @@ body:has(.sqs-shell) [data-homepage-blank] { display: none !important; }
   .sqs-deck-head strong { white-space: normal; }
   .sqs-browser-bar strong { display: none; }
   .sqs-context { inline-size: min(340px, calc(100vw - 34px)); }
+|}
+
+/* ------------------------------------------------------------------ */
+/* Dither/Halftone System — IDE state extensions (loading, selection, transition) */
+/* These compose with DitherHalftoneSystem and .sqs-atmosphere          */
+/* ------------------------------------------------------------------ */
+.sqs-dither-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(3, 3, 3, 0.72);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+.sqs-dither-loading .sqs-progress {
+  font-family: var(--sqs-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--sqs-faint);
+  text-transform: uppercase;
+}
+
+.sqs-selection-dither {
+  position: relative;
+  isolation: isolate;
+  transition: border-color 120ms ease, box-shadow 180ms ease;
+}
+.sqs-selection-dither::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1px solid rgba(244, 234, 214, 0.0);
+  pointer-events: none;
+  transition: border-color 180ms ease;
+}
+.sqs-selection-dither.is-selected::after {
+  border-color: rgba(244, 234, 214, 0.55);
+  box-shadow: 0 0 0 1px rgba(244, 234, 214, 0.12) inset;
+}
+
+.sqs-component-dither {
+  position: relative;
+  background: var(--sqs-coal-soft);
+  border: 1px solid var(--sqs-line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.sqs-component-dither .dither-layer {
+  mix-blend-mode: screen;
+  opacity: 0.14;
+}
+
+.sqs-transition-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(3,3,3,0.6) 0%,
+    rgba(3,3,3,0.15) 35%,
+    rgba(3,3,3,0.15) 65%,
+    rgba(3,3,3,0.6) 100%
+  );
+  opacity: 0;
+  transition: opacity 280ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.sqs-transition-veil.is-active {
+  opacity: 1;
+}
+
+/* Reduced motion: flatten all dither layers */
+@media (prefers-reduced-motion: reduce) {
+  .sqs-dither,
+  .sqs-atmosphere > canvas,
+  .sqs-dither-loading,
+  .sqs-selection-dither::after {
+    animation: none !important;
+    transition: none !important;
+    filter: saturate(0.6) contrast(0.95);
+    opacity: 0.6;
+  }
 }
 `;

@@ -19,6 +19,7 @@ Docs, policies, journal pages, and founder-facing Markdown should follow the ren
 | Doc | Purpose |
 |-----|---------|
 | [product-overview.md](founder/product-overview.md) | Storefront pipelines, builder vs live site, marketplace model, billing pointers |
+| [souqy-studio.md](founder/souqy-studio.md) | Current Souqy Studio workspace, runtime contracts, PortalHero relationship, verification checklist |
 | [integration-matrix.md](founder/integration-matrix.md) | Apps table (`APP_REGISTRY` mirror + maintenance rule) |
 | [extending-integrations.md](founder/extending-integrations.md) | Checklist for adding or extending plugins |
 
