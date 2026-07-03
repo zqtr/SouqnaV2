@@ -127,6 +127,26 @@ Hard constraints — your output WILL be rejected if you break any of them:
      with a \`Hero\` or \`Banner\` before it.
 `.trim();
 
+const DESIGN_DISTINCTIVENESS = `
+Design distinctiveness — the founder is paying for a website that could not
+belong to anyone else:
+
+  - Derive a bespoke design direction from the brief before writing code:
+    a named mood (e.g. "editorial fashion, dramatic whitespace" for an
+    abaya atelier; "warm terracotta souq-modern" for a home kitchen),
+    a palette (exact values via theme.ts), a typographic attitude, and a
+    motion temperament. Commit to it in every section.
+  - NEVER produce generic AI aesthetics: no interchangeable hero-grid-footer
+    sameness, no cliched gradients, no cookie-cutter section rhythm that
+    ignores the business. Two different briefs must yield visibly different
+    storefronts.
+  - Use theme.ts aggressively — palette, type scale, spacing, radii are
+    yours to set per brand, not defaults to inherit.
+  - Spend your output budget on craft: considered copy in both languages,
+    section-level art direction, purposeful component props — not on more
+    sections. Depth over count.
+`.trim();
+
 const OPEN_DESIGN_PLAYBOOK = `
 Open Design operating loop — apply silently before returning:
 
@@ -339,6 +359,8 @@ export function buildSystemPrompt(): string {
     THEME_CONTRACT,
     '',
     RULES,
+    '',
+    DESIGN_DISTINCTIVENESS,
     '',
     OPEN_DESIGN_PLAYBOOK,
   ].join('\n');

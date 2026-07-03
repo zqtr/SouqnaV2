@@ -65,6 +65,10 @@ const schema = z.object({
   // https://sdk.vercel.ai/providers/ai-sdk-providers — so any
   // `provider/model` slug the gateway supports works here.
   SOUQY_GENERATE_MODEL: z.string().min(1).default('google/gemini-2.5-flash-lite'),
+  // Output budget for whole-storefront code generation. 4096 was the old
+  // hardcoded ceiling — far too small for a distinctive site; 16000 stays
+  // under non-streaming HTTP timeout territory.
+  SOUQY_GENERATE_MAX_TOKENS: z.coerce.number().int().min(1_024).max(64_000).default(16_000),
   SOUQY_REPLICATE_TEXT_MODEL: z.string().min(1).default('qwen/qwen3-235b-a22b-instruct-2507'),
   SOUQY_BLOCK_EDIT_MODEL: z.string().min(1).default('google/gemini-2.5-flash-lite'),
   SOUQY_CHAT_MODEL: z.string().min(1).default('google/gemini-2.5-flash-lite'),
@@ -195,6 +199,7 @@ const parsed = schema.safeParse({
   SOUQY_ADMIN_TOKEN: clean(process.env.SOUQY_ADMIN_TOKEN),
   SOUQY_BUILD_SNAPSHOT_ID: clean(process.env.SOUQY_BUILD_SNAPSHOT_ID),
   SOUQY_GENERATE_MODEL: clean(process.env.SOUQY_GENERATE_MODEL),
+  SOUQY_GENERATE_MAX_TOKENS: clean(process.env.SOUQY_GENERATE_MAX_TOKENS),
   SOUQY_REPLICATE_TEXT_MODEL: clean(process.env.SOUQY_REPLICATE_TEXT_MODEL),
   SOUQY_BLOCK_EDIT_MODEL: clean(process.env.SOUQY_BLOCK_EDIT_MODEL),
   SOUQY_CHAT_MODEL: clean(process.env.SOUQY_CHAT_MODEL),
@@ -281,6 +286,7 @@ export const env = parsed.success
       SOUQY_ADMIN_TOKEN: undefined as string | undefined,
       SOUQY_BUILD_SNAPSHOT_ID: undefined as string | undefined,
       SOUQY_GENERATE_MODEL: 'google/gemini-2.5-flash-lite',
+      SOUQY_GENERATE_MAX_TOKENS: 16_000,
       SOUQY_REPLICATE_TEXT_MODEL: 'qwen/qwen3-235b-a22b-instruct-2507',
       SOUQY_BLOCK_EDIT_MODEL: 'google/gemini-2.5-flash-lite',
       SOUQY_CHAT_MODEL: 'google/gemini-2.5-flash-lite',

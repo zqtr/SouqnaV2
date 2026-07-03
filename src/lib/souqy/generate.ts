@@ -103,7 +103,7 @@ export async function generateSouqyStorefront(input: GenerateInput): Promise<Gen
         system: buildSystemPrompt(),
         messages,
         temperature: 0.4,
-        maxOutputTokens: 4096,
+        maxOutputTokens: env.SOUQY_GENERATE_MAX_TOKENS,
         user: input.clerkUserId,
         tags: SOUQY_TAGS,
       });
@@ -205,7 +205,7 @@ export async function repromptSouqyStorefront(args: {
         system: buildSystemPrompt(),
         messages,
         temperature: 0.4,
-        maxOutputTokens: 4096,
+        maxOutputTokens: env.SOUQY_GENERATE_MAX_TOKENS,
         user: args.clerkUserId,
         tags: [...SOUQY_TAGS, 'op:reprompt'],
       });
@@ -294,7 +294,7 @@ export async function repairSouqyStorefrontBuild(args: {
         system: buildSystemPrompt(),
         messages,
         temperature: 0.2,
-        maxOutputTokens: 4096,
+        maxOutputTokens: env.SOUQY_GENERATE_MAX_TOKENS,
         user: args.clerkUserId,
         tags: [...SOUQY_TAGS, 'op:build-repair'],
       });
@@ -381,7 +381,15 @@ async function generateSouqyText(args: {
   user: string;
   tags: string[];
 }): Promise<{ text: string; usage: { inputTokens: number; outputTokens: number } }> {
-  if (env.REPLICATE_API_TOKEN) {
+  // Gateway first: SOUQY_GENERATE_MODEL (e.g. anthropic/claude-sonnet-5) is
+  // the quality path for website transforms. Replicate's Qwen text model is
+  // only a fallback when no gateway credential exists — previously it won
+  // whenever REPLICATE_API_TOKEN was set (it always is, for Flux images),
+  // silently downgrading every transform.
+  const hasGatewayCredentials = Boolean(
+    process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN,
+  );
+  if (env.REPLICATE_API_TOKEN && !hasGatewayCredentials) {
     return generateSouqyTextWithReplicate(args);
   }
 

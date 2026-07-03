@@ -1,6 +1,7 @@
 import {
   Archive,
   BadgeCheck,
+  Code2,
   FileImage,
   FolderKanban,
   Globe2,
@@ -225,6 +226,8 @@ export const QUICK_PROMPTS = [
 ];
 
 export const STUDIO_MODES: StudioModeMeta[] = [
+  // Flag-gated in ModeRail: only rendered when the 'code-v1' slice is on.
+  { id: 'code', icon: Code2, kind: 'panel' },
   { id: 'projects', icon: FolderKanban, kind: 'panel' },
   { id: 'create', icon: Sparkles, kind: 'thread' },
   { id: 'edit', icon: Pencil, kind: 'thread' },

@@ -2,10 +2,10 @@ import 'server-only';
 import { env } from '@/lib/env';
 import {
   FANAR_ALLOWED_USE_CASES,
-  FANAR_BLOCKED_USE_CASES,
   isSouqyStudioFanarEnabled,
   type FanarUseCase,
 } from '@/lib/fanar/provider';
+import type { FANAR_BLOCKED_USE_CASES } from '@/lib/fanar/provider';
 import type { SouqyStudioChatModel } from '@/lib/souqy-studio/modelCatalog';
 import { SOUQY_STUDIO_CHAT_MODELS } from '@/lib/souqy-studio/modelCatalog';
 

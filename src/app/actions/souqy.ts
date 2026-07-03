@@ -22,11 +22,11 @@ import {
 import { buildSouqyArtifact, type BuildOk, type BuildResult } from '@/lib/souqy/build';
 import {
   getSouqyAuditById,
-  getSouqyMonthlyCount,
   logSouqyAudit,
   setSouqyRevision,
   updateSouqyAudit,
 } from '@/lib/souqy/db';
+import { reserveSouqyGeneration } from '@/lib/souqy/credits';
 import type { SouqyOutput } from '@/lib/souqy/prompt';
 import { editBlockWithSouqy, isBuilderRequest, souqyRefusalCopy } from '@/lib/souqy/editBlock';
 import { getPageById } from '@/lib/storefrontPages';
@@ -162,6 +162,10 @@ const EditBlockSchema = z.object({
   pageId: z.string().uuid(),
   blockId: z.string().uuid(),
   request: z.string().trim().min(3).max(400),
+  // false = propose only: return the edited block without persisting, so
+  // the Souqy IDE can show an accept/reject diff first. The Builder's
+  // one-tap flow keeps the default immediate apply.
+  apply: z.boolean().optional().default(true),
 });
 
 export type SouqyEditBlockInput = z.input<typeof EditBlockSchema>;
@@ -185,7 +189,6 @@ export type SouqyActionState =
  * dashboard, not a server error. Configurable per-deploy via env if we
  * later need to tune it without a release.
  */
-const MONTHLY_GENERATION_CAP = Number.parseInt(process.env.SOUQY_MONTHLY_CAP ?? '50', 10);
 
 async function ipKey(): Promise<string> {
   const hdrs = await headers();
@@ -395,10 +398,11 @@ export async function souqyKickoff(input: SouqyKickoffInput): Promise<SouqyKicko
   if (!rateLimit(`souqy-kickoff:${await ipKey()}`, 4, 60_000).ok) {
     return { status: 'error', message: 'Too many Souqy launches — try again in a moment.' };
   }
-  if ((await getSouqyMonthlyCount(userId)) >= MONTHLY_GENERATION_CAP) {
+  if (!(await reserveSouqyGeneration(userId)).allowed) {
     return {
       status: 'error',
-      message: `You've reached this month's Souqy quota (${MONTHLY_GENERATION_CAP}). Resets on the 1st.`,
+      message:
+        "You've used all your Souqy generations this month. Upgrade your Souqy plan in Settings → Souqy for more.",
     };
   }
 
@@ -466,10 +470,11 @@ export async function souqyKickoffFromHomepagePrompt(
   if (!rateLimit(`souqy-kickoff:${await ipKey()}`, 4, 60_000).ok) {
     return { status: 'error', message: 'Too many Souqy launches — try again in a moment.' };
   }
-  if ((await getSouqyMonthlyCount(userId)) >= MONTHLY_GENERATION_CAP) {
+  if (!(await reserveSouqyGeneration(userId)).allowed) {
     return {
       status: 'error',
-      message: `You've reached this month's Souqy quota (${MONTHLY_GENERATION_CAP}). Resets on the 1st.`,
+      message:
+        "You've used all your Souqy generations this month. Upgrade your Souqy plan in Settings → Souqy for more.",
     };
   }
 
@@ -515,10 +520,11 @@ export async function souqyRegenerate(
   if (!rateLimit(`souqy-regenerate:${await ipKey()}`, 6, 60_000).ok) {
     return { status: 'error', message: 'Slow down — try again in a minute.' };
   }
-  if ((await getSouqyMonthlyCount(owner.userId)) >= MONTHLY_GENERATION_CAP) {
+  if (!(await reserveSouqyGeneration(owner.userId)).allowed) {
     return {
       status: 'error',
-      message: `You've reached this month's Souqy quota (${MONTHLY_GENERATION_CAP}).`,
+      message:
+        "You've used all your Souqy generations this month. Upgrade your Souqy plan in Settings → Souqy for more.",
     };
   }
 
@@ -584,10 +590,11 @@ export async function souqyReprompt(
   if (!rateLimit(`souqy-reprompt:${await ipKey()}`, 12, 60_000).ok) {
     return { status: 'error', message: 'Too many edits — give it a moment.' };
   }
-  if ((await getSouqyMonthlyCount(owner.userId)) >= MONTHLY_GENERATION_CAP) {
+  if (!(await reserveSouqyGeneration(owner.userId)).allowed) {
     return {
       status: 'error',
-      message: `You've reached this month's Souqy quota (${MONTHLY_GENERATION_CAP}).`,
+      message:
+        "You've used all your Souqy generations this month. Upgrade your Souqy plan in Settings → Souqy for more.",
     };
   }
 
@@ -684,12 +691,13 @@ export async function souqyDesignStorefront(
   const owner = await souqyGate(parsed.data.slug);
   if (!owner.ok) return { status: 'error', message: owner.message };
   if (!rateLimit(`souqy-design:${await ipKey()}`, 8, 60_000).ok) {
-    return { status: 'error', message: 'Too many edits â€” give it a moment.' };
+    return { status: 'error', message: 'Too many edits — give it a moment.' };
   }
-  if ((await getSouqyMonthlyCount(owner.userId)) >= MONTHLY_GENERATION_CAP) {
+  if (!(await reserveSouqyGeneration(owner.userId)).allowed) {
     return {
       status: 'error',
-      message: `You've reached this month's Souqy quota (${MONTHLY_GENERATION_CAP}).`,
+      message:
+        "You've used all your Souqy generations this month. Upgrade your Souqy plan in Settings → Souqy for more.",
     };
   }
 
@@ -1138,10 +1146,11 @@ export async function souqyEditBlock(input: SouqyEditBlockInput): Promise<SouqyE
       message: 'Slow down — try again in a moment.',
     };
   }
-  if ((await getSouqyMonthlyCount(owner.userId)) >= MONTHLY_GENERATION_CAP) {
+  if (!(await reserveSouqyGeneration(owner.userId)).allowed) {
     return {
       status: 'error',
-      message: `You've reached this month's Souqy quota (${MONTHLY_GENERATION_CAP}). Resets on the 1st.`,
+      message:
+        "You've used all your Souqy generations this month. Upgrade your Souqy plan in Settings → Souqy for more.",
     };
   }
 
@@ -1201,6 +1210,21 @@ export async function souqyEditBlock(input: SouqyEditBlockInput): Promise<SouqyE
     return result.status === 'refused'
       ? { status: 'refused', message: result.message }
       : { status: 'error', message: result.message };
+  }
+
+  if (!data.apply) {
+    if (auditId != null) {
+      await updateSouqyAudit(auditId, {
+        status: 'success',
+        meta: {
+          patches: result.patches,
+          steps: result.steps,
+          usage: result.usage,
+          proposedOnly: true,
+        },
+      });
+    }
+    return { status: 'ok', block: result.block };
   }
 
   const nextBlocks: Block[] = page.draftBlocks.slice();

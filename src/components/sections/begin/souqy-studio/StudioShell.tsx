@@ -33,7 +33,14 @@ import { CommandDeck } from './CommandDeck';
 import { ContextInspector } from './ContextInspector';
 import { ModeRail } from './ModeRail';
 import { ProjectsPanel } from './ProjectsPanel';
+import dynamic from 'next/dynamic';
 import { WebPreview } from './WebPreview';
+
+// Monaco is heavy — only pull the IDE chunk when the Code tab is opened.
+const IdeWorkbench = dynamic(
+  () => import('@/components/souqy-ide/IdeWorkbench').then((mod) => mod.IdeWorkbench),
+  { ssr: false, loading: () => <section className="sqs-panel" aria-hidden /> },
+);
 import type {
   CatalogProduct,
   CatalogStorefront,
@@ -970,6 +977,9 @@ export function StudioShell({ locale, initialTab }: Props) {
               onEditAsset={(asset) => void prepareAssetForEdit(asset)}
               onRefresh={() => void refreshLibrary()}
             />
+          ) : null}
+          {activeTab === 'code' ? (
+            <IdeWorkbench copy={copy} isRtl={isRtl} storefrontSlug={webStorefront?.slug ?? null} />
           ) : null}
           {activeTab === 'web' ? (
             <WebPreview

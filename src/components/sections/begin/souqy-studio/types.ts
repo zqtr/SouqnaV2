@@ -92,7 +92,7 @@ export type ReferenceImage = {
   file: File;
 };
 
-export type StudioTab = 'projects' | 'create' | 'edit' | 'chat' | 'web' | 'history';
+export type StudioTab = 'projects' | 'create' | 'edit' | 'chat' | 'web' | 'code' | 'history';
 
 export type StudioChatMessage = {
   id: string;

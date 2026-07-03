@@ -59,6 +59,22 @@ export async function GET(request: Request) {
     flags: {
       NEXT_PUBLIC_SOUQY_IDE_ENABLED: process.env.NEXT_PUBLIC_SOUQY_IDE_ENABLED ?? null,
     },
+    // Whole-storefront code transformation (Web tab → generate → sandbox
+    // build → blob → SouqyMount). Every link must be green for "Transform"
+    // to produce a real custom website instead of falling back to blocks.
+    transform: {
+      model: env.SOUQY_GENERATE_MODEL,
+      maxOutputTokens: env.SOUQY_GENERATE_MAX_TOKENS,
+      gatewayCredential: Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN),
+      sandboxSnapshot: Boolean(process.env.SOUQY_BUILD_SNAPSHOT_ID),
+      blobToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+      hint:
+        !process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN
+          ? 'No AI Gateway credential — transforms will fall back to the Replicate text model.'
+          : !process.env.BLOB_READ_WRITE_TOKEN
+            ? 'BLOB_READ_WRITE_TOKEN missing — sandbox builds cannot upload, storefront falls back to blocks.'
+            : undefined,
+    },
   };
 
   const live = new URL(request.url).searchParams.get('live') === '1';
