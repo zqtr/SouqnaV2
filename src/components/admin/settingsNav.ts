@@ -56,6 +56,8 @@ export const SETTINGS_NAV_SECTIONS: SettingsNavSection[] = [
     summary: 'Plan, account, team access, audit log, files, and custom data.',
     items: [
       { id: 'plan', label: 'Plan', href: '/account/settings/plan' },
+      { id: 'souqy', label: 'Souqy plan', href: '/account/settings/souqy' },
+      { id: 'wallet', label: 'Wallet', href: '/account/settings/wallet' },
       { id: 'account', label: 'Your account', href: '/account/settings/account' },
       { id: 'team', label: 'Team', href: '/account/settings/team' },
       { id: 'activity-log', label: 'Activity log', href: '/account/settings/activity-log' },

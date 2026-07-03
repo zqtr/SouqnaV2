@@ -105,27 +105,27 @@ const FAMILY_LABELS = {
     catalog: 'Live catalogue',
   },
   ar: {
-    browse: 'ØªØµÙØ­',
-    products: 'Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª',
-    allProducts: 'ÙƒÙ„ Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª',
-    checkout: 'Ø§Ù„Ø¯ÙØ¹',
-    cart: 'Ø§Ù„Ø³Ù„Ø©',
-    featured: 'Ù…Ø®ØªØ§Ø±',
-    add: 'Ø£Ø¶Ù Ù„Ù„Ø³Ù„Ø©',
-    view: 'Ø¹Ø±Ø¶ Ø§Ù„Ù…Ù†ØªØ¬',
-    quick: 'Ù†Ø¸Ø±Ø© Ø³Ø±ÙŠØ¹Ø©',
-    categories: 'Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø§Øª',
-    reviews: 'Ø¢Ø±Ø§Ø¡ Ø§Ù„Ø¹Ù…Ù„Ø§Ø¡',
-    trusted: 'Ø¯ÙØ¹ Ù…ÙˆØ«ÙˆÙ‚',
-    order: 'Ù…Ù„Ø®Øµ Ø§Ù„Ø·Ù„Ø¨',
-    offer: 'Ø¹Ø±Ø¶ Ø®Ø§Øµ',
-    empty: 'Ø£Ø¶Ù Ù…Ù†ØªØ¬Ø§Øª Ù„ÙŠØ¸Ù‡Ø± Ù‡Ø°Ø§ Ø§Ù„Ù‚Ø³Ù… Ø§Ù„Ù…Ù…ÙŠØ².',
-    available: 'Ù…ØªÙˆÙØ±',
-    soldOut: 'Ù†ÙØ¯',
-    delivery: 'ØªÙˆØµÙŠÙ„ Ù…Ø­Ù„ÙŠ',
-    secure: 'Ø¯ÙØ¹ Ø¢Ù…Ù†',
-    whatsapp: 'Ø¯Ø¹Ù… ÙˆØ§ØªØ³Ø§Ø¨',
-    catalog: 'ÙƒØªØ§Ù„ÙˆØ¬ Ù…Ø¨Ø§Ø´Ø±',
+    browse: 'تصفح',
+    products: 'المنتجات',
+    allProducts: 'كل المنتجات',
+    checkout: 'الدفع',
+    cart: 'السلة',
+    featured: 'مختار',
+    add: 'أضف للسلة',
+    view: 'عرض المنتج',
+    quick: 'نظرة سريعة',
+    categories: 'المجموعات',
+    reviews: 'آراء العملاء',
+    trusted: 'دفع موثوق',
+    order: 'ملخص الطلب',
+    offer: 'عرض خاص',
+    empty: 'أضف منتجات ليظهر هذا القسم المميز.',
+    available: 'متوفر',
+    soldOut: 'نفد',
+    delivery: 'توصيل محلي',
+    secure: 'دفع آمن',
+    whatsapp: 'دعم واتساب',
+    catalog: 'كتالوج مباشر',
   },
 };
 
@@ -443,11 +443,11 @@ export function ShadcnOrderSummaryBlock({ block, ctx }: BlockRenderProps<ShadcnO
           </div>
         ))}
         <div style={summaryRowStyle}>
-          <span>{ctx.isRtl ? 'Ø§Ù„ØªÙˆØµÙŠÙ„' : 'Delivery'}</span>
+          <span>{ctx.isRtl ? 'التوصيل' : 'Delivery'}</span>
           <strong>{ctx.storefront.checkout.currency} {shipping}</strong>
         </div>
         <div style={{ ...summaryRowStyle, borderTop: '1px solid color-mix(in srgb, var(--sf-ink) 14%, transparent)', paddingTop: 14 }}>
-          <span>{ctx.isRtl ? 'Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹' : 'Total'}</span>
+          <span>{ctx.isRtl ? 'المجموع' : 'Total'}</span>
           <strong>{ctx.storefront.checkout.currency} {subtotal + shipping}</strong>
         </div>
         <Link href={checkoutHref} style={summaryCtaStyle}>
@@ -527,6 +527,155 @@ export function ShadcnFooterBlock({ block, ctx }: BlockRenderProps<ShadcnFooterP
   );
 }
 
+/** Clean, self-contained nav copy — avoids the shared FAMILY_LABELS. */
+function premiumNavCopy(isRtl: boolean) {
+  return isRtl
+    ? {
+        allProducts: 'كل المنتجات',
+        browse: 'تصفّح',
+        cart: 'السلة',
+        shop: 'تسوّق',
+        search: 'ابحث في المتجر',
+      }
+    : {
+        allProducts: 'All Products',
+        browse: 'Browse',
+        cart: 'Cart',
+        shop: 'Shop',
+        search: 'Search the store',
+      };
+}
+
+type NavLink = { label: string; href: string };
+type NavLayout = 'standard' | 'center' | 'search' | 'command' | 'hybrid' | 'split' | 'mega' | 'luxury';
+
+function navLayout(variant?: string): NavLayout {
+  switch (variant) {
+    case 'navbar-center-logo':
+    case 'navbar-editorial':
+      return 'center';
+    case 'navbar-search-first':
+      return 'search';
+    case 'navbar-command':
+    case 'navbar-max-command':
+      return 'command';
+    case 'navbar-sidebar-hybrid':
+      return 'hybrid';
+    case 'navbar-split':
+      return 'split';
+    case 'navbar-mega-menu':
+      return 'mega';
+    case 'navbar-luxury':
+      return 'luxury';
+    default:
+      return 'standard';
+  }
+}
+
+const navDividerStyle: CSSProperties = {
+  width: 1,
+  height: 22,
+  background: 'color-mix(in srgb, var(--sf-nav-ink, var(--sf-ink)) 20%, transparent)',
+  margin: '0 4px',
+  flexShrink: 0,
+};
+
+const navSearchFieldStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  width: '100%',
+  maxWidth: 460,
+  margin: '0 auto',
+  padding: '9px 14px',
+  borderRadius: 999,
+  border: '1px solid color-mix(in srgb, var(--sf-nav-ink, var(--sf-ink)) 18%, transparent)',
+  background: 'color-mix(in srgb, var(--sf-nav-ink, var(--sf-ink)) 4%, transparent)',
+  color: 'var(--sf-nav-ink, var(--sf-ink))',
+};
+
+const navSearchInputStyle: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  border: 'none',
+  outline: 'none',
+  background: 'transparent',
+  color: 'inherit',
+  fontSize: 13,
+  fontFamily: 'inherit',
+};
+
+const navCommandPillStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  width: '100%',
+  maxWidth: 420,
+  margin: '0 auto',
+  padding: '9px 14px',
+  borderRadius: 999,
+  border: '1px solid color-mix(in srgb, var(--sf-nav-ink, var(--sf-ink)) 18%, transparent)',
+  background: 'color-mix(in srgb, var(--sf-nav-ink, var(--sf-ink)) 5%, transparent)',
+  color: 'var(--sf-nav-ink, var(--sf-ink))',
+  textDecoration: 'none',
+  fontSize: 13,
+};
+
+const navKbdStyle: CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10.5,
+  padding: '3px 6px',
+  borderRadius: 6,
+  border: '1px solid color-mix(in srgb, var(--sf-nav-ink, var(--sf-ink)) 22%, transparent)',
+  opacity: 0.75,
+};
+
+const megaPanelStyle: CSSProperties = {
+  position: 'absolute',
+  top: '100%',
+  insetInlineStart: 0,
+  marginTop: 12,
+  minWidth: 240,
+  padding: 10,
+  borderRadius: 16,
+  background: 'var(--sf-ground)',
+  border: '1px solid color-mix(in srgb, var(--sf-ink) 12%, transparent)',
+  boxShadow: '0 24px 60px -34px color-mix(in srgb, var(--sf-ink) 74%, transparent)',
+  display: 'grid',
+  gap: 2,
+  zIndex: 60,
+};
+
+const megaItemStyle: CSSProperties = {
+  padding: '9px 11px',
+  borderRadius: 9,
+  color: 'var(--sf-ink)',
+  textDecoration: 'none',
+  fontSize: 13,
+  whiteSpace: 'nowrap',
+};
+
+const navRailChipStyle: CSSProperties = {
+  flexShrink: 0,
+  padding: '7px 12px',
+  borderRadius: 999,
+  border: '1px solid color-mix(in srgb, var(--sf-nav-ink, var(--sf-ink)) 16%, transparent)',
+  color: 'var(--sf-nav-ink, var(--sf-ink))',
+  textDecoration: 'none',
+  fontSize: 12,
+  background: 'color-mix(in srgb, var(--sf-nav-ink, var(--sf-ink)) 4%, transparent)',
+};
+
+/**
+ * Premium storefront navbar. The 16 premium `StorefrontNavbarVariant`
+ * values map to eight structural layouts (see {@link navLayout}):
+ * brand+links (standard/split), centered-logo (center-logo/editorial),
+ * a real search field (search-first), a ⌘K command pill (command/
+ * max-command), a hover mega-menu (mega-menu), a slim sidebar-hybrid bar,
+ * an uppercase-serif luxury bar, and an optional second category rail.
+ * Style (floating capsule, dark inversion, announcement tint) still comes
+ * from {@link premiumNavStyle}.
+ */
 export function PremiumStorefrontNav({
   storefront,
   storefrontBaseHref,
@@ -560,21 +709,95 @@ export function PremiumStorefrontNav({
 }) {
   const [open, setOpen] = useState(false);
   const isRtl = storefront.locale === 'ar';
-  const t = FAMILY_LABELS[isRtl ? 'ar' : 'en'];
   const chromeText = premiumChromeCopy(isRtl);
-  const links = [
+  const nav = premiumNavCopy(isRtl);
+  const layout = navLayout(variant);
+  const luxury = layout === 'luxury';
+
+  const productsHref = storefront.productIndex.enabled
+    ? `${storefrontBaseHref}/products`
+    : storefrontBaseHref;
+
+  const links: NavLink[] = [
     { label: chromeText.home, href: storefrontBaseHref },
     ...(storefront.productIndex.enabled
-      ? [{ label: storefront.productIndex.title || t.allProducts, href: `${storefrontBaseHref}/products` }]
+      ? [{ label: storefront.productIndex.title || nav.allProducts, href: productsHref }]
       : []),
     ...pages.map((page) => ({ label: page.title, href: `${storefrontBaseHref}/${page.slug}` })),
   ];
-  const legalLinks = showPolicyLinks
-    ? legalPolicies
-        .slice(0, 2)
-        .map((policy) => ({ label: policy.title, href: `${storefrontBaseHref}/${policy.key}` }))
+  const legalLinks: NavLink[] = showPolicyLinks
+    ? legalPolicies.slice(0, 2).map((policy) => ({
+        label: policy.title,
+        href: `${storefrontBaseHref}/${policy.key}`,
+      }))
     : [];
+  const allDesktopLinks = [...links, ...legalLinks];
+  const megaItems: NavLink[] = [
+    ...(storefront.productIndex.enabled
+      ? [{ label: storefront.productIndex.title || nav.allProducts, href: productsHref }]
+      : []),
+    ...pages.map((page) => ({ label: page.title, href: `${storefrontBaseHref}/${page.slug}` })),
+    ...legalLinks,
+  ];
   const resolvedCtaHref = resolvePremiumChromeHref(ctaHref, storefrontBaseHref);
+
+  const navStyle: CSSProperties = {
+    ...premiumNavStyle(sticky, embedded, variant),
+    ...(layout === 'center'
+      ? { gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)' }
+      : {}),
+  };
+
+  const brand = (
+    <PremiumNavBrand
+      storefront={storefront}
+      href={storefrontBaseHref}
+      centered={layout === 'center'}
+      serif={luxury || variant === 'navbar-editorial'}
+    />
+  );
+
+  const actions = (
+    <PremiumNavActions
+      productsHref={productsHref}
+      showBrowse={showSearch && layout !== 'search' && layout !== 'command'}
+      browseLabel={nav.browse}
+      ctaLabel={ctaLabel}
+      ctaHref={resolvedCtaHref}
+      cartLabel={cartLabel || nav.cart}
+      cartVariant={cartVariant}
+      split={layout === 'split'}
+      open={open}
+      onToggle={() => setOpen((v) => !v)}
+      menuOpenLabel={chromeText.openMenu}
+      menuCloseLabel={chromeText.closeMenu}
+    />
+  );
+
+  let mid: ReactNode;
+  switch (layout) {
+    case 'search':
+      mid = <PremiumNavSearch productsHref={productsHref} placeholder={nav.search} />;
+      break;
+    case 'command':
+      mid = <PremiumNavCommand productsHref={productsHref} placeholder={nav.search} />;
+      break;
+    case 'hybrid':
+      mid = <PremiumNavLinks links={allDesktopLinks} start />;
+      break;
+    case 'mega':
+      mid = (
+        <PremiumNavMega
+          home={{ label: chromeText.home, href: storefrontBaseHref }}
+          shopLabel={nav.shop}
+          items={megaItems}
+        />
+      );
+      break;
+    default:
+      mid = <PremiumNavLinks links={allDesktopLinks} uppercase={luxury} />;
+  }
+
   return (
     <>
       <style>{`
@@ -585,88 +808,349 @@ export function PremiumStorefrontNav({
           }
           .souqna-premium-nav__links,
           .souqna-premium-nav__browse,
-          .souqna-premium-nav__cta {
+          .souqna-premium-nav__cta,
+          .souqna-premium-nav__search,
+          .souqna-premium-nav__rail {
             display: none !important;
           }
           .souqna-premium-nav__menu {
             display: inline-grid !important;
           }
         }
+        .souqna-mega__panel {
+          opacity: 0;
+          visibility: hidden;
+          transform: translateY(6px);
+          transition: opacity 160ms ease, transform 160ms ease, visibility 160ms;
+          pointer-events: none;
+        }
+        .souqna-mega:hover .souqna-mega__panel,
+        .souqna-mega:focus-within .souqna-mega__panel {
+          opacity: 1;
+          visibility: visible;
+          transform: translateY(0);
+          pointer-events: auto;
+        }
+        .souqna-mega__item:hover {
+          background: color-mix(in srgb, var(--sf-ink) 6%, transparent);
+        }
       `}</style>
       {announcement ? <PremiumNavAnnouncement text={announcement} embedded={embedded} /> : null}
-      <nav
-        className="souqna-premium-nav"
-        style={premiumNavStyle(sticky, embedded, variant)}
-        aria-label={chromeText.storefrontPages}
-      >
-      <Link href={storefrontBaseHref} style={brandStyle}>
-        {storefront.logoUrl ? <img src={storefront.logoUrl} alt={storefront.businessName} style={navLogoStyle} /> : <span style={monogramStyle}>{storefront.businessName.slice(0, 1)}</span>}
-        <span style={brandNameStyle}>{storefront.businessName}</span>
-      </Link>
-      <div className="souqna-premium-nav__links" style={desktopNavLinksStyle}>
-        {links.map((link) => (
-          <Link key={link.href} href={link.href} style={navLinkStyle}>
-            {link.label}
-          </Link>
-        ))}
-        {legalLinks.map((link) => (
-          <Link key={link.href} href={link.href} style={navLinkStyle}>
-            {link.label}
-          </Link>
-        ))}
-      </div>
-      <div style={navActionsStyle}>
-        {showSearch ? (
-          <Link
-            className="souqna-premium-nav__browse"
-            href={storefront.productIndex.enabled ? `${storefrontBaseHref}/products` : storefrontBaseHref}
-            style={navSearchStyle}
-          >
-            <Search size={15} />
-            <span>{t.browse}</span>
-          </Link>
+      <nav className="souqna-premium-nav" style={navStyle} aria-label={chromeText.storefrontPages}>
+        {layout === 'center' ? (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'flex-start', minWidth: 0 }}>
+              <PremiumNavLinks links={links} uppercase={luxury} start />
+            </div>
+            {brand}
+            {actions}
+          </>
+        ) : (
+          <>
+            {brand}
+            {mid}
+            {actions}
+          </>
+        )}
+        {variant === 'navbar-category-rail' ? (
+          <PremiumNavCategoryRail links={[...links.slice(1), ...legalLinks]} />
         ) : null}
-        {ctaLabel && resolvedCtaHref ? (
-          <Link className="souqna-premium-nav__cta" href={resolvedCtaHref} style={navCtaStyle}>
-            {ctaLabel}
-            <ArrowUpRight size={14} />
-          </Link>
+        {open ? (
+          <PremiumNavMobileMenu
+            links={links}
+            legalLinks={legalLinks}
+            ctaLabel={ctaLabel}
+            ctaHref={resolvedCtaHref}
+            isRtl={isRtl}
+            onClose={() => setOpen(false)}
+          />
         ) : null}
-        <CartIconButton label={cartLabel || t.cart} variant={cartVariant} />
-        <button
-          className="souqna-premium-nav__menu"
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          style={mobileMenuButtonStyle}
-          aria-label={open ? chromeText.closeMenu : chromeText.openMenu}
-        >
-          {open ? <X size={18} /> : <Menu size={18} />}
-        </button>
-      </div>
-      {open ? (
-        <div style={mobileMenuStyle}>
-          {links.map((link) => (
-            <Link key={link.href} href={link.href} style={mobileLinkStyle} onClick={() => setOpen(false)}>
-              {link.label}
-              <ChevronRight size={15} style={isRtl ? rtlChevronStyle : undefined} />
-            </Link>
-          ))}
-          {legalLinks.map((link) => (
-            <Link key={link.href} href={link.href} style={mobileLinkStyle} onClick={() => setOpen(false)}>
-              {link.label}
-              <ChevronRight size={15} style={isRtl ? rtlChevronStyle : undefined} />
-            </Link>
-          ))}
-          {ctaLabel && resolvedCtaHref ? (
-            <Link href={resolvedCtaHref} style={mobileLinkStyle} onClick={() => setOpen(false)}>
-              {ctaLabel}
-              <ChevronRight size={15} style={isRtl ? rtlChevronStyle : undefined} />
-            </Link>
-          ) : null}
-        </div>
-      ) : null}
       </nav>
     </>
+  );
+}
+
+function PremiumNavBrand({
+  storefront,
+  href,
+  centered,
+  serif,
+}: {
+  storefront: Storefront;
+  href: string;
+  centered?: boolean;
+  serif?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      style={{
+        ...brandStyle,
+        justifyContent: centered ? 'center' : undefined,
+        fontFamily: serif ? 'var(--font-serif, serif)' : undefined,
+        fontWeight: serif ? 500 : brandStyle.fontWeight,
+      }}
+    >
+      {storefront.logoUrl ? (
+        <img src={storefront.logoUrl} alt={storefront.businessName} style={navLogoStyle} />
+      ) : (
+        <span style={monogramStyle}>{storefront.businessName.slice(0, 1)}</span>
+      )}
+      <span
+        style={{
+          ...brandNameStyle,
+          fontSize: serif ? 18 : undefined,
+          letterSpacing: serif ? '0.01em' : undefined,
+        }}
+      >
+        {storefront.businessName}
+      </span>
+    </Link>
+  );
+}
+
+function PremiumNavLinks({
+  links,
+  uppercase,
+  start,
+  className = 'souqna-premium-nav__links',
+}: {
+  links: NavLink[];
+  uppercase?: boolean;
+  start?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={className}
+      style={{ ...desktopNavLinksStyle, justifyContent: start ? 'flex-start' : 'center' }}
+    >
+      {links.map((link) => (
+        <Link
+          key={link.href}
+          href={link.href}
+          style={{
+            ...navLinkStyle,
+            textTransform: uppercase ? 'uppercase' : undefined,
+            letterSpacing: uppercase ? '0.08em' : undefined,
+            fontSize: uppercase ? 12 : navLinkStyle.fontSize,
+          }}
+        >
+          {link.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function PremiumNavActions({
+  productsHref,
+  showBrowse,
+  browseLabel,
+  ctaLabel,
+  ctaHref,
+  cartLabel,
+  cartVariant,
+  split,
+  open,
+  onToggle,
+  menuOpenLabel,
+  menuCloseLabel,
+}: {
+  productsHref: string;
+  showBrowse: boolean;
+  browseLabel: string;
+  ctaLabel?: string;
+  ctaHref: string | null;
+  cartLabel: string;
+  cartVariant: StorefrontCartVariant;
+  split: boolean;
+  open: boolean;
+  onToggle: () => void;
+  menuOpenLabel: string;
+  menuCloseLabel: string;
+}) {
+  return (
+    <div style={navActionsStyle}>
+      {showBrowse ? (
+        <Link className="souqna-premium-nav__browse" href={productsHref} style={navSearchStyle}>
+          <Search size={15} />
+          <span>{browseLabel}</span>
+        </Link>
+      ) : null}
+      {split && ctaLabel && ctaHref ? (
+        <span className="souqna-premium-nav__cta" style={navDividerStyle} aria-hidden />
+      ) : null}
+      {ctaLabel && ctaHref ? (
+        <Link className="souqna-premium-nav__cta" href={ctaHref} style={navCtaStyle}>
+          {ctaLabel}
+          <ArrowUpRight size={14} />
+        </Link>
+      ) : null}
+      <CartIconButton label={cartLabel} variant={cartVariant} />
+      <button
+        className="souqna-premium-nav__menu"
+        type="button"
+        onClick={onToggle}
+        style={mobileMenuButtonStyle}
+        aria-label={open ? menuCloseLabel : menuOpenLabel}
+      >
+        {open ? <X size={18} /> : <Menu size={18} />}
+      </button>
+    </div>
+  );
+}
+
+function PremiumNavSearch({
+  productsHref,
+  placeholder,
+}: {
+  productsHref: string;
+  placeholder: string;
+}) {
+  return (
+    <form
+      action={productsHref}
+      method="get"
+      role="search"
+      className="souqna-premium-nav__search"
+      style={navSearchFieldStyle}
+    >
+      <Search size={15} style={{ flexShrink: 0, opacity: 0.7 }} />
+      <input name="q" placeholder={placeholder} aria-label={placeholder} style={navSearchInputStyle} />
+    </form>
+  );
+}
+
+function PremiumNavCommand({
+  productsHref,
+  placeholder,
+}: {
+  productsHref: string;
+  placeholder: string;
+}) {
+  return (
+    <Link href={productsHref} className="souqna-premium-nav__search" style={navCommandPillStyle}>
+      <Search size={14} style={{ opacity: 0.7, flexShrink: 0 }} />
+      <span style={{ flex: 1, textAlign: 'start', opacity: 0.7 }}>{placeholder}</span>
+      <kbd style={navKbdStyle}>⌘K</kbd>
+    </Link>
+  );
+}
+
+function PremiumNavMega({
+  home,
+  shopLabel,
+  items,
+}: {
+  home: NavLink;
+  shopLabel: string;
+  items: NavLink[];
+}) {
+  return (
+    <div className="souqna-premium-nav__links" style={{ ...desktopNavLinksStyle, overflow: 'visible' }}>
+      <Link href={home.href} style={navLinkStyle}>
+        {home.label}
+      </Link>
+      <div className="souqna-mega" style={{ position: 'relative' }}>
+        <button
+          type="button"
+          aria-haspopup="true"
+          style={{
+            ...navLinkStyle,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          {shopLabel}
+          <ChevronRight size={13} style={{ transform: 'rotate(90deg)' }} />
+        </button>
+        <div
+          className="souqna-mega__panel"
+          role="menu"
+          style={{
+            ...megaPanelStyle,
+            gridTemplateColumns: items.length > 6 ? '1fr 1fr' : '1fr',
+          }}
+        >
+          {items.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              role="menuitem"
+              className="souqna-mega__item"
+              style={megaItemStyle}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PremiumNavCategoryRail({ links }: { links: NavLink[] }) {
+  if (links.length === 0) return null;
+  return (
+    <div
+      className="souqna-premium-nav__rail"
+      style={{
+        gridColumn: '1 / -1',
+        display: 'flex',
+        gap: 8,
+        marginTop: 10,
+        paddingTop: 10,
+        borderTop: '1px solid color-mix(in srgb, var(--sf-nav-ink, var(--sf-ink)) 12%, transparent)',
+        overflowX: 'auto',
+        whiteSpace: 'nowrap',
+        scrollbarWidth: 'none',
+      }}
+    >
+      {links.map((link) => (
+        <Link key={link.href} href={link.href} style={navRailChipStyle}>
+          {link.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function PremiumNavMobileMenu({
+  links,
+  legalLinks,
+  ctaLabel,
+  ctaHref,
+  isRtl,
+  onClose,
+}: {
+  links: NavLink[];
+  legalLinks: NavLink[];
+  ctaLabel?: string;
+  ctaHref: string | null;
+  isRtl: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <div style={mobileMenuStyle}>
+      {[...links, ...legalLinks].map((link) => (
+        <Link key={link.href} href={link.href} style={mobileLinkStyle} onClick={onClose}>
+          {link.label}
+          <ChevronRight size={15} style={isRtl ? rtlChevronStyle : undefined} />
+        </Link>
+      ))}
+      {ctaLabel && ctaHref ? (
+        <Link href={ctaHref} style={mobileLinkStyle} onClick={onClose}>
+          {ctaLabel}
+          <ChevronRight size={15} style={isRtl ? rtlChevronStyle : undefined} />
+        </Link>
+      ) : null}
+    </div>
   );
 }
 

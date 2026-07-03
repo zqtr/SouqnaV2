@@ -917,7 +917,7 @@ export default function TemplateShowcasePage() {
                   The same premium blocks connected to product media and cart.
                 </h3>
                 <p className="mt-1 text-sm font-bold text-[#7a6348]" dir="rtl">
-                  Ù…ÙƒÙˆÙ†Ø§Øª Ù…Ø±Ø¨ÙˆØ·Ø© Ø¨Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª ÙˆØ§Ù„ÙÙŠØ¯ÙŠÙˆ ÙˆØ§Ù„Ø³Ù„Ø©
+                  مكونات مربوطة بالمنتجات والفيديو والسلة
                 </p>
               </div>
               <p className="max-w-2xl text-sm font-semibold leading-6 text-[#6a5740]">

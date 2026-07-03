@@ -28,6 +28,7 @@ export type SkipCashPayment = {
   visaId?: string | null;
   status?: SkipCashPaymentStatus;
   recurringSubscriptionId?: string | null;
+  tokenId?: string | null;
 };
 
 type SkipCashResponse<T> = {
@@ -111,6 +112,8 @@ export type SkipCashWebhookPayload = {
   VisaId?: string | null;
   recurringSubscriptionId?: string | null;
   RecurringSubscriptionId?: string | null;
+  tokenId?: string | null;
+  TokenId?: string | null;
 };
 
 const CREATE_SIGNATURE_KEYS = [
@@ -346,6 +349,93 @@ async function getSkipCashPaymentWithClientId(
   return json.resultObj;
 }
 
+export type SkipCashCardDetails = {
+  tokenId: string;
+  last4: string | null;
+  cardType: string | null;
+  expiry: string | null;
+};
+
+/**
+ * `cardType` in the cardDetails response is a numeric enum (observed
+ * live: 1 for a Visa card). Unknown values fall back to null so the UI
+ * shows a generic "Card" label instead of a wrong brand.
+ */
+const SKIPCASH_CARD_TYPE_LABELS: Record<number, string> = {
+  1: 'Visa',
+  2: 'Mastercard',
+  3: 'American Express',
+};
+
+/**
+ * Card display details for a saved token (GET /token/cardDetails/{id}).
+ *
+ * Observed live response shape:
+ *   { resultObj: [{ cardNumber: "8583", cardType: 1, cardExpiry: "01/2000" }] }
+ * — `cardNumber` is the last 4 digits, `cardType` a numeric enum, and
+ * `cardExpiry` is "01/2000" when SkipCash has no expiry on file (that
+ * placeholder is normalized to null). Lookup failures return null; the
+ * token stays usable without display details.
+ */
+export async function getSkipCashCardDetails(
+  tokenId: string,
+): Promise<SkipCashCardDetails | null> {
+  if (!env.SKIPCASH_CLIENT_ID) return null;
+  try {
+    const base = skipCashBaseUrl().replace(/\/api\/v1$/u, '');
+    const res = await fetch(`${base}/token/cardDetails/${encodeURIComponent(tokenId)}`, {
+      method: 'GET',
+      headers: {
+        Authorization: env.SKIPCASH_CLIENT_ID,
+        'x-client-id': env.SKIPCASH_CLIENT_ID,
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    const json = text ? (JSON.parse(text) as SkipCashResponse<unknown>) : {};
+    const raw = json.resultObj;
+    const record = Array.isArray(raw) ? raw[0] : raw;
+    if (!record || typeof record !== 'object') return null;
+    const r = record as Record<string, unknown>;
+    return {
+      tokenId,
+      last4: parseSkipCashLast4(r.cardNumber ?? r.CardNumber ?? r.last4 ?? r.maskedPan),
+      cardType: parseSkipCashCardType(r.cardType ?? r.CardType ?? r.brand),
+      expiry: parseSkipCashExpiry(r.cardExpiry ?? r.CardExpiry ?? r.expiry ?? r.expiryDate),
+    };
+  } catch (err) {
+    console.warn('[skipcash] card details lookup failed', err);
+    return null;
+  }
+}
+
+function parseSkipCashLast4(value: unknown): string | null {
+  const digits = String(value ?? '').replace(/\D/gu, '');
+  return digits.length >= 4 ? digits.slice(-4) : null;
+}
+
+function parseSkipCashCardType(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim() && Number.isNaN(Number(value))) {
+    return value.trim();
+  }
+  const code = Number(value);
+  return Number.isFinite(code) ? SKIPCASH_CARD_TYPE_LABELS[code] ?? null : null;
+}
+
+function parseSkipCashExpiry(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const match = value.trim().match(/^(\d{1,2})\/(\d{2}|\d{4})$/u);
+  if (!match) return null;
+  const [, monthPart, yearPart] = match as unknown as [string, string, string];
+  const year = Number(yearPart.length === 2 ? `20${yearPart}` : yearPart);
+  // "01/2000" is SkipCash's no-expiry placeholder; anything clearly in
+  // the past is equally useless as display data.
+  if (year < 2020) return null;
+  return `${monthPart.padStart(2, '0')}/${year}`;
+}
+
 export function normalizeSkipCashStatusId(statusId: number | string | undefined): number {
   const n = Number(statusId);
   return Number.isFinite(n) ? n : -1;
@@ -382,6 +472,9 @@ export function normalizeWebhookPayload(payload: SkipCashWebhookPayload) {
     RecurringSubscriptionId: stringValue(
       payload.RecurringSubscriptionId ?? payload.recurringSubscriptionId,
     ),
+    // Not part of the webhook signature — surfaced so tokenization-aware
+    // consumers (wallet saved cards) can pick it up when present.
+    TokenId: stringValue(payload.TokenId ?? payload.tokenId),
   };
 }
 

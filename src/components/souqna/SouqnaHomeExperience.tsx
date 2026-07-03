@@ -22,6 +22,7 @@ import HalftoneWave from '@/components/halftone-wave';
 import { Navigation2 } from '@/components/navigation-2';
 import { MetalFrame } from '@/components/primitives/MetalFrame';
 import { Pricing5 } from '@/components/pricing-5';
+import { SouqyPricing } from '@/components/sections/souqy-pricing/SouqyPricing';
 import RotatingText from '@/components/souqna-motion/RotatingText';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import type { Locale } from '@/i18n/locales';
@@ -626,6 +627,8 @@ export function SouqnaHomeExperience({ locale }: Props) {
         </section>
 
         <Pricing5 locale={locale} />
+
+        <SouqyPricing locale={locale} />
 
         <section id="contact" className="sq-contact">
           <div>

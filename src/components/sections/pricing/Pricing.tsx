@@ -39,8 +39,8 @@ const TAGLINE: Record<Plan, { en: string; ar: string }> = {
     ar: 'أطلق متاجر أكثر مع نطاق خاص ودعم.',
   },
   pro: {
-    en: 'Scale with Souqy, AI generation, teams, and official payment providers.',
-    ar: 'أضف سوقي، أصول الذكاء، نصوص المنتجات، وتطبيقات النمو.',
+    en: 'Scale with AI branding, teams, and official payment providers.',
+    ar: 'أضف أصول الذكاء، نصوص المنتجات، وتطبيقات النمو.',
   },
   atelier: {
     en: 'Run agencies, operators, multi-brand workspaces, and every payment provider.',
@@ -75,7 +75,6 @@ const FEATURES_EN: Record<Plan, { intro: string; bullets: string[] }> = {
       'WhatsApp integration',
       'Fawran + cash on delivery checkout',
       'Discount codes + SEO settings',
-      '100 AI credits per month',
       'Email support',
     ],
   },
@@ -83,9 +82,7 @@ const FEATURES_EN: Record<Plan, { intro: string; bullets: string[] }> = {
     intro: 'Everything in Pro:',
     bullets: [
       '8 storefronts',
-      'Souqy AI operator',
       'AI branding assets',
-      'EN + AR AI generation',
       'Marketing apps',
       'Meta/TikTok integrations',
       'Payment providers: SADAD, SkipCash, Tap Payments',
@@ -136,7 +133,6 @@ const FEATURES_AR: Record<Plan, { intro: string; bullets: string[] }> = {
     bullets: [
       '٨ متاجر',
       'أصول هوية وتسويق بالذكاء الاصطناعي',
-      'مشغّل سوقي الذكي',
       'نصوص منتجات بالعربي والإنجليزي',
       'إضافات التسويق والتحليلات',
       'دعم واتساب',

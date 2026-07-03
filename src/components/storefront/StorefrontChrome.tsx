@@ -7,6 +7,7 @@ import { env } from '@/lib/env';
 import { CartProvider } from './cart/CartContext';
 import { CartDrawer, type CartDrawerLabels } from './cart/CartDrawer';
 import { CartIconButton } from './cart/CartIconButton';
+import { StorefrontSidebar } from './StorefrontSidebar';
 import { PremiumStorefrontNav } from './blocks/ShadcnCommerceBlocks';
 import {
   normalizeStorefrontChromeConfig,
@@ -14,7 +15,6 @@ import {
   type StorefrontChromeConfig,
   type StorefrontFooterVariant,
   type StorefrontNavbarVariant,
-  type StorefrontSidebarVariant,
 } from '@/lib/storefrontChrome';
 
 export type ChromeNavPage = { slug: string; title: string };
@@ -113,114 +113,6 @@ export function StorefrontFooter({ storefront }: Props) {
   );
 }
 
-function StorefrontSidebarChrome({
-  storefront,
-  pages,
-  storefrontBaseHref,
-  variant,
-  label,
-}: {
-  storefront: Storefront;
-  pages: ChromeNavPage[];
-  storefrontBaseHref: string;
-  variant: StorefrontSidebarVariant;
-  label?: string;
-}) {
-  if (variant === 'sidebar-none') return null;
-  const isRtl = storefront.locale === 'ar';
-  const productsLabel =
-    storefront.productIndex.title ||
-    (isRtl ? '\u0643\u0644 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a' : 'All Products');
-  const links = [
-    { href: storefrontBaseHref, label: isRtl ? '\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629' : 'Home' },
-    ...(storefront.productIndex.enabled
-      ? [{ href: `${storefrontBaseHref}/products`, label: productsLabel }]
-      : []),
-    ...pages.slice(0, 5).map((page) => ({ href: `${storefrontBaseHref}/${page.slug}`, label: page.title })),
-  ];
-  const title = label || (isRtl ? '\u062a\u0635\u0641\u062d \u0627\u0644\u0645\u062a\u062c\u0631' : 'Browse store');
-  return (
-    <aside
-      aria-label={isRtl ? '\u062a\u0646\u0642\u0644 \u0627\u0644\u0645\u062a\u062c\u0631' : 'Store menu'}
-      style={{
-        position: 'fixed',
-        insetBlockStart:
-          variant === 'sidebar-floating-menu' || variant === 'sidebar-account-style'
-            ? 'clamp(92px, 12vw, 140px)'
-            : '50%',
-        transform:
-          variant === 'sidebar-floating-menu' || variant === 'sidebar-account-style'
-            ? undefined
-            : 'translateY(-50%)',
-        insetInlineStart: isRtl ? undefined : 14,
-        insetInlineEnd: isRtl ? 14 : undefined,
-        zIndex: 44,
-        display: 'grid',
-        gap: 6,
-        maxWidth: 210,
-        padding: variant === 'sidebar-account-style' ? 10 : 8,
-        borderRadius: variant === 'sidebar-category-rail' ? 999 : 18,
-        border: '1px solid color-mix(in srgb, var(--sf-ink) 12%, transparent)',
-        background:
-          variant === 'sidebar-max-catalog'
-            ? 'linear-gradient(180deg, color-mix(in srgb, var(--sf-ink) 9%, var(--sf-ground)), var(--sf-ground))'
-            : 'color-mix(in srgb, var(--sf-ground) 88%, transparent)',
-        boxShadow: '0 18px 44px -34px color-mix(in srgb, var(--sf-ink) 70%, transparent)',
-        backdropFilter: 'blur(16px)',
-      }}
-      className="souqna-storefront-sidebar-chrome"
-    >
-      <style>{`
-        @media (max-width: 900px) {
-          .souqna-storefront-sidebar-chrome { display: none !important; }
-        }
-      `}</style>
-      {variant !== 'sidebar-category-rail' ? (
-        <span
-          style={{
-            padding: '4px 10px 2px',
-            color: 'color-mix(in srgb, var(--sf-ink) 62%, transparent)',
-            fontFamily: 'var(--font-mono), monospace',
-            fontSize: 10,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {title}
-        </span>
-      ) : null}
-      {links.map((link) => (
-        <a
-          key={link.href}
-          href={link.href}
-          className="no-underline"
-          style={{
-            minWidth: variant === 'sidebar-category-rail' ? 0 : 126,
-            padding: variant === 'sidebar-category-rail' ? '9px 10px' : '9px 12px',
-            borderRadius: 999,
-            color: 'var(--sf-ink)',
-            background:
-              variant === 'sidebar-filter-drawer' || variant === 'sidebar-max-catalog'
-                ? 'color-mix(in srgb, var(--sf-ink) 5%, transparent)'
-                : 'transparent',
-            fontFamily: 'var(--font-mono), monospace',
-            fontSize: 11,
-            letterSpacing: '0.04em',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {link.label}
-        </a>
-      ))}
-    </aside>
-  );
-}
-
 /**
  * Wraps a storefront tree with the M3 cart provider and mounts the
  * floating cart trigger + slide-in drawer once at the root. The cart
@@ -301,7 +193,7 @@ export function StorefrontChrome({
           cartLabel={chromeConfig.cartLabel}
         />
       )}
-      <StorefrontSidebarChrome
+      <StorefrontSidebar
         storefront={storefront}
         pages={navPages}
         storefrontBaseHref={storefrontBaseHref}
@@ -514,6 +406,89 @@ function ChromeAnnouncement({ text }: { text: string }) {
   );
 }
 
+type FooterLink = { href: string; label: string; external?: boolean };
+type FooterLayout = 'inline' | 'feature' | 'directory' | 'statement';
+type FooterFeature = 'none' | 'newsletter' | 'whatsapp' | 'trust' | 'story' | 'support';
+
+type FooterSpec = {
+  layout: FooterLayout;
+  feature: FooterFeature;
+  /** Soft ink-tinted band behind the whole footer. */
+  tint: boolean;
+  /** Large serif brand lockup. */
+  bigBrand: boolean;
+  /** Break links into more, tighter columns. */
+  dense: boolean;
+  /** Render policies as a pill grid rather than a plain column. */
+  policyPills: boolean;
+};
+
+function footerSpec(variant: StorefrontFooterVariant): FooterSpec {
+  switch (variant) {
+    case 'footer-links':
+      return { layout: 'directory', feature: 'none', tint: false, bigBrand: false, dense: false, policyPills: false };
+    case 'footer-commerce':
+      return { layout: 'feature', feature: 'whatsapp', tint: false, bigBrand: false, dense: false, policyPills: false };
+    case 'footer-newsletter':
+      return { layout: 'feature', feature: 'newsletter', tint: true, bigBrand: false, dense: false, policyPills: false };
+    case 'footer-brand-story':
+      return { layout: 'feature', feature: 'story', tint: false, bigBrand: true, dense: false, policyPills: false };
+    case 'footer-social-proof':
+      return { layout: 'feature', feature: 'trust', tint: false, bigBrand: false, dense: false, policyPills: false };
+    case 'footer-policy-grid':
+      return { layout: 'directory', feature: 'none', tint: false, bigBrand: false, dense: true, policyPills: true };
+    case 'footer-support':
+      return { layout: 'feature', feature: 'support', tint: true, bigBrand: false, dense: false, policyPills: false };
+    case 'footer-marketplace':
+      return { layout: 'directory', feature: 'none', tint: false, bigBrand: false, dense: true, policyPills: false };
+    case 'footer-luxury':
+      return { layout: 'statement', feature: 'none', tint: true, bigBrand: true, dense: false, policyPills: false };
+    case 'footer-editorial':
+      return { layout: 'statement', feature: 'story', tint: false, bigBrand: true, dense: false, policyPills: false };
+    case 'footer-max-directory':
+      return { layout: 'directory', feature: 'none', tint: false, bigBrand: false, dense: true, policyPills: false };
+    case 'footer-minimal':
+    default:
+      return { layout: 'inline', feature: 'none', tint: false, bigBrand: false, dense: false, policyPills: false };
+  }
+}
+
+function footerCopy(isRtl: boolean) {
+  return isRtl
+    ? {
+        home: 'الرئيسية',
+        allProducts: 'كل المنتجات',
+        shop: 'تسوّق',
+        explore: 'الصفحات',
+        policies: 'السياسات',
+        contact: 'تواصل',
+        stayInTouch: 'ابقَ على تواصل',
+        updates: 'استلم تحديثات المتجر',
+        whatsapp: 'واتساب',
+        needHelp: 'تحتاج مساعدة؟',
+        footerLinks: 'روابط التذييل',
+        fallbackTagline: 'متجر جاهز للطلبات',
+        rights: 'جميع الحقوق محفوظة',
+        trust: ['دفع آمن', 'توصيل سريع', 'دعم محلي'],
+      }
+    : {
+        home: 'Home',
+        allProducts: 'All Products',
+        shop: 'Shop',
+        explore: 'Pages',
+        policies: 'Policies',
+        contact: 'Contact',
+        stayInTouch: 'Stay in touch',
+        updates: 'Get store updates',
+        whatsapp: 'WhatsApp',
+        needHelp: 'Need a hand?',
+        footerLinks: 'Footer links',
+        fallbackTagline: 'A storefront built for orders',
+        rights: 'All rights reserved',
+        trust: ['Secure checkout', 'Fast local delivery', 'Real human support'],
+      };
+}
+
 function ChromeStorefrontFooter({
   storefront,
   pages,
@@ -535,96 +510,378 @@ function ChromeStorefrontFooter({
 }) {
   const isRtl = storefront.locale === 'ar';
   const year = new Date().getFullYear();
-  const links = [
-    { href: storefrontBaseHref, label: isRtl ? '\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629' : 'Home' },
-    ...(storefront.productIndex.enabled
-      ? [
-          {
-            href: `${storefrontBaseHref}/products`,
-            label:
-              storefront.productIndex.title ||
-              (isRtl ? '\u0643\u0644 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a' : 'All Products'),
-          },
-        ]
-      : []),
-    ...pages.slice(0, 4).map((page) => ({ href: `${storefrontBaseHref}/${page.slug}`, label: page.title })),
-    ...policies.map((p) => ({ href: `${storefrontBaseHref}/${p.key}`, label: p.title })),
+  const spec = footerSpec(variant);
+  const t = footerCopy(isRtl);
+
+  const productsLabel = storefront.productIndex.title || t.allProducts;
+  const productLinks: FooterLink[] = storefront.productIndex.enabled
+    ? [{ href: `${storefrontBaseHref}/products`, label: productsLabel }]
+    : [];
+  const pageLinks: FooterLink[] = pages.map((p) => ({
+    href: `${storefrontBaseHref}/${p.slug}`,
+    label: p.title,
+  }));
+  const legalLinks: FooterLink[] = policies.map((p) => ({
+    href: `${storefrontBaseHref}/${p.key}`,
+    label: p.title,
+  }));
+  const waDigits = storefront.phone ? storefront.phone.replace(/\D/g, '') : '';
+  const waHref = waDigits ? `https://wa.me/${waDigits}` : null;
+  const contactLinks: FooterLink[] = waHref
+    ? [{ href: waHref, label: t.whatsapp, external: true }]
+    : [];
+
+  const shopLinks: FooterLink[] = [
+    { href: storefrontBaseHref, label: t.home },
+    ...productLinks,
+    ...pageLinks.slice(0, 6),
   ];
+
+  // Directory columns — split more finely when dense.
+  const columns: { heading: string; links: FooterLink[] }[] = spec.dense
+    ? [
+        { heading: t.shop, links: [{ href: storefrontBaseHref, label: t.home }, ...productLinks] },
+        ...(pageLinks.length ? [{ heading: t.explore, links: pageLinks.slice(0, 6) }] : []),
+        ...(!spec.policyPills && legalLinks.length ? [{ heading: t.policies, links: legalLinks }] : []),
+        ...(contactLinks.length ? [{ heading: t.contact, links: contactLinks }] : []),
+      ]
+    : [
+        { heading: t.shop, links: shopLinks },
+        ...(legalLinks.length ? [{ heading: t.policies, links: legalLinks }] : []),
+        ...(contactLinks.length ? [{ heading: t.contact, links: contactLinks }] : []),
+      ];
+
+  const brand = headline || storefront.businessName;
+  const tagline = text || storefront.tagline || t.fallbackTagline;
+  const wantsNewsletter = showNewsletter || spec.feature === 'newsletter';
+
+  const brandBlock = (
+    <FooterBrandBlock
+      brand={brand}
+      tagline={tagline}
+      spec={spec}
+      copy={t}
+      wantsNewsletter={wantsNewsletter}
+      waHref={waHref}
+      fallbackHref={storefrontBaseHref}
+      centered={spec.layout === 'inline'}
+    />
+  );
+
   return (
     <footer
-      className="flex flex-wrap"
+      aria-label={t.footerLinks}
       style={{
-        alignItems: variant === 'footer-brand-story' || variant === 'footer-luxury' ? 'end' : 'center',
-        justifyContent:
-          variant === 'footer-minimal' || variant === 'footer-links' ? 'center' : 'space-between',
-        gap: 'clamp(16px, 3vw, 34px)',
         marginTop: 64,
         paddingBlock:
-          variant === 'footer-luxury' || variant === 'footer-max-directory'
-            ? 'clamp(32px, 5vw, 56px)'
-            : 'clamp(20px, 3vw, 30px)',
-        paddingInline: 'clamp(16px, 4vw, 32px)',
+          spec.layout === 'statement' ? 'clamp(40px, 6vw, 72px)' : 'clamp(28px, 4vw, 46px)',
+        paddingInline: 'clamp(16px, 4vw, 40px)',
         borderTop: '1px solid color-mix(in srgb, var(--sf-accent) 18%, transparent)',
-        background:
-          variant === 'footer-luxury' || variant === 'footer-editorial'
-            ? 'color-mix(in srgb, var(--sf-ink) 6%, transparent)'
-            : undefined,
+        background: spec.tint ? 'color-mix(in srgb, var(--sf-ink) 5%, transparent)' : undefined,
         fontFamily: 'var(--font-mono), monospace',
-        fontSize: 11.5,
-        letterSpacing: '0.06em',
-        color: 'color-mix(in srgb, var(--sf-ink) 60%, transparent)',
+        fontSize: 12,
+        letterSpacing: '0.04em',
+        color: 'color-mix(in srgb, var(--sf-ink) 62%, transparent)',
+        display: 'grid',
+        gap: 'clamp(22px, 4vw, 38px)',
       }}
     >
-      <div style={{ display: 'grid', gap: 6, minWidth: 180 }}>
-        <strong
+      {spec.layout === 'inline' ? (
+        <div style={{ display: 'grid', justifyItems: 'center', gap: 18, textAlign: 'center' }}>
+          {brandBlock}
+          <FooterInlineLinks links={[...shopLinks, ...legalLinks]} centered />
+        </div>
+      ) : null}
+
+      {spec.layout === 'statement' ? (
+        <div style={{ display: 'grid', gap: 'clamp(20px, 3vw, 32px)' }}>
+          {brandBlock}
+          <FooterInlineLinks links={[...shopLinks, ...legalLinks, ...contactLinks]} />
+        </div>
+      ) : null}
+
+      {spec.layout === 'feature' ? (
+        <div
+          className="souqna-footer-feature"
           style={{
-            color: 'var(--sf-ink)',
-            fontFamily: 'var(--font-serif), serif',
-            fontSize: variant === 'footer-luxury' ? 22 : 15,
-            letterSpacing: 0,
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1.3fr) minmax(0, 1fr)',
+            gap: 'clamp(24px, 5vw, 56px)',
+            alignItems: 'start',
           }}
         >
-          {headline || storefront.businessName}
-        </strong>
-        <span>
-          {text ||
-            storefront.tagline ||
-            (isRtl
-              ? '\u0645\u062a\u062c\u0631 \u062c\u0627\u0647\u0632 \u0644\u0644\u0637\u0644\u0628\u0627\u062a'
-              : `Commerce storefront · ${year}`)}
-        </span>
-        {showNewsletter || variant === 'footer-newsletter' ? (
-          <a
-            href={storefront.phone ? `https://wa.me/${storefront.phone.replace(/\D/g, '')}` : storefrontBaseHref}
-            target={storefront.phone ? '_blank' : undefined}
-            rel={storefront.phone ? 'noreferrer' : 'noopener'}
-            className="no-underline"
+          {brandBlock}
+          <div
             style={{
-              justifySelf: 'start',
-              marginTop: 6,
-              color: 'var(--sf-ink)',
-              border: '1px solid color-mix(in srgb, var(--sf-accent) 34%, transparent)',
-              borderRadius: 999,
-              padding: '8px 12px',
-              background: 'color-mix(in srgb, var(--sf-accent) 10%, transparent)',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+              gap: 'clamp(16px, 3vw, 32px)',
             }}
           >
-            {isRtl
-              ? '\u0627\u0633\u062a\u0644\u0645 \u062a\u062d\u062f\u064a\u062b\u0627\u062a \u0627\u0644\u0645\u062a\u062c\u0631'
-              : 'Get store updates'}
-          </a>
-        ) : null}
-      </div>
-      <nav
-        aria-label={isRtl ? '\u0631\u0648\u0627\u0628\u0637 \u0627\u0644\u062a\u0630\u064a\u064a\u0644' : 'Footer links'}
+            <FooterLinkColumn heading={t.shop} links={shopLinks} />
+            {legalLinks.length ? <FooterLinkColumn heading={t.policies} links={legalLinks} /> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {spec.layout === 'directory' ? (
+        <div style={{ display: 'grid', gap: 'clamp(22px, 3vw, 32px)' }}>
+          {brandBlock}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(auto-fit, minmax(${spec.dense ? 130 : 160}px, 1fr))`,
+              gap: 'clamp(16px, 3vw, 34px)',
+            }}
+          >
+            {columns.map((col) => (
+              <FooterLinkColumn key={col.heading} heading={col.heading} links={col.links} />
+            ))}
+          </div>
+          {spec.policyPills && legalLinks.length ? (
+            <FooterPolicyPills heading={t.policies} links={legalLinks} />
+          ) : null}
+        </div>
+      ) : null}
+
+      <FooterBottomBar business={storefront.businessName} year={year} note={t.rights} />
+      <style>{`
+        @media (max-width: 720px) {
+          .souqna-footer-feature { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+    </footer>
+  );
+}
+
+function FooterBrandBlock({
+  brand,
+  tagline,
+  spec,
+  copy,
+  wantsNewsletter,
+  waHref,
+  fallbackHref,
+  centered,
+}: {
+  brand: string;
+  tagline: string;
+  spec: FooterSpec;
+  copy: ReturnType<typeof footerCopy>;
+  wantsNewsletter: boolean;
+  waHref: string | null;
+  fallbackHref: string;
+  centered?: boolean;
+}) {
+  const story = spec.feature === 'story';
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gap: 12,
+        minWidth: 0,
+        justifyItems: centered ? 'center' : 'start',
+        maxWidth: story ? 560 : centered ? undefined : 420,
+      }}
+    >
+      <strong
         style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          justifyContent: 'inherit',
-          gap: variant === 'footer-policy-grid' || variant === 'footer-max-directory' ? 10 : 18,
-          maxWidth: variant === 'footer-max-directory' ? 620 : undefined,
+          color: 'var(--sf-ink)',
+          fontFamily: 'var(--font-serif), serif',
+          fontWeight: 500,
+          fontSize: spec.bigBrand ? 'clamp(24px, 4vw, 38px)' : 18,
+          lineHeight: 1.1,
+          letterSpacing: spec.bigBrand ? '-0.02em' : 0,
         }}
       >
+        {brand}
+      </strong>
+      <span
+        style={{
+          fontSize: story ? 14 : 12.5,
+          lineHeight: story ? 1.7 : 1.5,
+          color: 'color-mix(in srgb, var(--sf-ink) 62%, transparent)',
+          maxWidth: story ? 520 : undefined,
+        }}
+      >
+        {tagline}
+      </span>
+
+      {wantsNewsletter ? (
+        <FooterCta
+          href={waHref ?? fallbackHref}
+          external={Boolean(waHref)}
+          label={copy.updates}
+          heading={copy.stayInTouch}
+        />
+      ) : null}
+
+      {!wantsNewsletter && (spec.feature === 'whatsapp' || spec.feature === 'support') && waHref ? (
+        <FooterCta
+          href={waHref}
+          external
+          label={copy.whatsapp}
+          heading={spec.feature === 'support' ? copy.needHelp : copy.contact}
+          icon="chat"
+        />
+      ) : null}
+
+      {spec.feature === 'trust' ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
+          {copy.trust.map((note) => (
+            <span
+              key={note}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 11px',
+                borderRadius: 999,
+                border: '1px solid color-mix(in srgb, var(--sf-ink) 12%, transparent)',
+                background: 'color-mix(in srgb, var(--sf-accent) 8%, transparent)',
+                color: 'var(--sf-ink)',
+                fontSize: 11,
+                letterSpacing: '0.03em',
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: 999,
+                  background: 'var(--sf-accent)',
+                }}
+              />
+              {note}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function FooterCta({
+  href,
+  external,
+  label,
+  heading,
+  icon,
+}: {
+  href: string;
+  external?: boolean;
+  label: string;
+  heading?: string;
+  icon?: 'chat';
+}) {
+  return (
+    <div style={{ display: 'grid', gap: 6, marginTop: 4 }}>
+      {heading ? (
+        <span
+          style={{
+            fontSize: 10.5,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            color: 'color-mix(in srgb, var(--sf-ink) 55%, transparent)',
+          }}
+        >
+          {heading}
+        </span>
+      ) : null}
+      <a
+        href={href}
+        target={external ? '_blank' : undefined}
+        rel={external ? 'noreferrer' : 'noopener'}
+        className="no-underline"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          color: 'var(--sf-ink)',
+          border: '1px solid color-mix(in srgb, var(--sf-accent) 34%, transparent)',
+          borderRadius: 999,
+          padding: '9px 14px',
+          background: 'color-mix(in srgb, var(--sf-accent) 10%, transparent)',
+          fontSize: 12,
+          letterSpacing: '0.03em',
+          width: 'fit-content',
+        }}
+      >
+        {icon === 'chat' ? (
+          <svg
+            width={14}
+            height={14}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.7}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5.6A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5Z" />
+          </svg>
+        ) : null}
+        {label}
+      </a>
+    </div>
+  );
+}
+
+function FooterLinkColumn({ heading, links }: { heading: string; links: FooterLink[] }) {
+  return (
+    <nav aria-label={heading} style={{ display: 'grid', gap: 10, alignContent: 'start' }}>
+      <span
+        style={{
+          fontSize: 10.5,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: 'color-mix(in srgb, var(--sf-ink) 50%, transparent)',
+        }}
+      >
+        {heading}
+      </span>
+      <div style={{ display: 'grid', gap: 9 }}>
+        {links.map((link) => (
+          <FooterAnchor key={`${link.href}-${link.label}`} link={link} />
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+function FooterInlineLinks({ links, centered }: { links: FooterLink[]; centered?: boolean }) {
+  return (
+    <nav
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: centered ? 'center' : 'flex-start',
+        gap: 'clamp(14px, 2.5vw, 26px)',
+      }}
+    >
+      {links.map((link) => (
+        <FooterAnchor key={`${link.href}-${link.label}`} link={link} />
+      ))}
+    </nav>
+  );
+}
+
+function FooterPolicyPills({ heading, links }: { heading: string; links: FooterLink[] }) {
+  return (
+    <nav aria-label={heading} style={{ display: 'grid', gap: 10 }}>
+      <span
+        style={{
+          fontSize: 10.5,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: 'color-mix(in srgb, var(--sf-ink) 50%, transparent)',
+        }}
+      >
+        {heading}
+      </span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {links.map((link) => (
           <a
             key={`${link.href}-${link.label}`}
@@ -632,25 +889,62 @@ function ChromeStorefrontFooter({
             rel="noopener"
             className="no-underline transition-opacity hover:opacity-100"
             style={{
-              color: 'inherit',
-              opacity: 0.88,
-              padding:
-                variant === 'footer-policy-grid' || variant === 'footer-support'
-                  ? '7px 10px'
-                  : undefined,
-              border:
-                variant === 'footer-policy-grid' || variant === 'footer-support'
-                  ? '1px solid color-mix(in srgb, var(--sf-ink) 10%, transparent)'
-                  : undefined,
-              borderRadius:
-                variant === 'footer-policy-grid' || variant === 'footer-support' ? 999 : undefined,
+              color: 'var(--sf-ink)',
+              opacity: 0.85,
+              padding: '7px 12px',
+              borderRadius: 999,
+              border: '1px solid color-mix(in srgb, var(--sf-ink) 12%, transparent)',
+              fontSize: 11.5,
             }}
           >
             {link.label}
           </a>
         ))}
-      </nav>
-    </footer>
+      </div>
+    </nav>
+  );
+}
+
+function FooterAnchor({ link }: { link: FooterLink }) {
+  return (
+    <a
+      href={link.href}
+      target={link.external ? '_blank' : undefined}
+      rel={link.external ? 'noreferrer' : 'noopener'}
+      className="no-underline transition-opacity hover:opacity-100"
+      style={{ color: 'inherit', opacity: 0.85, fontSize: 12.5 }}
+    >
+      {link.label}
+    </a>
+  );
+}
+
+function FooterBottomBar({
+  business,
+  year,
+  note,
+}: {
+  business: string;
+  year: number;
+  note: string;
+}) {
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between"
+      style={{
+        gap: 12,
+        paddingTop: 18,
+        borderTop: '1px solid color-mix(in srgb, var(--sf-ink) 10%, transparent)',
+        fontSize: 11,
+        letterSpacing: '0.06em',
+        color: 'color-mix(in srgb, var(--sf-ink) 50%, transparent)',
+      }}
+    >
+      <span>
+        © {year} {business.toUpperCase()}
+      </span>
+      <span>{note}</span>
+    </div>
   );
 }
 
@@ -685,6 +979,10 @@ function cartDrawerLabels(
         continueBrowsing: '\u0645\u062a\u0627\u0628\u0639\u0629 \u0627\u0644\u062a\u0635\u0641\u062d',
         decreaseQuantity: '\u062a\u0642\u0644\u064a\u0644 \u0627\u0644\u0643\u0645\u064a\u0629',
         increaseQuantity: '\u0632\u064a\u0627\u062f\u0629 \u0627\u0644\u0643\u0645\u064a\u0629',
+        total: '\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a',
+        shippingNote: '\u064a\u064f\u062d\u062a\u0633\u0628 \u0627\u0644\u0634\u062d\u0646 \u0639\u0646\u062f \u0627\u0644\u062f\u0641\u0639',
+        secureNote: '\u062f\u0641\u0639 \u0622\u0645\u0646',
+        items: '\u0645\u0646\u062a\u062c\u0627\u062a',
       }
     : {
         title: 'Your cart',
@@ -700,6 +998,10 @@ function cartDrawerLabels(
         continueBrowsing: 'Continue browsing',
         decreaseQuantity: 'Decrease quantity',
         increaseQuantity: 'Increase quantity',
+        total: 'Total',
+        shippingNote: 'Shipping calculated at checkout',
+        secureNote: 'Secure checkout',
+        items: 'items',
       };
   return {
     ...defaults,

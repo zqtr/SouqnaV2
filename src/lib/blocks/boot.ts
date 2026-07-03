@@ -296,22 +296,6 @@ function withPremiumProductSuite(template: TemplateId, s: Storefront, blocks: Bl
         },
         {
           id: randomUUID(),
-          type: 'shadcnOrderSummary',
-          props: {
-            variant: 'order-summary2',
-            kicker: 'Checkout confidence',
-            title: 'Payment and delivery clarity',
-            subtitle: 'A checkout-inspired section that makes totals, shipping, and trust cues feel deliberate.',
-            note: 'Use this as a page section or adapt the same style inside checkout settings.',
-            cta: { label: 'Continue checkout', href: '/checkout' },
-            productSource: { ...source, limit: 3 },
-            density: 'balanced',
-            tone: 'gold',
-          },
-          style: { paddingY: 'md' },
-        },
-        {
-          id: randomUUID(),
           type: 'shadcnQuickView',
           props: {
             variant: suite.quickView,

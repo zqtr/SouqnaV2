@@ -52,7 +52,10 @@ describe('Souqna plan catalog', () => {
     expect(getAnalyticsAccessLevel('pro')).toBe('advanced');
     expect(planUnlocksIntegrations('starter')).toBe(true);
     expect(planUnlocksDiscounts('starter')).toBe(true);
-    expect(planUnlocksSouqy('starter')).toBe(false);
+    // Souqy is now its own subscription (Free tier available to all);
+    // storefront-plan access is no longer a gate.
+    expect(planUnlocksSouqy('free')).toBe(true);
+    expect(planUnlocksSouqy('starter')).toBe(true);
     expect(planUnlocksSouqy('pro')).toBe(true);
     expect(planUnlocksOnlinePayments('starter')).toBe(false);
     expect(planUnlocksOnlinePayments('pro')).toBe(true);

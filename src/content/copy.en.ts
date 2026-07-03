@@ -422,7 +422,6 @@ export const copyEn = {
           'WhatsApp integration',
           'Fawran + cash on delivery checkout',
           'Discount codes + SEO settings',
-          '100 AI credits per month',
           'Email support',
         ],
       },
@@ -435,10 +434,8 @@ export const copyEn = {
         featuresIntro: 'Everything in Pro, plus:',
         features: [
           '8 storefronts',
-          'Souqy AI operator',
           'AI branding assets',
           'Marketing apps',
-          'EN + AR AI generation',
           'Payment providers: SADAD, SkipCash, Tap Payments',
           'Meta/TikTok integrations',
           'Team members + automation flows',

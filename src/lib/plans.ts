@@ -238,11 +238,15 @@ export function planAtLeast(plan: Plan, min: Plan): boolean {
 }
 
 /**
- * Souqy must remain a real Pro+ gate even while broader plan gates are
- * relaxed for launch/testing. Internal `pro` is the public "Pro +" tier.
+ * Souqy is now its own subscription product (see src/lib/souqy/plans.ts),
+ * available to everyone via the Free tier (5 generations/month) and
+ * metered by `reserveSouqyGeneration`. Access is therefore no longer
+ * gated by the storefront plan — this stays `true` so the Souqy UI shows
+ * for all users. Volume, not access, is what the Souqy tier controls.
  */
-export function planUnlocksSouqy(plan: Plan): boolean {
-  return PLAN_RANK[plan] >= PLAN_RANK.pro;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function planUnlocksSouqy(_plan: Plan): boolean {
+  return true;
 }
 
 export function planUnlocksOnlinePayments(plan: Plan): boolean {

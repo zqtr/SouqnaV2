@@ -64,7 +64,6 @@ const planCopy = {
           'Analytics export ready',
           'WhatsApp, discounts, and SEO',
           'Fawran + cash on delivery',
-          '100 AI credits/month',
         ],
       },
       {
@@ -77,9 +76,7 @@ const planCopy = {
         href: '/account/settings/plan?plan=pro_plus',
         features: [
           '8 storefronts',
-          'Souqy AI operator',
           'AI branding assets',
-          'EN + AR AI generation',
           'Marketing apps',
           'Payment providers: SADAD, SkipCash, Tap Payments',
           'Meta/TikTok integrations',
@@ -147,14 +144,13 @@ const planCopy = {
         name: 'Pro+',
         price: '145 ر.ق',
         label: '/ شهر',
-        description: 'أضف سوقي، أصول الذكاء، نصوص المنتجات، وتطبيقات النمو.',
+        description: 'أضف أصول الذكاء، نصوص المنتجات، وتطبيقات النمو.',
         cta: 'اختر Pro +',
         billingPlan: 'pro',
         href: '/account/settings/plan?plan=pro_plus',
         features: [
           '8 واجهات متاجر',
           'أصول علامة بالذكاء',
-          'مشغل سوقي الذكي',
           'نصوص منتجات عربي + إنجليزي',
           'تطبيقات التسويق والتحليلات',
         ],

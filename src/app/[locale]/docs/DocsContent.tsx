@@ -113,9 +113,9 @@ const PLANS_TABLE = [
       name: 'Pro',
       price: '49 QAR / mo',
       stores: '2 storefronts',
-      tpl: 'Unlimited products, 5 templates, 100 AI credits, Fawran + COD',
+      tpl: 'Unlimited products, 5 templates, Fawran + COD',
     },
-    ar: { name: 'برو', price: '١٩٠ ر.ق / شهر', stores: '٣ متاجر', tpl: '٦ قوالب كلاسيكية' },
+    ar: { name: 'برو', price: '٤٩ ر.ق / شهر', stores: '٣ متاجر', tpl: '٦ قوالب كلاسيكية' },
     en_tag: 'A small portfolio of brands.',
     ar_tag: 'محفظة صغيرة من العلامات.',
   },
@@ -125,13 +125,13 @@ const PLANS_TABLE = [
       name: 'Pro+',
       price: '145 QAR / mo',
       stores: '8 storefronts',
-      tpl: 'Souqy AI, marketing apps, team, automation, advanced analytics, provider payments (SADAD, SkipCash, Tap Payments)',
+      tpl: 'Marketing apps, team, automation, advanced analytics, provider payments (SADAD, SkipCash, Tap Payments)',
     },
     ar: {
       name: 'برو +',
-      price: '٣٥٠ ر.ق / شهر',
+      price: '١٤٥ ر.ق / شهر',
       stores: '١٠ متاجر',
-      tpl: '٨ قوالب + أنماط مميزة + بلوكات متحركة + سوقي AI',
+      tpl: '٨ قوالب + أنماط مميزة + بلوكات متحركة',
     },
     en_tag: 'Founders going pro.',
     ar_tag: 'للمؤسسين اللي يبون يطلعون احترافي.',
@@ -146,7 +146,7 @@ const PLANS_TABLE = [
     },
     ar: {
       name: 'ماكس +',
-      price: '٧٠٠ ر.ق / شهر',
+      price: '٢٣٥ ر.ق / شهر',
       stores: 'متاجر غير محدودة',
       tpl: 'كل القوالب الـ١٠ + كل الأنماط المميزة + دعم بالقفازات البيضاء',
     },
@@ -711,7 +711,7 @@ const SECTIONS: Section[] = [
           </p>
           <ul>
             <li>
-              Souqy is gated to <strong>Pro +</strong> and above.
+              Souqy is its own plan — free includes 5 generations a month; paid plans add more.
             </li>
             <li>It drafts pages, not entire stores or product catalogs.</li>
             <li>Output may need editorial polish — always proofread, especially Arabic.</li>
@@ -755,7 +755,7 @@ const SECTIONS: Section[] = [
           </p>
           <ul>
             <li>
-              سوقي متاح بدءاً من باقة <strong>برو +</strong> وفوق.
+              سوقي خطة مستقلة — المجاني يشمل ٥ توليدات شهرياً، والخطط المدفوعة تضيف المزيد.
             </li>
             <li>يكتب صفحات، مو متاجر كاملة ولا كتالوجات منتجات.</li>
             <li>المخرجات تحتاج تنقيح تحريري دائماً — راجع النص، خاصة العربي.</li>
@@ -963,9 +963,10 @@ const SECTIONS: Section[] = [
             </table>
           </div>
           <p className="mt-4 text-sm text-[color:var(--ink-muted)]">
-            Souqy AI generation is gated to <strong>Pro +</strong> and above. Premium block variants
-            and animated text/image blocks unlock at <strong>Pro +</strong>. The bleeding-edge
-            templates (Noctis, Bazaar) ship with <strong>Max +</strong>.
+            Souqy is its own plan — free includes 5 generations a month, with the Souqy and Team
+            plans adding more. Premium block variants and animated text/image blocks unlock at{' '}
+            <strong>Pro +</strong>. The bleeding-edge templates (Noctis, Bazaar) ship with{' '}
+            <strong>Max +</strong>.
           </p>
         </>
       ),
@@ -1003,9 +1004,9 @@ const SECTIONS: Section[] = [
             </table>
           </div>
           <p className="mt-4 text-sm text-[color:var(--ink-muted)]">
-            توليد سوقي بالذكاء الاصطناعي يبدأ من باقة <strong>برو +</strong> وفوق. الأنماط المميّزة
-            وبلوكات النص والصورة المتحركة تفتح من <strong>برو +</strong>. القوالب الجريئة (Noctis،
-            Bazaar) تجي مع <strong>ماكس +</strong>.
+            سوقي خطة مستقلة — المجاني يشمل ٥ توليدات شهرياً، وخطتا سوقي وفريق تضيفان المزيد. الأنماط
+            المميّزة وبلوكات النص والصورة المتحركة تفتح من <strong>برو +</strong>. القوالب الجريئة
+            (Noctis، Bazaar) تجي مع <strong>ماكس +</strong>.
           </p>
         </>
       ),

@@ -626,7 +626,7 @@ function PaymentInstructions({
               <Dd>{notes}</Dd>
             </>
           ) : null}
-          <Dt>{isAr ? 'Ø§Ù„Ù…Ø±Ø¬Ø¹' : 'Reference'}</Dt>
+          <Dt>{isAr ? 'المرجع' : 'Reference'}</Dt>
           <Dd mono>{shortRef}</Dd>
         </dl>
       </Surface>

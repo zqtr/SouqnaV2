@@ -36,13 +36,12 @@ const plans = [
   {
     name: 'Pro+',
     price: '145',
-    description: 'Grow with Souqy, automation, and marketing integrations.',
+    description: 'Grow with automation and marketing integrations.',
     cta: 'Choose Pro+',
     highlighted: true,
     features: [
       'Everything in Pro',
       '8 storefronts',
-      'Souqy AI operator',
       'Meta/TikTok integrations',
       'Advanced analytics',
       'Team automation',

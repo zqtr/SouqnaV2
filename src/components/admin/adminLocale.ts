@@ -146,6 +146,8 @@ export const ADMIN_NAV_LABELS_AR: Record<string, string> = {
   Payments: 'المدفوعات',
   'Payment providers': 'مزودو الدفع',
   Plan: 'الخطة',
+  'Souqy plan': 'خطة سوقي',
+  Wallet: 'المحفظة',
   Policies: 'السياسات',
   'Store policies': 'سياسات المتجر',
   Products: 'المنتجات',
@@ -250,6 +252,13 @@ export const ADMIN_STATIC_AR: Record<string, string> = {
 
 export const ADMIN_PHRASES_AR: Record<string, string> = {
   ...ADMIN_STATIC_AR,
+  'Platform · Wallet': 'المنصة · المحفظة',
+  'Platform · Souqy': 'المنصة · سوقي',
+  'Souqy plan': 'خطة سوقي',
+  'Choose how much you build. Free includes 5 generations a month; paid plans add more.':
+    'اختر حجم ما تبنيه. المجاني يشمل ٥ توليدات شهرياً، والخطط المدفوعة تضيف المزيد.',
+  'Top up once with SkipCash and spend instantly on small purchases — no checkout each time.':
+    'اشحن رصيدك مرة واحدة عبر SkipCash وأنفق فوراً على المشتريات الصغيرة — بدون خطوات دفع في كل مرة.',
   'Workspace': 'مساحة العمل',
   'Create your first storefront': 'أنشئ متجرك الأول',
   'Your account is ready. Start with the onboarding flow and this dashboard will fill with live orders, products, customers, and activity.':

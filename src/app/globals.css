@@ -1601,8 +1601,20 @@ body.souqna-admin-shell [data-slot='dialog-overlay'] {
   z-index: 80;
 }
 
+/* The overlay is lifted above the sticky dock (z-45) — the content must
+   sit above the overlay, or the transparent overlay swallows every
+   click and the dialog is visible but untouchable. */
+body.souqna-admin-shell [data-slot='dialog-content'] {
+  z-index: 81;
+}
+
 body.souqna-admin-shell [data-slot='drawer-overlay'] {
   z-index: 75;
+}
+
+/* Same as dialog-content: keep the panel above its lifted overlay. */
+body.souqna-admin-shell [data-slot='drawer-content'] {
+  z-index: 76;
 }
 
 .souqna-admin-mobile-panel {

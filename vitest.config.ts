@@ -2,6 +2,11 @@ import { defineConfig } from 'vitest/config';
 import path from 'node:path';
 
 export default defineConfig({
+  // tsconfig sets jsx: preserve for Next; vitest needs the transform
+  // so component render smoke tests (.tsx imports) can run.
+  oxc: {
+    jsx: { runtime: 'automatic' },
+  },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],

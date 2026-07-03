@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { gateAtelierPro } from '@/lib/billing';
-import { getSouqyAuditForStorefront, getSouqyMonthlyCount } from '@/lib/souqy/db';
+import { getSouqyAuditForStorefront } from '@/lib/souqy/db';
+import { getSouqyAllowance } from '@/lib/souqy/credits';
 import {
   mobileError,
   mobileJson,
@@ -20,8 +21,6 @@ const QuerySchema = z.object({
   store: z.string().trim().min(1),
 });
 
-const MONTHLY_GENERATION_CAP = Number.parseInt(process.env.SOUQY_MONTHLY_CAP ?? '50', 10);
-
 export async function GET(req: Request): Promise<Response> {
   const parsed = QuerySchema.safeParse({ store: searchParam(req, 'store') });
   if (!parsed.success) {
@@ -31,17 +30,15 @@ export async function GET(req: Request): Promise<Response> {
   const gate = await requireMobileStoreAccess(parsed.data.store, 'builder.edit');
   if (!gate.ok) return gate.response;
 
+  // Souqy is available to all tiers now (Free = 5/month); only auth is
+  // required. Volume is reported via the tier allowance below.
   const planGate = await gateAtelierPro(gate.user.userId);
   if (!planGate.ok) {
-    return mobileError(
-      planGate.reason === 'unauthenticated' ? 401 : 402,
-      'souqy_requires_pro_plus',
-      'Souqy is available on Pro + and above.',
-    );
+    return mobileError(401, 'unauthenticated', 'Sign in to use Souqy.');
   }
 
-  const [monthlyUsed, audit] = await Promise.all([
-    getSouqyMonthlyCount(gate.user.userId),
+  const [allowance, audit] = await Promise.all([
+    getSouqyAllowance(gate.user.userId),
     getSouqyAuditForStorefront(gate.access.storefront.slug, 8),
   ]);
   const latest = audit[0] ?? null;
@@ -53,10 +50,11 @@ export async function GET(req: Request): Promise<Response> {
       locale: gate.access.storefront.locale,
     },
     access: {
-      allowed: true,
-      reason: 'ok',
-      monthlyUsed,
-      monthlyLimit: MONTHLY_GENERATION_CAP,
+      allowed: allowance.remaining > 0,
+      reason: allowance.remaining > 0 ? 'ok' : 'quota_exhausted',
+      souqyTier: allowance.tier,
+      monthlyUsed: allowance.usedThisMonth,
+      monthlyLimit: allowance.cap,
     },
     published: {
       revision: gate.access.storefront.souqyRevision,
