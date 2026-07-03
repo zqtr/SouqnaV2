@@ -14,14 +14,7 @@ import type { CSSProperties, ReactNode } from 'react';
  * shared across every route group, not feature-specific.
  */
 
-type Variant =
-  | 'builder'
-  | 'admin'
-  | 'intake'
-  | 'storefront'
-  | 'auth'
-  | 'marketing'
-  | 'fallback';
+type Variant = 'builder' | 'admin' | 'intake' | 'storefront' | 'auth' | 'marketing' | 'fallback';
 
 export function RouteSkeleton({ pathname }: { pathname: string }) {
   const variant = pickVariant(pathname);
@@ -104,11 +97,7 @@ function Stack({
   gap?: number;
   style?: CSSProperties;
 }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap, ...style }}>
-      {children}
-    </div>
-  );
+  return <div style={{ display: 'flex', flexDirection: 'column', gap, ...style }}>{children}</div>;
 }
 
 function Row({
@@ -120,13 +109,7 @@ function Row({
   gap?: number;
   style?: CSSProperties;
 }) {
-  return (
-    <div
-      style={{ display: 'flex', alignItems: 'center', gap, ...style }}
-    >
-      {children}
-    </div>
-  );
+  return <div style={{ display: 'flex', alignItems: 'center', gap, ...style }}>{children}</div>;
 }
 
 /* ─────────────────────── variants ─────────────────────── */
@@ -147,12 +130,7 @@ function AdminSkeleton() {
       }}
     >
       <div className="souqna-dash-loader-shell" aria-hidden="true">
-        <aside
-          className="souqna-dash-loader-rail"
-          style={{
-            borderInlineEnd: '1px solid var(--surface-rule)',
-          }}
-        >
+        <aside className="souqna-dash-loader-rail">
           <div className="souqna-dash-loader-brand">
             <span className="souqna-dash-loader-logo" />
             <span className="souqna-dash-loader-wordmark" />
