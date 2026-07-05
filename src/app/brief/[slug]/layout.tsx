@@ -3,10 +3,7 @@ import '@/app/globals.css';
 import { fontVariables } from '@/lib/fonts';
 import { direction } from '@/i18n/locales';
 import { getStorefront } from '@/lib/brief';
-import {
-  getServerTheme,
-  ThemeInitScript,
-} from '@/components/theme/ServerThemeScript';
+import { ThemeInitScript } from '@/components/theme/ServerThemeScript';
 import type { Theme } from '@/lib/theme';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { NavigationLoader } from '@/components/system/NavigationLoader';
@@ -37,7 +34,14 @@ export default async function BriefLayout({ children, params }: Props) {
     // Fall back to en if DB is unreachable; the page itself will show 404 / error.
   }
 
-  const theme = forcedTheme ?? (await getServerTheme());
+  // Storefronts are a fixed, merchant-branded experience and must NOT track
+  // the shopper's OS/cookie theme. If they did, a dark-mode visitor's first
+  // load would flip <html data-theme="dark"> *after* SSR — activating the app's
+  // dark layer (`dark:` utilities + dark ink) while the palette's --sf-* ground
+  // stays the SSR-baked light cream, i.e. light text on a light background.
+  // Lock to the merchant's explicit choice, defaulting to light. Dark templates
+  // opt in via themeOverrides.themeBehaviour = 'dark'.
+  const theme: Theme = forcedTheme ?? 'light';
 
   return (
     <html
@@ -49,7 +53,7 @@ export default async function BriefLayout({ children, params }: Props) {
       suppressHydrationWarning
     >
       <head>
-        <ThemeInitScript forcedTheme={forcedTheme} />
+        <ThemeInitScript forcedTheme={theme} />
       </head>
       <body
         className="min-h-dvh antialiased"
