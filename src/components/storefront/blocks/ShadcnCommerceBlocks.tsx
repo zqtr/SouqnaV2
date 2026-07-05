@@ -1,5 +1,4 @@
 ﻿'use client';
-/* eslint-disable @next/next/no-img-element */
 
 import Link from 'next/link';
 import {
@@ -25,6 +24,7 @@ import type { Storefront } from '@/lib/brief';
 import { resolveCommerceProductSource } from '@/lib/blocks/commerce';
 import { normalizeWaMePhone } from '@/lib/whatsappLinks';
 import { isVideoMediaUrl, mediaKindFromUrl } from '@/lib/media';
+import { StoreImage } from '@/components/storefront/StoreImage';
 import type {
   ChromeLegalPolicy,
   ChromeNavPage,
@@ -265,7 +265,7 @@ export function ShadcnCategoriesBlock({ block, ctx }: BlockRenderProps<ShadcnCat
         {categories.length === 0 ? <EmptyPremium label={t.empty} /> : null}
         {categories.map((category) => (
           <Link key={category.id} href={category.href} style={categoryTileStyle}>
-            {category.imageUrl ? <img src={category.imageUrl} alt="" style={categoryImageStyle} /> : null}
+            {category.imageUrl ? <StoreImage src={category.imageUrl} alt="" style={categoryImageStyle} sizes="(max-width: 768px) 50vw, 33vw" /> : null}
             <span style={categoryOverlayStyle} />
             <span style={categoryTextStyle}>
               <strong>{category.label}</strong>
@@ -892,7 +892,7 @@ function PremiumNavBrand({
       }}
     >
       {storefront.logoUrl ? (
-        <img src={storefront.logoUrl} alt={storefront.businessName} style={navLogoStyle} />
+        <StoreImage src={storefront.logoUrl} alt={storefront.businessName} style={navLogoStyle} sizes="200px" priority />
       ) : (
         <span style={monogramStyle}>{storefront.businessName.slice(0, 1)}</span>
       )}
@@ -1402,7 +1402,7 @@ function ProductMedia({
   }
 
   if (product.mediaUrl) {
-    return <img src={product.mediaUrl} alt={alt} style={style} />;
+    return <StoreImage src={product.mediaUrl} alt={alt} style={style} sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 320px" />;
   }
 
   return (

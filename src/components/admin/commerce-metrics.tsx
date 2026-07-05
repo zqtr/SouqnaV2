@@ -108,7 +108,7 @@ export function CommerceMetricCard({
             >
               <Icon className="size-5" aria-hidden />
             </span>
-            <CardTitle className="min-w-0 font-mono text-xs font-semibold uppercase leading-4 tracking-[0.18em] text-muted-foreground">
+            <CardTitle className="min-w-0 text-xs font-semibold leading-4 text-muted-foreground">
               {label}
             </CardTitle>
           </div>

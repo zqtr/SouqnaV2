@@ -11,6 +11,22 @@ const nextConfig = {
   experimental: {
     typedRoutes: false,
   },
+  // Image optimization: founders upload originals up to 50 MB to Vercel
+  // Blob and they were served raw to shoppers. Routing them through the
+  // Next optimizer (`/_next/image`) resizes to the display size, negotiates
+  // AVIF/WebP by Accept header, and CDN-caches the result. Only the hosts
+  // below are optimizable; anything else falls back to the raw URL in
+  // StoreImage so external/pasted images still render.
+  images: {
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days
+    remotePatterns: [
+      { protocol: 'https', hostname: '*.public.blob.vercel-storage.com' },
+      { protocol: 'https', hostname: '*.blob.vercel-storage.com' },
+      { protocol: 'https', hostname: '**.cloudfront.net' },
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+    ],
+  },
   async headers() {
     return [
       {

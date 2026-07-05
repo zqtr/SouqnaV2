@@ -26,6 +26,9 @@ type Props = {
   showPoints?: boolean;
   boil?: boolean;
   highlightIndex?: number | null;
+  onHover?: (
+    info: { index: number; x: number; align: 'start' | 'middle' | 'end' } | null,
+  ) => void;
 };
 
 type BarChartProps = {
@@ -70,6 +73,7 @@ export function DitheredPixelGraph({
   showPoints = false,
   boil = false,
   highlightIndex = null,
+  onHover,
 }: Props) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const wrapRef = React.useRef<HTMLDivElement>(null);
@@ -133,7 +137,7 @@ export function DitheredPixelGraph({
       }
 
       if (!reducedMotion && state.reveal < 1) {
-        state.reveal = Math.min(1, state.reveal + 0.018);
+        state.reveal = Math.min(1, state.reveal + 0.05);
         dirty = true;
       }
 
@@ -166,6 +170,37 @@ export function DitheredPixelGraph({
     return () => window.cancelAnimationFrame(frameRef.current ?? 0);
   }, [ariaLabel, boil, dataKey, density, height, highlightIndex, padding, reducedMotion, series, showGrid, showPoints, size.height, size.width, stacked, width]);
 
+  const hoverIndexRef = React.useRef<number | null>(null);
+  const handleHoverMove = React.useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!onHover) return;
+      const el = wrapRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const pad = Math.max(14, padding);
+      const plotLeft = pad;
+      const plotWidth = Math.max(1, rect.width - pad * 2);
+      const counts = series.map((item) => item.data.length).filter((count) => count > 0);
+      const points = counts.length ? Math.max(...counts) : 0;
+      if (points < 2) return;
+      const localX = Math.min(plotLeft + plotWidth, Math.max(plotLeft, event.clientX - rect.left));
+      const index = Math.round(((localX - plotLeft) / plotWidth) * (points - 1));
+      // Only re-render the parent when the highlighted day actually changes.
+      if (index === hoverIndexRef.current) return;
+      hoverIndexRef.current = index;
+      const snappedX = plotLeft + (plotWidth * index) / (points - 1);
+      const ratio = index / (points - 1);
+      const align = ratio > 0.66 ? 'end' : ratio < 0.34 ? 'start' : 'middle';
+      onHover({ index, x: snappedX, align });
+    },
+    [onHover, padding, series],
+  );
+  const handleHoverLeave = React.useCallback(() => {
+    hoverIndexRef.current = null;
+    onHover?.(null);
+  }, [onHover]);
+
   return (
     <div
       ref={wrapRef}
@@ -173,6 +208,8 @@ export function DitheredPixelGraph({
       aria-label={ariaLabel}
       className={cn('souqna-bayer-chart relative h-full min-h-0 w-full overflow-hidden', className)}
       style={{ minHeight: height }}
+      onPointerMove={handleHoverMove}
+      onPointerLeave={handleHoverLeave}
     >
       <canvas ref={canvasRef} className="block h-full w-full" />
     </div>
@@ -221,7 +258,7 @@ export function DitheredBayerBarChart({
         return Math.abs(eased - value) < 0.002 ? value : eased;
       });
       if (!reducedMotion && revealRef.current < 1) {
-        revealRef.current = Math.min(1, revealRef.current + 0.018);
+        revealRef.current = Math.min(1, revealRef.current + 0.05);
         dirty = true;
       }
       drawBarChart({

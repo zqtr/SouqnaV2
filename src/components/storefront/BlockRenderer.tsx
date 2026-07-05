@@ -14,6 +14,7 @@ import { MenuBlock } from './blocks/MenuBlock';
 import { CalendarBlock } from './blocks/CalendarBlock';
 import { ContactCardBlock } from './blocks/ContactCardBlock';
 import { InquireCtaBlock } from './blocks/InquireCtaBlock';
+import { ActivityPanelBlock } from './blocks/ActivityPanelBlock';
 import { SpacerBlock } from './blocks/SpacerBlock';
 import { DividerBlock } from './blocks/DividerBlock';
 import { DropBlock as RawDropBlock } from './blocks/DropBlock';
@@ -270,6 +271,8 @@ function renderBlock(block: Block, ctx: BlockContext): React.ReactNode {
       return <ContactCardBlock block={block as never} ctx={ctx} />;
     case 'inquireCta':
       return <InquireCtaBlock block={block as never} ctx={ctx} />;
+    case 'activityPanel':
+      return <ActivityPanelBlock block={block as never} ctx={ctx} />;
     case 'spacer':
       return <SpacerBlock block={block as never} ctx={ctx} />;
     case 'divider':

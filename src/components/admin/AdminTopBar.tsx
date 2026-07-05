@@ -293,20 +293,105 @@ function isDeploymentCommentUpdate(update: AccountUpdateView): boolean {
 }
 
 function SouqyFloatingTrigger({ hidden, onOpen }: { hidden: boolean; onOpen: () => void }) {
+  const dockRef = useRef<HTMLDivElement>(null);
+  const drag = useRef({ active: false, startX: 0, startY: 0, x: 0, y: 0, moved: false });
+  const [dismissed, setDismissed] = useState(false);
+
+  const endDrag = useCallback((pointerId: number | undefined, releaseX: number) => {
+    const dock = dockRef.current;
+    if (!dock || !drag.current.active) return;
+    drag.current.active = false;
+    if (pointerId != null) {
+      try {
+        dock.releasePointerCapture(pointerId);
+      } catch {
+        /* pointer already released */
+      }
+    }
+    dock.style.cursor = '';
+    dock.style.transition = 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease';
+    // Hide when flung to the far right: a rightward drag that ends near the right edge.
+    const nearRightEdge = releaseX >= window.innerWidth - 40;
+    if (drag.current.x > 12 && (nearRightEdge || drag.current.x > 90)) {
+      // Slide off the right edge, then remove it.
+      dock.style.transform = `translate(${window.innerWidth}px, ${drag.current.y}px)`;
+      dock.style.opacity = '0';
+      window.setTimeout(() => setDismissed(true), 260);
+    } else {
+      // Snap back to the corner.
+      dock.style.transform = 'translate(0px, 0px)';
+      dock.style.opacity = '1';
+      drag.current.x = 0;
+      drag.current.y = 0;
+    }
+  }, []);
+
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const dock = dockRef.current;
+    if (!dock) return;
+    drag.current = {
+      active: true,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: 0,
+      y: 0,
+      moved: false,
+    };
+    try {
+      dock.setPointerCapture(event.pointerId);
+    } catch {
+      /* capture unsupported */
+    }
+    dock.style.transition = 'none';
+    dock.style.cursor = 'grabbing';
+  };
+
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current.active) return;
+    const dock = dockRef.current;
+    if (!dock) return;
+    const dx = event.clientX - drag.current.startX;
+    const dy = event.clientY - drag.current.startY;
+    drag.current.x = dx;
+    drag.current.y = dy;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.current.moved = true;
+    dock.style.transform = `translate(${dx}px, ${dy}px) scale(${drag.current.moved ? 1.04 : 1})`;
+    // Fade as the pointer nears the right edge (the fling-to-hide zone).
+    const edgeDist = window.innerWidth - event.clientX;
+    dock.style.opacity = dx > 8 && edgeDist < 90 ? String(Math.max(0.2, edgeDist / 90)) : '1';
+  };
+
+  const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) =>
+    endDrag(event.pointerId, event.clientX);
+
+  if (dismissed) return null;
+
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: souqyLauncherStyles }} />
-      <button
-        type="button"
-        onClick={onOpen}
-        aria-label="Open assistant chat"
-        title="Open assistant chat"
-        className={`souqy-launcher${hidden ? ' is-hidden' : ''}`}
+      <div
+        ref={dockRef}
+        className="souqy-launcher-dock"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
       >
-        <span className="souqy-launcher-handle" aria-hidden>
-          <SouqyLogo size={54} className="souqy-launcher-logo" />
-        </span>
-      </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (drag.current.moved) return;
+            onOpen();
+          }}
+          aria-label="Open assistant chat"
+          title="Drag to move. Fling right to hide. Click to open."
+          className={`souqy-launcher${hidden ? ' is-hidden' : ''}`}
+        >
+          <span className="souqy-launcher-handle" aria-hidden>
+            <SouqyLogo size={54} className="souqy-launcher-logo" />
+          </span>
+        </button>
+      </div>
     </>
   );
 }
@@ -523,11 +608,22 @@ const topBarPortalStyles = `
 `;
 
 const souqyLauncherStyles = `
-.souqy-launcher {
+.souqy-launcher-dock {
   position: fixed;
   right: 18px;
   bottom: calc(22px + env(safe-area-inset-bottom));
   z-index: 70;
+  touch-action: none;
+  cursor: grab;
+  will-change: transform;
+}
+
+.souqy-launcher-dock:active {
+  cursor: grabbing;
+}
+
+.souqy-launcher {
+  position: relative;
   display: grid;
   width: 64px;
   height: 64px;

@@ -314,6 +314,14 @@ const inquireCtaProps = z
   })
   .strict();
 
+const activityPanelProps = z
+  .object({
+    appId: z.enum(['booking', 'matbakh', 'tailoring']).optional(),
+    title: z.string().trim().max(120).optional(),
+    titleAr: z.string().trim().max(120).optional(),
+  })
+  .strict();
+
 const spacerProps = z
   .object({
     size: z.enum(['sm', 'md', 'lg', 'xl']).default('md'),
@@ -982,6 +990,7 @@ export const blockPropsByType = {
   calendar: calendarProps,
   contactCard: contactCardProps,
   inquireCta: inquireCtaProps,
+  activityPanel: activityPanelProps,
   spacer: spacerProps,
   divider: dividerProps,
   drop: dropProps,
@@ -1042,6 +1051,7 @@ export const blockSchema = z.discriminatedUnion('type', [
   z.object({ ...baseBlock, type: z.literal('calendar'), props: calendarProps }),
   z.object({ ...baseBlock, type: z.literal('contactCard'), props: contactCardProps }),
   z.object({ ...baseBlock, type: z.literal('inquireCta'), props: inquireCtaProps }),
+  z.object({ ...baseBlock, type: z.literal('activityPanel'), props: activityPanelProps }),
   z.object({ ...baseBlock, type: z.literal('spacer'), props: spacerProps }),
   z.object({ ...baseBlock, type: z.literal('divider'), props: dividerProps }),
   z.object({ ...baseBlock, type: z.literal('drop'), props: dropProps }),

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import type { BlockRenderProps } from './BlockContext';
 import type { TiltImageProps } from '@/lib/blocks/types';
+import { StoreImage } from '../StoreImage';
 
 /**
  * Single image rendered as a card that lifts and tilts on hover. The
@@ -122,10 +123,10 @@ function Tilt({
         }}
       >
         {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <StoreImage
             src={imageUrl}
             alt={alt ?? title ?? ''}
+            sizes="(max-width: 768px) 100vw, 600px"
             style={{
               width: '100%',
               height: '100%',

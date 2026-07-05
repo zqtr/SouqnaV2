@@ -1,4 +1,5 @@
 import type { BlockRenderProps } from './BlockContext';
+import { StoreImage } from '../StoreImage';
 import type { GalleryProps } from '@/lib/blocks/types';
 import { VariantFrame } from './VariantFrame';
 
@@ -77,10 +78,10 @@ export function GalleryBlock({ block, ctx }: BlockRenderProps<GalleryProps>) {
                         : undefined,
                   }}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <StoreImage
                     src={imageUrl}
                     alt={item.alt ?? ''}
+                    sizes="(max-width: 768px) 50vw, 33vw"
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                   />
                 </div>

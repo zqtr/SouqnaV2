@@ -1,4 +1,5 @@
 import type { AppDescriptor } from './types';
+import { ACTIVITY_PRICE_QAR } from './activities/types';
 
 /**
  * Single source of truth for the plugin Souqna lists in Souqna
@@ -25,6 +26,87 @@ export const APP_REGISTRY: AppDescriptor[] = [
       body:
         'Add live review components in Builder, collect visitor feedback in Arabic or English, and approve what appears on the public storefront.',
       ctaLabel: 'Enable Souqna Reviews',
+    },
+  },
+  {
+    id: 'booking',
+    name: 'Souqna Booking',
+    nameAr: 'حجوزات سوقنا',
+    vendor: 'by Souqna',
+    tagline: 'Take salon & appointment bookings on your storefront',
+    taglineAr: 'استقبل حجوزات المواعيد على متجرك',
+    description:
+      'For salons, barbers, spas, clinics and any by-appointment service. Buyers pick a service and a time slot from your storefront; each booking flows into checkout and lands on your dashboard.',
+    descriptionAr:
+      'لصالونات التجميل والحلاقة والعيادات وأي خدمة بموعد. يختار العميل الخدمة والوقت من متجرك، وتنتقل كل حجز إلى الدفع وتظهر في لوحتك.',
+    category: 'sales',
+    authKind: 'none',
+    priceQar: ACTIVITY_PRICE_QAR.booking,
+    activityKind: 'booking',
+    available: true,
+    customizable: true,
+    surfacesInBuilder: true,
+    glyph: '◷',
+    accentVar: '--color-gold-deep',
+    connectCopy: {
+      headline: 'Enable Souqna Booking',
+      body:
+        'Add the booking panel in Builder, set your services and hours, and take appointments straight into checkout — in Arabic or English.',
+      ctaLabel: 'Enable Booking',
+    },
+  },
+  {
+    id: 'matbakh',
+    name: 'Matbakh',
+    nameAr: 'مطبخ',
+    vendor: 'by Souqna',
+    tagline: 'Cafe & F&B orders with a live kitchen board',
+    taglineAr: 'طلبات المقاهي والمطاعم مع شاشة مطبخ مباشرة',
+    description:
+      'For cafes and F&B. Buyers order from your menu and you track every ticket through the kitchen — submitted, preparing, ready, served. Orders flow into checkout.',
+    descriptionAr:
+      'للمقاهي والمطاعم. يطلب العملاء من قائمتك وتتابع كل طلب في المطبخ — تم الإرسال، قيد التحضير، جاهز، تم التقديم. وتنتقل الطلبات إلى الدفع.',
+    category: 'sales',
+    authKind: 'none',
+    priceQar: ACTIVITY_PRICE_QAR.matbakh,
+    activityKind: 'fnb',
+    available: true,
+    customizable: true,
+    surfacesInBuilder: true,
+    glyph: '◍',
+    accentVar: '--color-gold-deep',
+    connectCopy: {
+      headline: 'Enable Matbakh',
+      body:
+        'Add the order panel in Builder, load your menu, and run every ticket through the kitchen board — bilingual, straight into checkout.',
+      ctaLabel: 'Enable Matbakh',
+    },
+  },
+  {
+    id: 'tailoring',
+    name: 'Souqna Tailoring',
+    nameAr: 'خياطة سوقنا',
+    vendor: 'by Souqna',
+    tagline: 'Capture body measurements saved to each buyer',
+    taglineAr: 'سجّل قياسات الجسم واحفظها لكل عميل',
+    description:
+      'For tailors and made-to-measure. Buyers submit height, weight and body measurements; save them to their name — in-shop only, or online so they carry over to the next visit.',
+    descriptionAr:
+      'للخياطين والتفصيل حسب المقاس. يُدخل العميل الطول والوزن وقياسات الجسم، فتُحفظ باسمه — داخل المتجر فقط أو أونلاين لتنتقل معه للزيارة القادمة.',
+    category: 'sales',
+    authKind: 'none',
+    priceQar: ACTIVITY_PRICE_QAR.tailoring,
+    activityKind: 'tailoring',
+    available: true,
+    customizable: true,
+    surfacesInBuilder: true,
+    glyph: '✂',
+    accentVar: '--color-gold-deep',
+    connectCopy: {
+      headline: 'Enable Souqna Tailoring',
+      body:
+        'Add the measurement panel in Builder, choose which measurements to collect, and save each buyer’s profile locally or online — in Arabic or English.',
+      ctaLabel: 'Enable Tailoring',
     },
   },
 ];

@@ -1,4 +1,5 @@
 import type { BlockRenderProps } from './BlockContext';
+import { StoreImage } from '../StoreImage';
 import type { MawidBlockProps } from '@/lib/blocks/types';
 import { COMPONENT_SHOWCASE_EVENT_ID } from '@/lib/blocks/componentShowcase';
 import { getInstalledApp } from '@/lib/apps/installed';
@@ -111,10 +112,10 @@ export async function MawidBlock({ block, ctx }: BlockRenderProps<MawidBlockProp
       }}
     >
       {product?.imageUrl && variant !== 'inline' && !isVideoMediaUrl(product.imageUrl) ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <StoreImage
           src={product.imageUrl}
           alt={product.title}
+          sizes="96px"
           style={{
             width: variant === 'banner' ? 74 : 96,
             height: variant === 'banner' ? 74 : 96,

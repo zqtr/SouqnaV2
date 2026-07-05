@@ -489,6 +489,8 @@ function componentProps(type: BlockType): Record<string, unknown> {
     case 'shadcnOfferModal':
     case 'shadcnFooter':
       return createShadcnShowcaseProps(type);
+    case 'activityPanel':
+      return { title: 'Book an appointment' };
     default: {
       const _exhaustive: never = type;
       return _exhaustive;

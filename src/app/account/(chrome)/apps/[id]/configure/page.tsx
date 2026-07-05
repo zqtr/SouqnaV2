@@ -47,6 +47,8 @@ import { getCategories } from '@/lib/categories';
 import { listKits } from '@/lib/apps/lookbook';
 import { getMawidSettings } from '@/lib/apps/mawid';
 import { getTaqimSettings } from '@/lib/apps/taqim';
+import { getActivitySettings, listSubmissions } from '@/lib/apps/activities/settings';
+import { ACTIVITY_KIND_BY_APP, isActivityAppId } from '@/lib/apps/activities/types';
 import {
   getReviewsSettings,
   listReviewsForAdmin,
@@ -79,6 +81,8 @@ import { MawidSettingsForm } from '@/components/admin/apps/MawidSettings';
 import { TaqimSettingsForm } from '@/components/admin/apps/TaqimSettings';
 import { WhatsAppBusinessSettingsForm } from '@/components/admin/apps/WhatsAppBusinessSettings';
 import { ReviewsSettingsForm } from '@/components/admin/apps/ReviewsSettings';
+import { ActivitySettingsForm } from '@/components/admin/apps/ActivitySettings';
+import { ActivityBoard } from '@/components/admin/apps/ActivityBoard';
 import { AppMark } from '@/components/admin/apps/AppMark';
 
 export default async function AppConfigurePage({
@@ -141,6 +145,8 @@ export default async function AppConfigurePage({
   const mawidSettings = desc.id === 'mawid' ? await getMawidSettings(slug) : null;
   const taqimSettings = desc.id === 'taqim' ? await getTaqimSettings(slug) : null;
   const reviewsSettings = desc.id === 'reviews' ? await getReviewsSettings(slug) : null;
+  const activitySettings = isActivityAppId(desc.id) ? await getActivitySettings(slug, desc.id) : null;
+  const activitySubmissions = isActivityAppId(desc.id) ? await listSubmissions(slug, desc.id) : null;
   const reviews = desc.id === 'reviews' ? await listReviewsForAdmin(slug) : null;
   const whatsappSettings =
     desc.id === 'whatsapp-business'
@@ -329,6 +335,21 @@ export default async function AppConfigurePage({
               reviews={reviews}
             />
           ) : null}
+          {activitySettings && isActivityAppId(desc.id) ? (
+            <ActivitySettingsForm
+              storefrontSlug={slug}
+              appId={desc.id}
+              kind={ACTIVITY_KIND_BY_APP[desc.id]}
+              initial={activitySettings}
+            />
+          ) : null}
+          {isActivityAppId(desc.id) ? (
+            <ActivityBoard
+              storefrontSlug={slug}
+              kind={ACTIVITY_KIND_BY_APP[desc.id]}
+              initial={activitySubmissions ?? []}
+            />
+          ) : null}
 
           {desc.id === 'currency-converter' ? (
             <CurrencyConverterPanel storefrontSlug={slug} />
@@ -377,6 +398,14 @@ export default async function AppConfigurePage({
             <Row label="Last refresh">
               {installed.lastSuccessAt.toLocaleString('en-GB')}
             </Row>
+          ) : null}
+          {desc.priceQar ? (
+            <>
+              <Row label="Plan add-on">+{desc.priceQar} QAR/mo</Row>
+              <p style={{ margin: '6px 0 0', fontSize: 11.5, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
+                Billed on your Souqna subscription while this app is installed.
+              </p>
+            </>
           ) : null}
           <div style={{ marginTop: 14 }}>
             <UninstallButton

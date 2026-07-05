@@ -3,10 +3,13 @@
 import * as React from 'react';
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   CreditCard,
   Gauge,
   Layers2,
   LineChart,
+  Minus,
   ReceiptText,
   ShoppingBag,
   ShoppingCart,
@@ -22,7 +25,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { DitheredPixelGraph } from '@/components/admin/charts/DitheredPixelGraph';
+import {
+  DitheredPixelGraph,
+  type DitheredPixelGraphSeries,
+} from '@/components/admin/charts/DitheredPixelGraph';
 import { Sparkline } from '@/components/admin/charts/Sparkline';
 import { cn } from '@/lib/utils';
 
@@ -67,6 +73,114 @@ const ICONS: Record<CommerceChartMetric['icon'], LucideIcon> = {
   cart: ShoppingCart,
 };
 
+/* ── Recording / replay support ─────────────────────────────────────────
+   Count-up numbers and a staggered entrance so the dashboard can be
+   screen-recorded cleanly. Everything replays when the surrounding subtree
+   is remounted via a key. Honors prefers-reduced-motion. */
+
+const RECORDING_STYLES = `
+  @media (prefers-reduced-motion: no-preference) {
+    .souqna-rec-fade {
+      animation: souqnaRecFade 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .souqna-rec-stagger > * {
+      animation: souqnaRecFade 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .souqna-rec-stagger > *:nth-child(1) { animation-delay: 140ms; }
+    .souqna-rec-stagger > *:nth-child(2) { animation-delay: 220ms; }
+    .souqna-rec-stagger > *:nth-child(3) { animation-delay: 300ms; }
+    .souqna-rec-stagger > *:nth-child(4) { animation-delay: 380ms; }
+    .souqna-rec-stagger > *:nth-child(5) { animation-delay: 460ms; }
+    .souqna-rec-stagger > *:nth-child(6) { animation-delay: 540ms; }
+    .souqna-rec-stagger > *:nth-child(7) { animation-delay: 620ms; }
+  }
+  @keyframes souqnaRecFade {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: none; }
+  }
+`;
+
+const AR_INDIC = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+const FA_INDIC = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+const NUM_TOKEN = /[\d٠-٩۰-۹][\d٠-٩۰-۹.,٫٬]*/;
+
+function toLatinDigits(input: string): string {
+  return input
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0));
+}
+
+function scriptOf(token: string): 'latin' | 'arab' | 'pers' {
+  if (/[٠-٩]/.test(token)) return 'arab';
+  if (/[۰-۹]/.test(token)) return 'pers';
+  return 'latin';
+}
+
+function toScript(latin: string, script: 'latin' | 'arab' | 'pers'): string {
+  if (script === 'arab') return latin.replace(/\d/g, (d) => AR_INDIC[Number(d)] ?? d);
+  if (script === 'pers') return latin.replace(/\d/g, (d) => FA_INDIC[Number(d)] ?? d);
+  return latin;
+}
+
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReduced(mq.matches);
+    const onChange = (event: MediaQueryListEvent) => setReduced(event.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return reduced;
+}
+
+/** Animates the first numeric token in `text` from 0 to its value while
+ *  preserving currency symbols, %, arrows, and digit script. Replays on
+ *  mount (remount the subtree to replay) and whenever `text` changes. */
+function CountUpText({ text, duration = 1200 }: { text: string; duration?: number }) {
+  const reduced = usePrefersReducedMotion();
+  const [display, setDisplay] = React.useState(text);
+
+  React.useEffect(() => {
+    const match = text.match(NUM_TOKEN);
+    if (!match) {
+      setDisplay(text);
+      return;
+    }
+    const token = match[0];
+    const script = scriptOf(token);
+    const normalized = toLatinDigits(token).replace(/[,٬]/g, '').replace(/٫/g, '.');
+    const target = Number(normalized);
+    if (!Number.isFinite(target) || reduced) {
+      setDisplay(text);
+      return;
+    }
+    const decimals = normalized.includes('.') ? (normalized.split('.')[1]?.length ?? 0) : 0;
+    const fmt = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+
+    let raf = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const formatted = toScript(fmt.format(target * eased), script);
+      setDisplay(text.replace(token, formatted));
+      if (progress < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        setDisplay(text);
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [text, duration, reduced]);
+
+  return <>{display}</>;
+}
+
 export function CommerceMetricChartGroup({
   locale,
   currency,
@@ -81,6 +195,35 @@ export function CommerceMetricChartGroup({
 }: Props) {
   const [activeId, setActiveId] = React.useState(metrics[0]?.id ?? '');
   const [view, setView] = React.useState<'line' | 'dither'>('line');
+  const [replayKey, setReplayKey] = React.useState(0);
+  const [ditherHover, setDitherHover] = React.useState<{
+    index: number;
+    x: number;
+    align: 'start' | 'middle' | 'end';
+  } | null>(null);
+  React.useEffect(() => {
+    setDitherHover(null);
+  }, [activeId, view]);
+
+  // Recording shortcut: Cmd/Ctrl + V replays the entrance animation (no visible button).
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'v') return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      setReplayKey((key) => key + 1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const activeMetric = metrics.find((metric) => metric.id === activeId) ?? metrics[0];
   const isRtl = locale === 'ar';
   const gradientId = React.useId().replace(/:/g, '');
@@ -94,6 +237,26 @@ export function CommerceMetricChartGroup({
   const chartData = React.useMemo(
     () => buildChartData(activeMetric?.series ?? [], activeMetric?.previousSeries ?? []),
     [activeMetric?.previousSeries, activeMetric?.series],
+  );
+
+  // Stable identity so hover re-renders never restart the canvas animation.
+  const ditherSeries = React.useMemo<DitheredPixelGraphSeries[]>(
+    () => [
+      {
+        data: activeMetric?.previousSeries ?? [],
+        color: 'var(--metric-chart-faint)',
+        fill: true,
+        dashed: true,
+        pattern: 'hatch',
+      },
+      {
+        data: activeMetric?.series ?? [],
+        color: 'var(--metric-accent)',
+        fill: true,
+        pattern: 'dots',
+      },
+    ],
+    [activeMetric?.previousSeries, activeMetric?.series, previousLabel, currentLabel],
   );
 
   if (!activeMetric) return null;
@@ -124,12 +287,13 @@ export function CommerceMetricChartGroup({
           'linear-gradient(135deg, color-mix(in srgb, var(--metric-chart-bg) 92%, var(--metric-accent) 8%), color-mix(in srgb, var(--metric-chart-panel) 90%, var(--metric-accent) 10%))',
       }}
     >
+      <style dangerouslySetInnerHTML={{ __html: RECORDING_STYLES }} />
       <div
         className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between"
         dir={isRtl ? 'rtl' : 'ltr'}
       >
         <div className="min-w-0">
-          <p className="font-mono text-[0.7rem] uppercase tracking-[0.24em] text-[color:color-mix(in_srgb,var(--metric-accent)_78%,var(--metric-chart-ink))]">
+          <p className="text-[0.8rem] font-medium capitalize text-[color:var(--metric-chart-muted)]">
             {selectLabel}
           </p>
           <h2 className="mt-2 text-2xl font-semibold leading-tight text-[color:var(--metric-chart-ink)] md:text-3xl">
@@ -139,7 +303,8 @@ export function CommerceMetricChartGroup({
             {subtitle}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2 self-start rounded-[var(--dash-radius)] border border-[color:color-mix(in_srgb,var(--metric-chart-ink)_12%,transparent)] bg-[color:color-mix(in_srgb,var(--metric-chart-ink)_7%,transparent)] p-1">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 self-start">
+          <div className="flex items-center gap-2 rounded-[var(--dash-radius)] border border-[color:color-mix(in_srgb,var(--metric-chart-ink)_12%,transparent)] bg-[color:color-mix(in_srgb,var(--metric-chart-ink)_7%,transparent)] p-1">
           <button
             type="button"
             onClick={() => setView('line')}
@@ -168,11 +333,12 @@ export function CommerceMetricChartGroup({
             <Layers2 className="size-4" aria-hidden />
             {ditherLabel}
           </button>
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-        <div className="min-h-[430px] rounded-[var(--dash-radius)] border border-[color:color-mix(in_srgb,var(--metric-chart-ink)_10%,transparent)] bg-[color:color-mix(in_srgb,var(--metric-chart-panel)_84%,var(--metric-chart-sunken))] p-4 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--metric-chart-ink)_7%,transparent)] sm:p-5">
+      <div key={replayKey} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+        <div className="souqna-rec-fade flex flex-col min-h-[430px] rounded-[var(--dash-radius)] border border-[color:color-mix(in_srgb,var(--metric-chart-ink)_10%,transparent)] bg-[color:color-mix(in_srgb,var(--metric-chart-panel)_84%,var(--metric-chart-sunken))] p-4 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--metric-chart-ink)_7%,transparent)] sm:p-5">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div dir={isRtl ? 'rtl' : 'ltr'}>
               <p className="text-sm font-medium text-[color:var(--metric-chart-muted)]">
@@ -183,7 +349,7 @@ export function CommerceMetricChartGroup({
                   className="text-4xl font-semibold leading-none text-[color:var(--metric-chart-ink)] md:text-5xl"
                   dir="ltr"
                 >
-                  {activeMetric.value}
+                  <CountUpText text={activeMetric.value} />
                 </span>
                 <DeltaBadge metric={activeMetric} />
                 {activeMetric.badge ? <StatusChip label={activeMetric.badge} /> : null}
@@ -204,7 +370,7 @@ export function CommerceMetricChartGroup({
             </div>
           </div>
 
-          <div className="h-[320px] min-h-0" dir="ltr">
+          <div className="flex-1 min-h-0" dir="ltr">
             {view === 'line' ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 16, right: 14, bottom: 8, left: 2 }}>
@@ -252,6 +418,10 @@ export function CommerceMetricChartGroup({
                     stroke="var(--metric-chart-faint)"
                     strokeWidth={2}
                     strokeDasharray="5 7"
+                    isAnimationActive
+                    animationBegin={140}
+                    animationDuration={1100}
+                    animationEasing="ease-out"
                   />
                   <Area
                     type={curveType}
@@ -261,40 +431,65 @@ export function CommerceMetricChartGroup({
                     stroke="var(--metric-accent)"
                     strokeWidth={3}
                     fill={`url(#${gradientId}-current)`}
+                    isAnimationActive
+                    animationBegin={140}
+                    animationDuration={1300}
+                    animationEasing="ease-out"
                   />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <DitheredPixelGraph
-                ariaLabel={`${activeMetric.label} ${currentLabel}`}
-                className="h-full rounded-[calc(var(--dash-radius)-2px)]"
-                density="normal"
-                padding={28}
-                showGrid
-                showPoints={false}
-                series={[
-                  {
-                    data: activeMetric.previousSeries,
-                    color: 'var(--metric-chart-faint)',
-                    label: previousLabel,
-                    fill: true,
-                    dashed: true,
-                    pattern: 'hatch',
-                  },
-                  {
-                    data: activeMetric.series,
-                    color: 'var(--metric-accent)',
-                    label: currentLabel,
-                    fill: true,
-                    pattern: 'dots',
-                  },
-                ]}
-              />
+              <div className="relative h-full">
+                <DitheredPixelGraph
+                  ariaLabel={`${activeMetric.label} ${currentLabel}`}
+                  className="h-full rounded-[calc(var(--dash-radius)-2px)]"
+                  density="normal"
+                  padding={28}
+                  showGrid
+                  showPoints={false}
+                  onHover={setDitherHover}
+                  series={ditherSeries}
+                />
+                {ditherHover ? (
+                  <>
+                    <span
+                      className="pointer-events-none absolute inset-y-2 z-10 w-px"
+                      style={{
+                        left: ditherHover.x,
+                        background: 'color-mix(in srgb, var(--metric-accent) 42%, transparent)',
+                      }}
+                    />
+                    <div
+                      className="pointer-events-none absolute top-2 z-20 whitespace-nowrap"
+                      style={{
+                        left: ditherHover.x,
+                        width: 'max-content',
+                        transform:
+                          ditherHover.align === 'end'
+                            ? 'translateX(calc(-100% - 10px))'
+                            : ditherHover.align === 'start'
+                              ? 'translateX(10px)'
+                              : 'translateX(-50%)',
+                      }}
+                    >
+                      <MetricTooltipCard
+                        label={`Day ${ditherHover.index + 1}`}
+                        current={activeMetric.series[ditherHover.index] ?? 0}
+                        previous={activeMetric.previousSeries[ditherHover.index] ?? 0}
+                        metric={activeMetric}
+                        currency={currency}
+                        currentLabel={currentLabel}
+                        previousLabel={previousLabel}
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </div>
             )}
           </div>
         </div>
 
-        <div className="grid auto-rows-fr gap-3" dir={isRtl ? 'rtl' : 'ltr'}>
+        <div className="souqna-rec-stagger grid auto-rows-fr gap-3" dir={isRtl ? 'rtl' : 'ltr'}>
           {metrics.map((metric) => {
             const Icon = ICONS[metric.icon];
             const selected = metric.id === activeMetric.id;
@@ -319,23 +514,23 @@ export function CommerceMetricChartGroup({
                 aria-pressed={selected}
               >
                 <div className="flex h-full items-center gap-3">
-                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <span className="inline-flex min-w-0 items-center gap-2 text-sm font-semibold text-[color:var(--metric-chart-muted)]">
+                      <Icon className="size-4 shrink-0 text-[color:var(--metric-accent)]" aria-hidden />
+                      <span className="truncate">{metric.label}</span>
+                    </span>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--metric-chart-muted)]">
-                        <Icon className="size-4 text-[color:var(--metric-accent)]" aria-hidden />
-                        {metric.label}
+                      <span
+                        className="truncate text-2xl font-semibold leading-none text-[color:var(--metric-chart-ink)]"
+                        dir="ltr"
+                      >
+                        <CountUpText text={metric.value} />
                       </span>
                       <span className="flex shrink-0 items-center gap-1.5">
                         {metric.badge ? <StatusChip label={metric.badge} small /> : null}
                         <DeltaBadge metric={metric} small />
                       </span>
                     </div>
-                    <span
-                      className="truncate text-2xl font-semibold leading-none text-[color:var(--metric-chart-ink)]"
-                      dir="ltr"
-                    >
-                      {metric.value}
-                    </span>
                     <span className="line-clamp-1 text-xs text-[color:var(--metric-chart-faint)]">
                       {metric.hint}
                     </span>
@@ -383,20 +578,50 @@ function MetricTooltip({
   const previous = payload.find((item) => item.dataKey === 'previous')?.value ?? 0;
 
   return (
-    <div className="rounded-[var(--dash-radius)] border border-[color:color-mix(in_srgb,var(--metric-tooltip-ink)_12%,transparent)] bg-[color:var(--metric-tooltip-bg)] px-3 py-2 text-xs shadow-lg">
-      <p className="font-mono uppercase tracking-[0.18em] text-[color:color-mix(in_srgb,var(--metric-tooltip-ink)_56%,transparent)]">
-        Day {label}
+    <MetricTooltipCard
+      label={`Day ${label}`}
+      current={current}
+      previous={previous}
+      metric={metric}
+      currency={currency}
+      currentLabel={currentLabel}
+      previousLabel={previousLabel}
+    />
+  );
+}
+
+function MetricTooltipCard({
+  label,
+  current,
+  previous,
+  metric,
+  currency,
+  currentLabel,
+  previousLabel,
+}: {
+  label: React.ReactNode;
+  current: number;
+  previous: number;
+  metric: CommerceChartMetric;
+  currency: string;
+  currentLabel: string;
+  previousLabel: string;
+}) {
+  return (
+    <div className="min-w-[176px] whitespace-nowrap rounded-[var(--dash-radius)] border border-[color:color-mix(in_srgb,var(--metric-tooltip-ink)_12%,transparent)] bg-[color:var(--metric-tooltip-bg)] px-3 py-2 text-xs shadow-lg">
+      <p className="font-medium text-[color:color-mix(in_srgb,var(--metric-tooltip-ink)_56%,transparent)]">
+        {label}
       </p>
       <div className="mt-2 space-y-1.5">
         <p className="flex items-center justify-between gap-6 text-[color:var(--metric-tooltip-ink)]">
           <span>{currentLabel}</span>
-          <span className="font-semibold" dir="ltr">
+          <span className="font-semibold tabular-nums" dir="ltr">
             {formatMetricValue(current, metric, currency)}
           </span>
         </p>
         <p className="flex items-center justify-between gap-6 text-[color:color-mix(in_srgb,var(--metric-tooltip-ink)_58%,transparent)]">
           <span>{previousLabel}</span>
-          <span className="font-semibold" dir="ltr">
+          <span className="font-semibold tabular-nums" dir="ltr">
             {formatMetricValue(previous, metric, currency)}
           </span>
         </p>
@@ -407,27 +632,29 @@ function MetricTooltip({
 
 function DeltaBadge({ metric, small = false }: { metric: CommerceChartMetric; small?: boolean }) {
   const delta = metricDelta(metric);
+  const flat = Math.abs(delta) < 0.01;
   const favorable = metric.tone === 'critical' ? delta <= 0 : delta >= 0;
-  const color =
-    Math.abs(delta) < 0.01
-      ? 'var(--metric-chart-muted)'
-      : favorable
-        ? 'var(--chart-success)'
-        : 'var(--chart-danger)';
+  const color = flat
+    ? 'var(--metric-chart-muted)'
+    : favorable
+      ? 'var(--metric-chart-ink)'
+      : 'var(--chart-danger)';
+  const Arrow = flat ? Minus : delta > 0 ? ArrowUp : ArrowDown;
 
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center rounded-full border font-mono font-semibold leading-none',
+        'inline-flex shrink-0 items-center gap-1 rounded-full border font-semibold leading-none tabular-nums',
         small ? 'px-1.5 py-1 text-[0.62rem]' : 'px-2.5 py-1.5 text-xs',
       )}
       style={{
         color,
-        borderColor: `color-mix(in srgb, ${color} 32%, transparent)`,
-        background: `color-mix(in srgb, ${color} 14%, transparent)`,
+        borderColor: `color-mix(in srgb, ${color} 30%, transparent)`,
+        background: `color-mix(in srgb, ${color} 12%, transparent)`,
       }}
       dir="ltr"
     >
+      <Arrow className={small ? 'size-3' : 'size-3.5'} strokeWidth={2.5} aria-hidden />
       {formatDelta(delta)}
     </span>
   );
@@ -437,8 +664,8 @@ function StatusChip({ label, small = false }: { label: string; small?: boolean }
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 rounded-full border border-[color:color-mix(in_srgb,var(--metric-accent)_36%,transparent)] bg-[color:color-mix(in_srgb,var(--metric-accent)_12%,transparent)] font-mono font-semibold uppercase tracking-[0.12em] text-[color:color-mix(in_srgb,var(--metric-accent)_82%,var(--metric-chart-ink))]',
-        small ? 'px-1.5 py-1 text-[0.56rem]' : 'px-2.5 py-1.5 text-[0.62rem]',
+        'inline-flex shrink-0 items-center rounded-full border border-[color:color-mix(in_srgb,var(--metric-accent)_26%,transparent)] bg-[color:color-mix(in_srgb,var(--metric-accent)_9%,transparent)] font-medium capitalize leading-none text-[color:color-mix(in_srgb,var(--metric-accent)_76%,var(--metric-chart-ink))]',
+        small ? 'px-2 py-1 text-[0.62rem]' : 'px-2.5 py-1.5 text-xs',
       )}
     >
       {label}
@@ -482,8 +709,7 @@ function formatDelta(value: number): string {
   const formatted = Intl.NumberFormat('en-US', {
     maximumFractionDigits: abs > 0 && abs < 10 ? 1 : 0,
   }).format(abs);
-  const arrow = value >= 0 ? '▲' : '▼';
-  return `${formatted}% ${arrow}`;
+  return `${formatted}%`;
 }
 
 function formatMetricValue(value: number, metric: CommerceChartMetric, currency: string): string {
@@ -500,11 +726,8 @@ function formatMetricValue(value: number, metric: CommerceChartMetric, currency:
 }
 
 function accentForTone(tone: CommerceChartMetric['tone']): string {
+  // Monochrome chart: everything reads in the ink tone. Critical stays red so
+  // "needs action" metrics still signal, but nothing is green anymore.
   if (tone === 'critical') return 'var(--chart-danger)';
-  if (tone === 'success') {
-    return 'color-mix(in srgb, var(--chart-success) 76%, var(--admin-accent) 24%)';
-  }
-  if (tone === 'info') return 'var(--chart-primary)';
-  if (tone === 'warning') return 'var(--chart-primary)';
-  return 'var(--chart-secondary, var(--chart-ink))';
+  return 'var(--metric-chart-ink)';
 }

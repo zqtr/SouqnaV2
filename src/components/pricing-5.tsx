@@ -70,7 +70,7 @@ const planCopy = {
         name: 'Pro+',
         price: '145 QAR',
         label: '/ mo',
-        description: 'Most chosen: AI, marketing, teams, automation, and providers.',
+        description: 'AI, marketing, teams, automation, and every payment provider.',
         cta: 'Choose Pro+',
         billingPlan: 'pro',
         href: '/account/settings/plan?plan=pro_plus',

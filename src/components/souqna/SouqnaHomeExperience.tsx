@@ -18,7 +18,6 @@ import {
 } from 'simple-icons';
 import type { SimpleIcon } from 'simple-icons';
 import Footer8 from '@/components/footer-8';
-import HalftoneWave from '@/components/halftone-wave';
 import { Navigation2 } from '@/components/navigation-2';
 import { MetalFrame } from '@/components/primitives/MetalFrame';
 import { Pricing5 } from '@/components/pricing-5';
@@ -68,7 +67,7 @@ const home = {
     heroC: '',
     echo: 'مكان عمل لمشاريع البيت',
     body:
-      'Open a store, write the pages, take the orders, and talk to the customer in Arabic and English on one calm cream surface. Souqna sets up the storefront, the back of house, and the AI on the line. You stay yourself.',
+      'Open a store, write the pages, take orders, and reply to customers in Arabic and English, all in one place.',
     primary: 'Start your store',
     secondary: 'See it work · شاهد كيف يعمل',
     manifesto: 'Open account',
@@ -102,7 +101,7 @@ const home = {
     heroC: '',
     echo: 'A workplace for home businesses',
     body:
-      'افتح متجراً، اكتب الصفحات، استقبل الطلبات، وتحدث مع العميل بالعربية والإنجليزية على سطح هادئ واحد. سوقنا يجهز الواجهة والتشغيل والذكاء على الخط، وأنت تبقى بنفسك.',
+      'افتح متجراً، اكتب الصفحات، استقبل الطلبات، وردّ على العملاء بالعربية والإنجليزية، كل ذلك في مكان واحد.',
     primary: 'ابدأ متجرك',
     secondary: 'شاهد كيف يعمل',
     manifesto: 'افتح الحساب',
@@ -424,57 +423,21 @@ export function SouqnaHomeExperience({ locale }: Props) {
       />
 
       <main>
-        <section id="top" className="sq-hero">
-          <HalftoneWave
-            width="100%"
-            height="100%"
-            className="sq-hero-halftone sq-hero-halftone-light"
-            speed={1.12}
-            noiseScale={3.3}
-            octaves={3}
-            gridDensity={64}
-            dotSize={0.65}
-            softness={0.35}
-            contrastMin={0.13}
-            contrastMax={0.8}
-            scrollX={0.16}
-            scrollY={0.13}
-            rotation={0}
-            colorA="#0A0A0A"
-            colorB="#5A5650"
-            backgroundColor="#E8DCC4"
-            opacity={0.3}
+        <div className="sq-topfold">
+          <video
+            className="sq-topfold-bg"
+            src="/videos/hero-bg.mp4"
+            poster="/videos/hero-bg-poster.jpg"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            aria-hidden="true"
           />
-          <HalftoneWave
-            width="100%"
-            height="100%"
-            className="sq-hero-halftone sq-hero-halftone-dark"
-            speed={1}
-            noiseScale={3.3}
-            octaves={3}
-            gridDensity={64}
-            dotSize={0.65}
-            softness={0.35}
-            contrastMin={0.13}
-            contrastMax={0.8}
-            scrollX={0.15}
-            scrollY={0.12}
-            rotation={0}
-            colorA="#F3F3EF"
-            colorB="#8B8B84"
-            backgroundColor="#050505"
-            opacity={0.26}
-          />
-          <div className="sq-hero-map-overlay" aria-hidden="true">
-            <Image
-              src="/brand/souqna-gcc-network-map.png"
-              alt=""
-              fill
-              priority
-              sizes="100vw"
-              className="sq-hero-map-image"
-            />
-          </div>
+          <div className="sq-topfold-scrim" aria-hidden="true" />
+          <div className="sq-topfold-grain" aria-hidden="true" />
+          <section id="top" className="sq-hero">
           <div className="sq-hero-copy">
             <div className="sq-kicker">
               <span />
@@ -504,21 +467,12 @@ export function SouqnaHomeExperience({ locale }: Props) {
                 <a href="#work" className="sq-button sq-button-ghost">
                   {c.secondary as string}
                 </a>
-                <SignedOut>
-                  <Link href="/sign-up" className="sq-manifesto">
-                    {c.manifesto as string}
-                  </Link>
-                </SignedOut>
-                <SignedIn>
-                  <Link href="/account" className="sq-manifesto">
-                    {c.manifesto as string}
-                  </Link>
-                </SignedIn>
               </div>
             </div>
           </div>
 
         </section>
+        </div>
 
         <section
           className="sq-integrations-marquee"
@@ -547,10 +501,6 @@ export function SouqnaHomeExperience({ locale }: Props) {
         <section id="work" className="sq-section sq-work">
           <div className="sq-section-head">
             <div>
-              <p className="sq-kicker">
-                <span />
-                {c.workEyebrow as string}
-              </p>
               <h2>{c.workTitle as string}</h2>
             </div>
             <p className="sq-side-note">{c.workAr as string}</p>
@@ -578,10 +528,6 @@ export function SouqnaHomeExperience({ locale }: Props) {
         <section id="process" className="sq-section sq-process">
           <div className="sq-section-head">
             <div>
-              <p className="sq-kicker">
-                <span />
-                {c.processEyebrow as string}
-              </p>
               <h2>{c.processTitle as string}</h2>
             </div>
           </div>
@@ -605,10 +551,6 @@ export function SouqnaHomeExperience({ locale }: Props) {
           </div>
           <div className="sq-section-head">
             <div>
-              <p className="sq-kicker">
-                <span />
-                {c.atelierEyebrow as string}
-              </p>
               <h2>{c.atelierTitle as string}</h2>
             </div>
           </div>
@@ -632,10 +574,6 @@ export function SouqnaHomeExperience({ locale }: Props) {
 
         <section id="contact" className="sq-contact">
           <div>
-            <p className="sq-kicker">
-              <span />
-              {c.contactEyebrow as string}
-            </p>
             <h2>{c.contactTitle as string}</h2>
             <p>{c.contactBody as string}</p>
           </div>
@@ -793,11 +731,7 @@ const homeStyles = `
     --sq-section-y: clamp(64px, 8vw, 112px);
     --sq-section-gap: clamp(34px, 5vw, 58px);
     min-height: 100dvh;
-    background:
-      linear-gradient(var(--sq-faint) 1px, transparent 1px),
-      linear-gradient(90deg, var(--sq-faint) 1px, transparent 1px),
-      var(--sq-bg);
-    background-size: 44px 44px;
+    background: var(--sq-bg);
     color: var(--sq-ink);
     font-family: var(--font-sans);
     overflow-x: clip;
@@ -822,12 +756,12 @@ const homeStyles = `
 
   .sq-home[dir='rtl'] {
     font-family: var(--font-arabic);
-    font-weight: 700;
+    font-weight: 500;
   }
 
   .sq-home[dir='rtl'] :where(a, button, p, span, small, h1, h2, h3, h4, li) {
     font-family: var(--font-arabic);
-    font-weight: 700;
+    font-weight: 500;
   }
 
   .sq-home * { box-sizing: border-box; }
@@ -1141,38 +1075,82 @@ const homeStyles = `
     }
   }
 
-  .sq-hero {
-    --sq-hero-bg: #E8DCC4;
-    --sq-hero-text: #0A0A0A;
-    --sq-hero-muted: rgba(10, 10, 10, 0.66);
-    --sq-hero-rule: rgba(10, 10, 10, 0.18);
-    --sq-hero-accent: #2A2A2A;
-    --sq-hero-accent-strong: #0A0A0A;
-    --sq-hero-line: rgba(10, 10, 10, 0.07);
-    --sq-hero-line-soft: rgba(10, 10, 10, 0.05);
-    --sq-hero-glow: rgba(10, 10, 10, 0.06);
-    --sq-hero-vignette: rgba(232, 220, 196, 0.18);
-    --sq-hero-vignette-strong: rgba(209, 199, 178, 0.5);
-    --sq-hero-spot-a: rgba(10, 10, 10, 0.05);
-    --sq-hero-spot-b: rgba(10, 10, 10, 0.07);
-    --sq-hero-spot-c: rgba(10, 10, 10, 0.04);
-    --sq-hero-blend: multiply;
-    --sq-hero-ghost-bg: rgba(10, 10, 10, 0.04);
-    min-height: min(880px, calc(100dvh - 66px));
+  /* Cinematic dark video hero. Fixed dark surface (light text) in both themes. */
+  .sq-topfold {
+    --sq-hero-text: #F7F7F3;
+    --sq-hero-muted: rgba(247, 247, 243, 0.74);
+    --sq-hero-rule: rgba(247, 247, 243, 0.26);
+    --sq-hero-accent: #EDEBE4;
+    --sq-hero-accent-strong: #ffffff;
+    --sq-hero-glow: rgba(255, 255, 255, 0.1);
+    --sq-hero-ghost-bg: rgba(255, 255, 255, 0.08);
     position: relative;
     isolation: isolate;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: center;
-    justify-items: start;
     overflow: hidden;
-    padding: clamp(64px, 9vw, 126px) var(--sq-page-pad) clamp(58px, 8vw, 98px);
-    background: var(--sq-hero-bg);
+    background: #0A0A0A;
     color: var(--sq-hero-text);
-    transition: background-color 320ms ease, color 320ms ease;
   }
 
-  [data-theme='dark'] .sq-hero {
+  .sq-topfold-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+  }
+
+  .sq-topfold-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(0, 0, 0, 0.74), rgba(0, 0, 0, 0.34) 46%, transparent 78%),
+      linear-gradient(180deg, rgba(0, 0, 0, 0.52), transparent 24%, transparent 66%, rgba(10, 10, 10, 0.66));
+  }
+
+  .sq-home[dir='rtl'] .sq-topfold-scrim {
+    background:
+      linear-gradient(270deg, rgba(0, 0, 0, 0.74), rgba(0, 0, 0, 0.34) 46%, transparent 78%),
+      linear-gradient(180deg, rgba(0, 0, 0, 0.52), transparent 24%, transparent 66%, rgba(10, 10, 10, 0.66));
+  }
+
+  .sq-topfold-grain {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0.42;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+    background-size: 150px 150px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sq-topfold-bg {
+      display: none;
+    }
+    .sq-topfold {
+      background: #0A0A0A center / cover no-repeat url('/videos/hero-bg-poster.jpg');
+    }
+  }
+
+  .sq-hero {
+    min-height: min(720px, calc(100dvh - 76px));
+    position: relative;
+    isolation: isolate;
+    z-index: 3;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    justify-items: start;
+    padding: clamp(110px, 13vh, 152px) var(--sq-page-pad) clamp(56px, 8vw, 100px);
+    color: var(--sq-hero-text);
+  }
+
+  [data-theme='dark'] .sq-topfold {
     --sq-hero-bg: #0A0A0A;
     --sq-hero-text: #F7F7F3;
     --sq-hero-muted: rgba(247, 247, 243, 0.7);
@@ -1196,35 +1174,9 @@ const homeStyles = `
     color: #ffffff;
   }
 
-  .sq-hero::before,
-  .sq-hero::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    pointer-events: none;
-  }
-
-  .sq-hero::before {
-    background:
-      linear-gradient(var(--sq-hero-line) 1px, transparent 1px),
-      linear-gradient(90deg, var(--sq-hero-line-soft) 1px, transparent 1px),
-      radial-gradient(circle at 78% 48%, var(--sq-hero-glow), transparent 38%),
-      linear-gradient(90deg, var(--sq-hero-vignette), var(--sq-hero-vignette-strong));
-    background-size: 44px 44px, 44px 44px, auto, auto;
-    animation: sq-hero-grid-drift 22s linear infinite;
-  }
-
-  .sq-hero::after {
-    background:
-      radial-gradient(circle at 12% 18%, var(--sq-hero-spot-a), transparent 28%),
-      radial-gradient(circle at 62% 22%, var(--sq-hero-spot-b), transparent 24%),
-      radial-gradient(circle at 42% 88%, var(--sq-hero-spot-c), transparent 32%),
-      linear-gradient(180deg, var(--sq-hero-vignette), var(--sq-hero-vignette-strong));
-    background-size: 130% 130%, 140% 140%, 160% 160%, auto;
-    mix-blend-mode: var(--sq-hero-blend);
-    opacity: 0.84;
-    animation: sq-hero-ambient-sweep 13s ease-in-out infinite alternate;
+  .sq-hero-copy {
+    position: relative;
+    z-index: 3;
   }
 
   .sq-hero-halftone {
@@ -1232,12 +1184,10 @@ const homeStyles = `
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    opacity: 1;
+    opacity: 0.55;
     mix-blend-mode: normal;
     transform: scale(1.035);
     transform-origin: center;
-    will-change: filter, opacity, transform;
-    animation: sq-hero-halftone-breathe 10s ease-in-out infinite alternate;
   }
 
   .sq-hero-halftone-dark {
@@ -1366,11 +1316,11 @@ const homeStyles = `
     max-width: min(100%, 980px);
     margin: 0;
     color: var(--sq-hero-text);
-    font-size: clamp(50px, 7vw, 104px);
+    font-size: clamp(44px, 6vw, 82px);
     font-family: var(--font-english);
     font-weight: 500;
     letter-spacing: 0;
-    line-height: 0.9;
+    line-height: 0.95;
     text-wrap: balance;
   }
 
@@ -1482,10 +1432,10 @@ const homeStyles = `
 
   .sq-hero .sq-button-gold,
   .sq-home .sq-hero a.sq-button-gold {
-    border-color: rgba(255, 255, 255, 0.86);
+    border-color: transparent;
     background: #F7F7F3;
     color: #111111;
-    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.22);
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
   }
 
   .sq-button-ghost {
@@ -1498,6 +1448,14 @@ const homeStyles = `
     border-color: var(--sq-hero-rule);
     background: var(--sq-hero-ghost-bg);
     color: var(--sq-hero-text);
+  }
+
+  .sq-contact .sq-button-gold,
+  .sq-home .sq-contact a.sq-button-gold {
+    border-color: transparent;
+    background: var(--sq-bg);
+    color: var(--sq-charcoal);
+    box-shadow: 0 18px 42px color-mix(in srgb, var(--sq-ink) 24%, transparent);
   }
 
   .sq-manifesto {
@@ -1575,38 +1533,78 @@ const homeStyles = `
     }
   }
 
+  .sq-showcase {
+    position: relative;
+    z-index: 5;
+    padding: 0 var(--sq-page-pad) var(--sq-section-y);
+    margin-top: clamp(4px, 1.5vw, 20px);
+  }
+
+  .sq-showcase-stage {
+    position: relative;
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+
+  .sq-shot {
+    margin: 0;
+    border: 1px solid color-mix(in srgb, var(--sq-ink) 12%, transparent);
+    border-radius: 18px;
+    overflow: hidden;
+    background: var(--sq-paper);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.55) inset,
+      0 2px 10px color-mix(in srgb, var(--sq-ink) 8%, transparent),
+      0 44px 100px color-mix(in srgb, var(--sq-ink) 22%, transparent);
+  }
+
+  .sq-shot-img,
+  .sq-shot-video {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .sq-shot-main .sq-shot-img + .sq-shot-img {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .sq-shot-inset {
+    position: absolute;
+    right: -20px;
+    bottom: -40px;
+    width: clamp(150px, 16vw, 216px);
+    border-radius: 14px;
+    box-shadow: 0 30px 80px color-mix(in srgb, var(--sq-ink) 36%, transparent);
+  }
+
+  .sq-home[dir='rtl'] .sq-shot-inset {
+    right: auto;
+    left: -20px;
+  }
+
+  @media (max-width: 720px) {
+    .sq-showcase {
+      margin-top: 10px;
+      padding-bottom: var(--sq-section-gap);
+    }
+    .sq-shot-inset {
+      display: none;
+    }
+  }
+
   .sq-integrations-marquee {
     position: relative;
+    z-index: 4;
+    margin-top: clamp(-96px, -7vw, -64px);
     overflow: hidden;
     display: grid;
     gap: 10px;
-    border-block: 1px solid var(--sq-rule);
-    background:
-      linear-gradient(90deg, var(--sq-bg), color-mix(in srgb, var(--sq-bg) 78%, transparent), var(--sq-bg)),
-      color-mix(in srgb, var(--sq-charcoal) 94%, var(--sq-bg));
-    color: var(--sq-invert-ink);
+    background: transparent;
+    color: #F7F7F3;
     padding: 18px 0;
-  }
-
-  .sq-integrations-marquee::before,
-  .sq-integrations-marquee::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    z-index: 2;
-    width: min(17vw, 180px);
-    pointer-events: none;
-  }
-
-  .sq-integrations-marquee::before {
-    left: 0;
-    background: linear-gradient(90deg, var(--sq-bg), transparent);
-  }
-
-  .sq-integrations-marquee::after {
-    right: 0;
-    background: linear-gradient(270deg, var(--sq-bg), transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
   }
 
   .sq-integration-row {
@@ -1626,10 +1624,12 @@ const homeStyles = `
     justify-content: center;
     width: clamp(76px, 8vw, 112px);
     height: clamp(52px, 5.5vw, 68px);
-    border: 1px solid color-mix(in srgb, var(--sq-invert-ink) 12%, transparent);
+    border: 1px solid rgba(247, 247, 243, 0.16);
     border-radius: 26px;
-    background: color-mix(in srgb, var(--sq-invert-bg) 25%, transparent);
-    color: var(--sq-invert-ink);
+    background: rgba(16, 16, 16, 0.3);
+    -webkit-backdrop-filter: blur(7px);
+    backdrop-filter: blur(7px);
+    color: #F7F7F3;
     padding: 0;
     line-height: 1;
     white-space: nowrap;
@@ -1638,13 +1638,13 @@ const homeStyles = `
       border-color 180ms ease,
       opacity 180ms ease,
       transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
-    opacity: 0.85;
+    opacity: 0.92;
   }
 
   .sq-integration-pill:hover {
     opacity: 1;
-    background: color-mix(in srgb, var(--sq-invert-bg) 40%, transparent);
-    border-color: color-mix(in srgb, var(--sq-invert-ink) 22%, transparent);
+    background: rgba(28, 28, 28, 0.46);
+    border-color: rgba(247, 247, 243, 0.3);
     transform: translateY(-2px);
   }
 

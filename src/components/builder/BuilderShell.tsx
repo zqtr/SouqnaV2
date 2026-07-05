@@ -6521,6 +6521,8 @@ function createBlock(
       return { id, type, props: {} };
     case 'inquireCta':
       return { id, type, props: {} };
+    case 'activityPanel':
+      return { id, type, props: {} };
     case 'spacer':
       return { id, type, props: { size: 'md' } };
     case 'divider':

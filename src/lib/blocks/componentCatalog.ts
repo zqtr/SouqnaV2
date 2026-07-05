@@ -403,6 +403,16 @@ export const COMPONENT_LIBRARY_GROUPS: ComponentLibraryGroup[] = [
           ar: 'دعوة مركزة لاتخاذ إجراء للاستفسارات والحجوزات ومحادثات واتساب والطلبات المخصصة وطلبات التسعير.',
         },
       },
+      {
+        type: 'activityPanel',
+        label: 'Activity panel',
+        hint: 'Booking · orders · measurements',
+        tier: 'starter',
+        description: {
+          en: 'The buyer surface for Souqna Activities — bookings, cafe/F&B orders, or tailoring measurements. Install a matching activity app, then drop this panel on a page. Submissions flow into the cart and checkout.',
+          ar: 'واجهة العميل لأنشطة سوقنا — الحجوزات أو طلبات المقاهي والمطاعم أو قياسات الخياطة. ثبّت التطبيق المناسب ثم أضف هذه اللوحة إلى صفحة، وتنتقل الطلبات إلى السلة والدفع.',
+        },
+      },
     ],
   },
   {

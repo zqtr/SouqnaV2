@@ -27,6 +27,7 @@ export const BLOCK_TYPES = [
   'calendar',
   'contactCard',
   'inquireCta',
+  'activityPanel',
   'spacer',
   'divider',
   'drop',
@@ -628,6 +629,19 @@ export type InquireCtaProps = {
   align?: 'start' | 'center' | 'end';
 };
 
+/**
+ * Souqna Activities panel — the storefront surface for the booking /
+ * matbakh (F&B) / tailoring plugins. Renders the buyer flow for one
+ * installed activity and hands the result to the cart → checkout.
+ */
+export type ActivityPanelProps = {
+  /** Which installed activity plugin this panel drives. When unset, the
+   *  first installed activity is used. */
+  appId?: 'booking' | 'matbakh' | 'tailoring';
+  title?: string;
+  titleAr?: string;
+};
+
 export type SpacerProps = {
   size: 'sm' | 'md' | 'lg' | 'xl';
 };
@@ -1225,6 +1239,7 @@ export type BlockPropsByType = {
   calendar: CalendarProps;
   contactCard: ContactCardProps;
   inquireCta: InquireCtaProps;
+  activityPanel: ActivityPanelProps;
   spacer: SpacerProps;
   divider: DividerProps;
   drop: DropProps;

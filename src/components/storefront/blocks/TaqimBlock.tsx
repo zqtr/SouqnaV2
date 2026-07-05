@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { StoreImage } from '../StoreImage';
 import type { BlockRenderProps } from './BlockContext';
 import type { TaqimBlockProps } from '@/lib/blocks/types';
 import { COMPONENT_SHOWCASE_BUNDLE_ID } from '@/lib/blocks/componentShowcase';
@@ -889,6 +890,5 @@ function TaqimProductMedia({
     );
   }
 
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt={title} style={mediaStyle} />;
+  return <StoreImage src={url} alt={title} style={mediaStyle} sizes="(max-width: 768px) 100vw, 600px" />;
 }

@@ -1,4 +1,5 @@
 import type { BlockRenderProps } from './BlockContext';
+import { optimizedBackgroundUrl } from '@/lib/image';
 import type { BannerProps } from '@/lib/blocks/types';
 import { VariantFrame } from './VariantFrame';
 
@@ -32,7 +33,7 @@ export function BannerBlock({ block, ctx }: BlockRenderProps<BannerProps>) {
             ? undefined
             : 'linear-gradient(135deg, color-mix(in srgb, var(--sf-accent) 10%, transparent), color-mix(in srgb, var(--sf-ink) 6%, transparent))',
           backgroundImage: hasImage
-            ? `linear-gradient(rgba(0,0,0,${scrimAlpha}), rgba(0,0,0,${scrimAlpha})), url(${imageUrl})`
+            ? `linear-gradient(rgba(0,0,0,${scrimAlpha}), rgba(0,0,0,${scrimAlpha})), url(${optimizedBackgroundUrl(imageUrl)})`
             : undefined,
           backgroundSize: 'cover',
           backgroundPosition: 'center',

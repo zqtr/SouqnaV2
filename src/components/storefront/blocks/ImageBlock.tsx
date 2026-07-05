@@ -1,4 +1,5 @@
 import type { BlockRenderProps } from './BlockContext';
+import { StoreImage } from '../StoreImage';
 import type { ImageProps as ImageBlockProps } from '@/lib/blocks/types';
 
 const widths: Record<NonNullable<ImageBlockProps['width']>, number | string> = {
@@ -36,10 +37,10 @@ export function ImageBlock({ block, ctx }: BlockRenderProps<ImageBlockProps>) {
           overflow: 'hidden',
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <StoreImage
           src={imageUrl}
           alt={props.alt ?? ''}
+          sizes="(max-width: 768px) 100vw, 800px"
           style={{
             width: '100%',
             height: aspect ? '100%' : 'auto',

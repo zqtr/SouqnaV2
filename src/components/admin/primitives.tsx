@@ -132,10 +132,8 @@ export function PageHeader({
           {eyebrow ? (
             <div
               style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                letterSpacing: '0.14em',
-                textTransform: 'uppercase',
+                fontSize: 12,
+                fontWeight: 500,
                 color: 'var(--ink-muted)',
                 marginBottom: 8,
               }}
@@ -270,11 +268,8 @@ export function Stat({
     <Surface padding={18} style={{ border: '1px solid var(--surface-rule)' }}>
       <div
         style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11.5,
+          fontSize: 12,
           fontWeight: 500,
-          letterSpacing: '0.16em',
-          textTransform: 'uppercase',
           color: 'var(--ink-muted)',
         }}
       >
@@ -349,10 +344,8 @@ export function EmptyState({
         {eyebrow ? (
           <div
             style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase',
+              fontSize: 12,
+              fontWeight: 500,
               color: 'var(--ink-muted)',
             }}
           >

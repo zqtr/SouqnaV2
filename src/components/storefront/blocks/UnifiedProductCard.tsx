@@ -1,12 +1,11 @@
 'use client';
 
-/* eslint-disable @next/next/no-img-element */
-
 import { useEffect, useState, type CSSProperties } from 'react';
 import { ShoppingBag } from 'lucide-react';
 import { AddToCartButton } from '../cart/AddToCartButton';
 import { PriceText, formatMonthlyPrice, formatPrice } from './helpers';
 import { isVideoMediaUrl } from '@/lib/media';
+import { StoreImage } from '../StoreImage';
 
 export type UnifiedProductCardProduct = {
   id: string;
@@ -370,7 +369,14 @@ function ProductMedia({
     );
   }
 
-  return <img src={url} alt={title} style={style} />;
+  return (
+    <StoreImage
+      src={url}
+      alt={title}
+      style={style}
+      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 320px"
+    />
+  );
 }
 
 function isRecent(value: UnifiedProductCardProduct['createdAt']) {

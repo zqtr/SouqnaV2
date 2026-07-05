@@ -1,10 +1,11 @@
-/* eslint-disable @next/next/no-img-element */
 import type { BlockRenderProps } from './BlockContext';
 import type { HeroProps } from '@/lib/blocks/types';
 import { StorefrontGlyph } from '@/lib/storefront-glyphs';
 import { LogoOrMonogram } from '../StorefrontChrome';
 import { VariantFrame } from './VariantFrame';
 import { TextEffectRenderer } from './TextEffectRenderer';
+import { StoreImage } from '../StoreImage';
+import { optimizedBackgroundUrl } from '@/lib/image';
 
 /**
  * Hero block. Three layouts:
@@ -39,12 +40,13 @@ export function HeroBlock({ block, ctx }: BlockRenderProps<HeroProps>) {
     if (glyphMode === 'hide') return null;
     if (glyphMode === 'custom' && props.glyphUrl) {
       return (
-        <img
+        <StoreImage
           src={props.glyphUrl}
           alt=""
           aria-hidden="true"
           width={size}
           height={size}
+          sizes={`${size}px`}
           style={{ width: size, height: size, objectFit: 'contain', opacity: 0.85 }}
         />
       );
@@ -86,7 +88,7 @@ export function HeroBlock({ block, ctx }: BlockRenderProps<HeroProps>) {
           ...(props.backgroundCssSize ? { backgroundSize: props.backgroundCssSize } : {}),
         }
       : {
-          backgroundImage: `linear-gradient(rgba(0,0,0,0.32), rgba(0,0,0,0.32)), url(${props.backgroundUrl})`,
+          backgroundImage: `linear-gradient(rgba(0,0,0,0.32), rgba(0,0,0,0.32)), url(${optimizedBackgroundUrl(props.backgroundUrl)})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         };

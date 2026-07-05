@@ -27,14 +27,36 @@ export type AppCategory =
  */
 export type AppAuthKind = 'oauth' | 'api_key' | 'none';
 
+/**
+ * Service-business activity powered by the shared Activities engine
+ * (`src/lib/apps/activities`). All three render through one UI system
+ * but install separately:
+ *   - 'booking'   → salons / barbers / spa / clinic time-slot bookings
+ *   - 'fnb'       → cafe / F&B orders with a kitchen cooking board
+ *   - 'tailoring' → body-measurement capture saved to the buyer's name
+ */
+export type ActivityKind = 'booking' | 'fnb' | 'tailoring';
+
 export type AppDescriptor = {
   /** Stable id used as the URL slug + DB key. Never renamed. */
   id: string;
   name: string;
+  /** Arabic display name (falls back to `name` when unset). */
+  nameAr?: string;
   tagline: string;
+  /** Arabic tagline (falls back to `tagline`). */
+  taglineAr?: string;
   description: string;
+  /** Arabic description (falls back to `description`). */
+  descriptionAr?: string;
   category: AppCategory;
   authKind: AppAuthKind;
+  /** Monthly add-on price in QAR, billed on top of the merchant's
+   *  Souqna plan (not Souqy). Undefined for free / built-in apps. */
+  priceQar?: number;
+  /** When set, this app is powered by the shared Activities engine and
+   *  renders its buyer flow through the shared storefront UI shell. */
+  activityKind?: ActivityKind;
   /** When false, the marketplace tile shows "Coming soon" and the
    *  Install button is disabled. v1 ships two `available: true` apps
    *  (Currency Converter + Giphy); the rest are scaffolding. */

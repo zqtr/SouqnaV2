@@ -538,11 +538,8 @@ function AccountHomeHero({
           >
             <span
               style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10.5,
+                fontSize: 12,
                 fontWeight: 600,
-                letterSpacing: '0.16em',
-                textTransform: 'uppercase',
                 color: 'var(--ink-faint)',
               }}
             >
@@ -553,11 +550,8 @@ function AccountHomeHero({
               style={{
                 minWidth: 0,
                 color: 'var(--ink-faint)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10.5,
+                fontSize: 12,
                 fontWeight: 600,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
                 unicodeBidi: 'plaintext',
               }}
             >
@@ -859,7 +853,7 @@ function Dashboard5WebsiteAnalyticsCard({
                     key={signal.label}
                     className="rounded-lg border border-border/70 bg-muted/30 p-3"
                   >
-                    <dt className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                    <dt className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span className="grid size-7 shrink-0 place-items-center rounded-md border border-border bg-card text-foreground">
                         <Icon className="size-3.5" aria-hidden />
                       </span>
@@ -951,19 +945,19 @@ function Dashboard5OrderMixCard({
       label: labels.paidOrders,
       value: stats.paidOrders,
       icon: CheckCircle2,
-      accent: 'var(--dash-important)',
+      color: 'var(--dash-important)',
     },
     {
       label: labels.unpaid,
       value: stats.unpaidOrders,
       icon: AlertCircle,
-      accent: 'var(--dash-important)',
+      color: 'color-mix(in srgb, var(--dash-important) 50%, var(--muted-foreground))',
     },
     {
       label: labels.pending,
       value: stats.pendingOrders,
       icon: Clock3,
-      accent: 'var(--dash-black)',
+      color: 'var(--muted-foreground)',
     },
   ];
 
@@ -972,40 +966,41 @@ function Dashboard5OrderMixCard({
       <CardHeader className="border-b border-border/80 px-5 py-4">
         <div>
           <CardTitle className="text-base">{labels.checkoutSignal}</CardTitle>
-          <CardDescription className="mt-1">{labels.ofOrdersPaid}</CardDescription>
+          <CardDescription className="mt-1">{labels.checkoutStatusHint}</CardDescription>
         </div>
         <CardAction>
           <PaidShareRing paid={stats.paidOrders} total={stats.totalOrders} locale={locale} />
         </CardAction>
       </CardHeader>
-      <CardContent className="grid gap-4 px-5 pb-5 pt-4">
-        {rows.map((row) => {
-          const pct = stats.totalOrders > 0 ? (row.value / total) * 100 : 0;
-          const Icon = row.icon;
-          return (
-            <div key={row.label} className="grid gap-2">
-              <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex min-w-0 items-center gap-2 text-sm text-foreground">
-                  <span
-                    className="grid size-7 shrink-0 place-items-center rounded-md border"
-                    style={{
-                      borderColor: `color-mix(in srgb, ${row.accent} 28%, transparent)`,
-                      background: `color-mix(in srgb, ${row.accent} 12%, transparent)`,
-                    }}
-                  >
-                    <Icon className="size-3.5" aria-hidden />
-                  </span>
+      <CardContent className="grid gap-5 px-5 pb-5 pt-4">
+        <div className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-muted">
+          {rows.map((row) => (
+            <div
+              key={row.label}
+              style={{ width: `${(row.value / total) * 100}%`, background: row.color }}
+            />
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          {rows.map((row) => {
+            const pct = stats.totalOrders > 0 ? Math.round((row.value / total) * 100) : 0;
+            const Icon = row.icon;
+            return (
+              <div key={row.label} className="flex flex-col gap-1.5">
+                <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+                  <Icon className="size-4 shrink-0" style={{ color: row.color }} aria-hidden />
                   <span className="truncate">{row.label}</span>
-                </span>
-                <span className="font-mono text-sm font-semibold tabular-nums">{row.value}</span>
+                </div>
+                <div className="text-2xl font-semibold leading-none tabular-nums text-foreground">
+                  {formatNumber(row.value, locale)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {formatPercent(pct, locale)} {labels.ofOrdersPaid}
+                </div>
               </div>
-              <Progress
-                value={pct}
-                className="h-1.5 bg-muted [&>[data-slot=progress-indicator]]:bg-[var(--chart-primary)]"
-              />
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );
@@ -1086,7 +1081,7 @@ function Dashboard5SetupCard({
                   {locale === 'ar' ? item.arBody : item.body}
                 </span>
               </span>
-              <span className="rounded-full border border-border/80 px-2 py-1 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              <span className="rounded-full border border-border/80 px-2 py-1 text-[11px] font-medium capitalize text-muted-foreground">
                 {item.done ? labels.done : labels.open}
               </span>
             </Link>
@@ -1095,7 +1090,7 @@ function Dashboard5SetupCard({
         <div className="rounded-md border border-border/80 bg-muted/25 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              <p className="text-xs font-medium capitalize text-muted-foreground">
                 {nextItem ? labels.setupNext : labels.ready}
               </p>
               <p className="mt-2 text-sm font-medium">
@@ -1685,7 +1680,8 @@ const HOME_STRINGS = {
       `${n.toLocaleString('en-US')} paid ${n === 1 ? 'order' : 'orders'}`,
     pageViewsHint: 'page views in the same window',
     lastThirtyDays: '30d',
-    checkoutSignal: 'checkout',
+    checkoutSignal: 'Checkout',
+    checkoutStatusHint: 'Paid, unpaid, and pending orders',
     conversionTooltip: 'Orders divided by unique visitors over the last 30 days.',
     ordersFromVisitors: (orders: number, visits: number) =>
       `${orders.toLocaleString('en-US')} ${orders === 1 ? 'order' : 'orders'} from ${visits.toLocaleString('en-US')} ${visits === 1 ? 'visit' : 'visits'}`,
@@ -1803,6 +1799,7 @@ const HOME_STRINGS = {
     pageViewsHint: 'مشاهدات صفحة في نفس الفترة',
     lastThirtyDays: '30 يوم',
     checkoutSignal: 'الدفع',
+    checkoutStatusHint: 'مدفوعة، غير مدفوعة، ومعلّقة',
     conversionTooltip: 'الطلبات مقسومة على الزوار الفريدين خلال آخر 30 يوماً.',
     ordersFromVisitors: (orders: number, visits: number) =>
       `${orders.toLocaleString('en-US')} ${orders === 1 ? 'طلب' : 'طلبات'} من ${visits.toLocaleString('en-US')} زيارة`,

@@ -10,6 +10,7 @@ import {
 } from 'framer-motion';
 import { useRef, type CSSProperties, type MouseEvent } from 'react';
 import type { BlockRenderProps } from './BlockContext';
+import { optimizedBackgroundUrl } from '@/lib/image';
 import type { AnimatedImageProps } from '@/lib/blocks/types';
 
 /**
@@ -108,7 +109,7 @@ function ParallaxImage({
           position: 'absolute',
           inset: `-${range}px 0`,
           y: reduced ? 0 : y,
-          backgroundImage: `url(${src})`,
+          backgroundImage: `url(${optimizedBackgroundUrl(src)})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         }}
