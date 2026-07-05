@@ -305,6 +305,46 @@
 .scope:global(.sqna-fx .hover\:border-neutral-400:hover) { border-color: color-mix(in srgb, var(--sqna-ink) 35%, transparent); }
 .scope:global(.sqna-fx .group:hover .group-hover\:scale-105) { transform: scale(1.05); }
 
+/* --- Neutralize app-level `dark:` variants -------------------------------
+   These react-bits blocks ship Tailwind `dark:` classes. A storefront is a
+   FIXED merchant palette (never the shopper's OS theme), so a `dark:` variant
+   must never flip text to a light color on the light ground — that renders as
+   invisible text. The base utilities above already remap to the palette and
+   win over Tailwind via the unlayered-beats-@layer rule, but that precedence
+   is unreliable on older iOS Safari (cascade-layer bugs), so a leaked
+   `[data-theme='dark']` there can let Tailwind's layered `dark:text-white`
+   win → white heading on a cream section.
+
+   Fix: remap each `dark:` color variant to the palette here too, matching its
+   base counterpart so the block is identical in either theme, and winning by
+   SPECIFICITY (0,3,0) — not layer order — so it holds even where layers
+   misbehave. Attribute selectors cover the /opacity variants in one rule. */
+.scope:global(.sqna-fx [class*="dark:text-white"]),
+.scope:global(.sqna-fx [class*="dark:text-neutral-50"]),
+.scope:global(.sqna-fx [class*="dark:text-neutral-100"]),
+.scope:global(.sqna-fx [class*="dark:text-neutral-900"]),
+.scope:global(.sqna-fx [class*="dark:text-neutral-950"]) { color: var(--sqna-ink) !important; }
+
+.scope:global(.sqna-fx [class*="dark:text-black"]) { color: var(--sqna-bg) !important; }
+
+.scope:global(.sqna-fx [class*="dark:text-neutral-200"]),
+.scope:global(.sqna-fx [class*="dark:text-neutral-300"]),
+.scope:global(.sqna-fx [class*="dark:text-neutral-400"]),
+.scope:global(.sqna-fx [class*="dark:text-neutral-500"]),
+.scope:global(.sqna-fx [class*="dark:text-neutral-600"]) { color: var(--sqna-muted) !important; }
+
+.scope:global(.sqna-fx [class*="dark:bg-white"]) { background: var(--sqna-ink) !important; }
+
+.scope:global(.sqna-fx [class*="dark:bg-neutral-7"]),
+.scope:global(.sqna-fx [class*="dark:bg-neutral-8"]),
+.scope:global(.sqna-fx [class*="dark:bg-neutral-9"]),
+.scope:global(.sqna-fx [class*="dark:bg-black"]) { background: var(--sqna-bg) !important; }
+
+.scope:global(.sqna-fx [class*="dark:border-white"]),
+.scope:global(.sqna-fx [class*="dark:border-neutral-7"]),
+.scope:global(.sqna-fx [class*="dark:border-neutral-8"]),
+.scope:global(.sqna-fx [class*="dark:border-neutral-9"]) { border-color: var(--sqna-line) !important; }
+
 @media (min-width: 640px) {
   .scope:global(.sqna-fx) { padding: 40px 24px; }
   .scope:global(.sqna-fx .sm\:px-6) { padding-left: 24px; padding-right: 24px; }
