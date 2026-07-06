@@ -7,7 +7,6 @@ import { buildMetadata } from '@/lib/seo';
 import { templatePresets, sortedTemplateIdsForPicker } from '@/lib/templates';
 import { palettes } from '@/lib/palettes';
 import { TEMPLATE_IDS, type TemplateId } from '@/lib/brief';
-import { TEMPLATE_PREVIEW_BUSINESS } from '@/lib/templateDemo';
 import { TemplatePreviewFrame } from '@/components/templates/TemplatePreviewFrame';
 import Footer8 from '@/components/footer-8';
 
