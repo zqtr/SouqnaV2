@@ -16,6 +16,7 @@ import type {
   Showcase3Item,
   Showcase4Project,
   Showcase5Tab,
+  SocialProofReview,
   TabbedProductsConfig,
   TaqimBlockProps,
   TextEffect,
@@ -141,6 +142,9 @@ const BLOCK_CATEGORY: Record<
   depthShowcase: 'motion',
   auroraRibbon: 'motion',
   portalHero: 'motion',
+  shaderHero: 'motion',
+  productSpotlight3d: 'commerce',
+  socialProofWall: 'motion',
   curvedLoop: 'motion',
   showcase1: 'motion',
   showcase2: 'motion',
@@ -274,6 +278,9 @@ const TITLES: Record<Block['type'], string> = {
   depthShowcase: 'Depth showcase',
   auroraRibbon: 'Aurora ribbon',
   portalHero: 'Souqy Portal',
+  shaderHero: 'Shader hero',
+  productSpotlight3d: 'Product spotlight 3D',
+  socialProofWall: 'Social proof wall',
   curvedLoop: 'Curved loop',
   showcase1: 'Case switcher',
   showcase2: 'Image marquee',
@@ -1545,6 +1552,102 @@ function renderForm(
           >
             WebGL aurora strip. Use one short ribbon per page; heavy on mobile GPUs.
           </p>
+        </Section>
+      );
+    case 'shaderHero':
+      return (
+        <Section>
+          <Field label="Eyebrow">
+            <TextInput value={str(p.eyebrow)} onChange={(v) => set('eyebrow', v)} />
+          </Field>
+          <Field label="Title">
+            <TextInput value={str(p.title)} onChange={(v) => set('title', v)} />
+          </Field>
+          <Field label="Subtitle">
+            <TextArea value={str(p.subtitle)} onChange={(v) => set('subtitle', v)} rows={2} />
+          </Field>
+          <Field label="Tone">
+            <SegmentedControl
+              value={str(p.tone) || 'ink'}
+              onChange={(v) => set('tone', v)}
+              options={[
+                { value: 'cream', label: 'Cream' },
+                { value: 'ink', label: 'Ink' },
+                { value: 'gold', label: 'Gold' },
+              ]}
+            />
+          </Field>
+          <Field label="Layout">
+            <SegmentedControl
+              value={str(p.layout) || 'immersive'}
+              onChange={(v) => set('layout', v)}
+              options={[
+                { value: 'compact', label: 'Compact' },
+                { value: 'immersive', label: 'Immersive' },
+              ]}
+            />
+          </Field>
+        </Section>
+      );
+    case 'productSpotlight3d':
+      return (
+        <Section>
+          <Field label="Eyebrow">
+            <TextInput value={str(p.eyebrow)} onChange={(v) => set('eyebrow', v)} />
+          </Field>
+          <Field label="Title">
+            <TextInput value={str(p.title)} onChange={(v) => set('title', v)} />
+          </Field>
+          <Field label="Subtitle">
+            <TextArea value={str(p.subtitle)} onChange={(v) => set('subtitle', v)} rows={2} />
+          </Field>
+          <Field label="Category filter">
+            <TextInput
+              value={str(p.category)}
+              onChange={(v) => set('category', v)}
+              placeholder="e.g. featured"
+            />
+          </Field>
+          <Field label="How many">
+            <NumberInput min={1} step={1} value={num(p.limit)} onChange={(v) => set('limit', v)} placeholder="3" />
+          </Field>
+          <Field label="Tilt strength">
+            <SegmentedControl
+              value={str(p.intensity) || 'medium'}
+              onChange={(v) => set('intensity', v)}
+              options={[
+                { value: 'subtle', label: 'Subtle' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'strong', label: 'Strong' },
+              ]}
+            />
+          </Field>
+        </Section>
+      );
+    case 'socialProofWall':
+      return (
+        <Section>
+          <Field label="Eyebrow">
+            <TextInput value={str(p.eyebrow)} onChange={(v) => set('eyebrow', v)} />
+          </Field>
+          <Field label="Title">
+            <TextInput value={str(p.title)} onChange={(v) => set('title', v)} />
+          </Field>
+          <Field label="Speed">
+            <SegmentedControl
+              value={str(p.speed) || 'medium'}
+              onChange={(v) => set('speed', v)}
+              options={[
+                { value: 'slow', label: 'Slow' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'fast', label: 'Fast' },
+              ]}
+            />
+          </Field>
+          <SocialProofReviewsEditor
+            items={(p.reviews as SocialProofReview[]) ?? []}
+            onChange={(reviews) => set('reviews', reviews)}
+          />
         </Section>
       );
     case 'curvedLoop':
@@ -3646,6 +3749,85 @@ function GalleryEditor({
       >
         + Add image
       </button>
+    </Section>
+  );
+}
+
+/**
+ * Review list editor for the social proof wall. Each review pairs the
+ * English quote/author with optional Arabic variants (edited RTL) so a
+ * bilingual storefront never shows a half-translated marquee. Capped at
+ * the schema's 24-review limit.
+ */
+function SocialProofReviewsEditor({
+  items,
+  onChange,
+}: {
+  items: SocialProofReview[];
+  onChange: (next: SocialProofReview[]) => void;
+}) {
+  const update = (idx: number, patch: Partial<SocialProofReview>) =>
+    onChange(items.map((item, i) => (i === idx ? { ...item, ...patch } : item)));
+  const remove = (idx: number) => onChange(items.filter((_, i) => i !== idx));
+  const add = () => onChange([...items, { quote: '', author: '' }]);
+
+  return (
+    <Section label="Reviews">
+      <div style={{ display: 'grid', gap: 10 }}>
+        {items.map((item, idx) => (
+          <div
+            key={idx}
+            style={{
+              border: '1px solid var(--bld-divider)',
+              padding: 10,
+              borderRadius: 4,
+              display: 'grid',
+              gap: 8,
+            }}
+          >
+            <Field label="Quote">
+              <TextArea value={item.quote} onChange={(v) => update(idx, { quote: v })} rows={2} />
+            </Field>
+            <TextInput
+              value={item.author}
+              onChange={(v) => update(idx, { author: v })}
+              placeholder="Author"
+            />
+            <TextInput
+              value={item.role ?? ''}
+              onChange={(v) => update(idx, { role: v })}
+              placeholder="Role or city (optional)"
+            />
+            <Field label="Arabic (optional)">
+              <div dir="rtl" style={{ display: 'grid', gap: 8 }}>
+                <TextArea
+                  value={item.quoteAr ?? ''}
+                  onChange={(v) => update(idx, { quoteAr: v })}
+                  rows={2}
+                />
+                <TextInput
+                  value={item.authorAr ?? ''}
+                  onChange={(v) => update(idx, { authorAr: v })}
+                  placeholder="الاسم"
+                />
+                <TextInput
+                  value={item.roleAr ?? ''}
+                  onChange={(v) => update(idx, { roleAr: v })}
+                  placeholder="المدينة أو الصفة"
+                />
+              </div>
+            </Field>
+            <button type="button" onClick={() => remove(idx)} style={inlineGhostBtn()}>
+              Remove
+            </button>
+          </div>
+        ))}
+        {items.length < 24 ? (
+          <button type="button" onClick={add} style={inlineGhostBtn()}>
+            + Add review
+          </button>
+        ) : null}
+      </div>
     </Section>
   );
 }

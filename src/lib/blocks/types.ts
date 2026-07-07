@@ -112,6 +112,12 @@ export const BLOCK_TYPES = [
   'shadcnOfferModal',
   /** Souqna Pro+/Max+ ecommerce footer family. */
   'shadcnFooter',
+  /** Max+ shader hero — React Bits Pro SilkWaves behind an editorial hero. */
+  'shaderHero',
+  /** Pro+ product row with pointer-driven 3D tilt, wired to live products. */
+  'productSpotlight3d',
+  /** Pro+ animated, hover-pausing marquee of bilingual customer reviews. */
+  'socialProofWall',
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
@@ -1195,6 +1201,48 @@ export type PortalHeroProps = {
   brightness?: number;
 };
 
+export type ShaderHeroProps = {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  cta?: Cta;
+  /** Compact = editorial band; immersive fills more of the first viewport. */
+  layout?: 'compact' | 'immersive';
+  /** Souqna-owned colourway. Avoids arbitrary neon in generated storefronts. */
+  tone?: 'cream' | 'ink' | 'gold';
+};
+
+export type ProductSpotlight3dProps = {
+  eyebrow?: string;
+  title?: string;
+  subtitle?: string;
+  /** Legacy free-text category filter. */
+  category?: string;
+  /** Stable category handle; resolved against the categories context. */
+  categorySlug?: string;
+  /** How many products to spotlight. */
+  limit?: number;
+  /** Tilt + lift strength. */
+  intensity?: 'subtle' | 'medium' | 'strong';
+};
+
+export type SocialProofReview = {
+  quote: string;
+  author: string;
+  role?: string;
+  quoteAr?: string;
+  authorAr?: string;
+  roleAr?: string;
+};
+
+export type SocialProofWallProps = {
+  eyebrow?: string;
+  title?: string;
+  reviews: SocialProofReview[];
+  /** Marquee speed. */
+  speed?: 'slow' | 'medium' | 'fast';
+};
+
 export type CurvedLoopProps = {
   /** Text rendered repeatedly along the animated curve. */
   marqueeText: string;
@@ -1279,6 +1327,9 @@ export type BlockPropsByType = {
   shadcnOrderSummary: ShadcnOrderSummaryProps;
   shadcnOfferModal: ShadcnOfferModalProps;
   shadcnFooter: ShadcnFooterProps;
+  shaderHero: ShaderHeroProps;
+  productSpotlight3d: ProductSpotlight3dProps;
+  socialProofWall: SocialProofWallProps;
 };
 
 /**

@@ -6652,6 +6652,67 @@ function createBlock(
           cta: { label: 'Explore products', href: '/products' },
         },
       };
+    case 'shaderHero':
+      return {
+        id,
+        type,
+        props: {
+          eyebrow: 'Premium opener',
+          title: 'A storefront that opens with a signature moment.',
+          subtitle: 'A living gradient sets the tone, then product and service sections do the selling.',
+          layout: 'immersive',
+          tone: 'ink',
+          cta: { label: 'Explore products', href: '/products' },
+        },
+      };
+    case 'productSpotlight3d':
+      return {
+        id,
+        type,
+        props: {
+          eyebrow: 'Featured',
+          title: 'Spotlight the hero products.',
+          subtitle: 'Cards react to the pointer with a premium tilt, pulled live from your catalogue.',
+          limit: 3,
+          intensity: 'medium',
+        },
+      };
+    case 'socialProofWall':
+      return {
+        id,
+        type,
+        props: {
+          eyebrow: 'Loved by shoppers',
+          title: 'What buyers say.',
+          speed: 'medium',
+          reviews: [
+            {
+              quote: 'Beautiful store and the checkout was effortless. Delivery landed a day early.',
+              author: 'Noora A.',
+              role: 'Doha',
+              quoteAr: 'متجر جميل والدفع كان سهل جداً. التوصيل وصل قبل الموعد بيوم.',
+              authorAr: 'نورة أ.',
+              roleAr: 'الدوحة',
+            },
+            {
+              quote: 'The quality is exactly as pictured. Already ordered twice this month.',
+              author: 'Khalid M.',
+              role: 'Repeat buyer',
+              quoteAr: 'الجودة مطابقة للصور تماماً. طلبت مرتين هالشهر.',
+              authorAr: 'خالد م.',
+              roleAr: 'عميل دائم',
+            },
+            {
+              quote: 'Bilingual, fast, and the support replied on WhatsApp within minutes.',
+              author: 'Sara H.',
+              role: 'Al Rayyan',
+              quoteAr: 'ثنائي اللغة وسريع، والدعم رد على واتساب خلال دقائق.',
+              authorAr: 'سارة هـ.',
+              roleAr: 'الريان',
+            },
+          ],
+        },
+      };
     case 'curvedLoop':
       return {
         id,

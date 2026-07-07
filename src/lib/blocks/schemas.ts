@@ -546,6 +546,49 @@ const portalHeroProps = z
   })
   .strict();
 
+const shaderHeroProps = z
+  .object({
+    eyebrow: z.string().trim().max(80).optional(),
+    title: z.string().trim().min(1).max(200),
+    subtitle: z.string().trim().max(420).optional(),
+    cta: ctaSchema.optional(),
+    layout: z.enum(['compact', 'immersive']).optional(),
+    tone: z.enum(['cream', 'ink', 'gold']).optional(),
+  })
+  .strict();
+
+const productSpotlight3dProps = z
+  .object({
+    eyebrow: z.string().trim().max(80).optional(),
+    title: z.string().trim().max(200).optional(),
+    subtitle: z.string().trim().max(400).optional(),
+    category: z.string().trim().max(120).optional(),
+    categorySlug: z.string().trim().max(120).optional(),
+    limit: z.number().int().min(1).max(12).optional(),
+    intensity: z.enum(['subtle', 'medium', 'strong']).optional(),
+  })
+  .strict();
+
+const socialProofReview = z
+  .object({
+    quote: z.string().trim().min(1).max(400),
+    author: z.string().trim().min(1).max(120),
+    role: z.string().trim().max(120).optional(),
+    quoteAr: z.string().trim().max(400).optional(),
+    authorAr: z.string().trim().max(120).optional(),
+    roleAr: z.string().trim().max(120).optional(),
+  })
+  .strict();
+
+const socialProofWallProps = z
+  .object({
+    eyebrow: z.string().trim().max(80).optional(),
+    title: z.string().trim().max(200).optional(),
+    reviews: z.array(socialProofReview).max(24).default([]),
+    speed: z.enum(['slow', 'medium', 'fast']).optional(),
+  })
+  .strict();
+
 const curvedLoopProps = z
   .object({
     marqueeText: z.string().trim().min(1).max(260).default('Add Text Here'),
@@ -1005,6 +1048,9 @@ export const blockPropsByType = {
   depthShowcase: depthShowcaseProps,
   auroraRibbon: auroraRibbonProps,
   portalHero: portalHeroProps,
+  shaderHero: shaderHeroProps,
+  productSpotlight3d: productSpotlight3dProps,
+  socialProofWall: socialProofWallProps,
   curvedLoop: curvedLoopProps,
   showcase1: showcase1Props,
   showcase2: showcase2Props,
@@ -1089,6 +1135,21 @@ export const blockSchema = z.discriminatedUnion('type', [
     ...baseBlock,
     type: z.literal('portalHero'),
     props: portalHeroProps,
+  }),
+  z.object({
+    ...baseBlock,
+    type: z.literal('shaderHero'),
+    props: shaderHeroProps,
+  }),
+  z.object({
+    ...baseBlock,
+    type: z.literal('productSpotlight3d'),
+    props: productSpotlight3dProps,
+  }),
+  z.object({
+    ...baseBlock,
+    type: z.literal('socialProofWall'),
+    props: socialProofWallProps,
   }),
   z.object({
     ...baseBlock,

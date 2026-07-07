@@ -116,6 +116,16 @@ export const COMPONENT_LIBRARY_GROUPS: ComponentLibraryGroup[] = [
           ar: 'تذييل تجاري بروابط المتجر والسياسات ودعم واتساب عند إعداد رقم المتجر.',
         },
       },
+      {
+        type: 'shaderHero',
+        label: 'Shader hero',
+        hint: 'WebGL silk gradient · one per page',
+        tier: 'atelier',
+        description: {
+          en: 'A Max+ opening hero with a living WebGL gradient behind editorial copy and a strong CTA. Lazy-mounts and falls back gracefully on mobile.',
+          ar: 'واجهة افتتاحية لباقة ماكس+ بخلفية متدرجة متحركة (WebGL) خلف نص تحريري وزر واضح. تُحمّل عند الحاجة وتتحول لبديل مناسب على الجوال.',
+        },
+      },
     ],
   },
   {
@@ -346,6 +356,16 @@ export const COMPONENT_LIBRARY_GROUPS: ComponentLibraryGroup[] = [
           ar: 'أجندة بتواريخ للدروس والفعاليات المؤقتة والإصدارات والجلسات القابلة للحجز والورش والتوفر الزمني.',
         },
       },
+      {
+        type: 'productSpotlight3d',
+        label: 'Product spotlight 3D',
+        hint: 'Pointer-tilt cards · live products',
+        tier: 'pro',
+        description: {
+          en: 'A premium product row whose cards tilt and lift toward the pointer, pulled live from your catalogue by category.',
+          ar: 'صف منتجات مميز تميل بطاقاته وترتفع باتجاه المؤشر، مسحوبة مباشرة من كتالوجك حسب التصنيف.',
+        },
+      },
     ],
   },
   {
@@ -487,6 +507,16 @@ export const COMPONENT_LIBRARY_GROUPS: ComponentLibraryGroup[] = [
         description: {
           en: 'A curved text marquee for premium campaign lines, product suite statements, and moving editorial separators.',
           ar: 'شريط نصي منحني لعبارات الحملات الفاخرة ورسائل حزم المنتجات والفواصل التحريرية المتحركة.',
+        },
+      },
+      {
+        type: 'socialProofWall',
+        label: 'Social proof wall',
+        hint: 'Hover-pausing review marquee',
+        tier: 'pro',
+        description: {
+          en: 'A seamless, hover-pausing marquee of bilingual customer reviews with star ratings — instant trust before the sale.',
+          ar: 'شريط متحرك متواصل يتوقف عند المرور يعرض آراء العملاء ثنائية اللغة مع تقييم بالنجوم — ثقة فورية قبل الشراء.',
         },
       },
       {

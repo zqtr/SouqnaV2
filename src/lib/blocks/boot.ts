@@ -1528,6 +1528,19 @@ function seedFrame(s: Storefront): Block[] {
   return [
     {
       id: randomUUID(),
+      type: 'shaderHero',
+      props: {
+        eyebrow: seed.eyebrow,
+        title: seed.title,
+        subtitle: seed.tagline,
+        layout: 'immersive',
+        tone: 'ink',
+        cta: { label: seed.ctaLabel, href: '/products' },
+      },
+      style: { paddingY: 'none' },
+    },
+    {
+      id: randomUUID(),
       type: 'animatedImage',
       props: {
         imageUrl: ORYX_ANIM,
@@ -1615,6 +1628,55 @@ function seedFrame(s: Storefront): Block[] {
         showInquire: true,
       },
       style: { paddingY: 'md' },
+    },
+    {
+      id: randomUUID(),
+      type: 'productSpotlight3d',
+      props: {
+        eyebrow: 'featured work',
+        title: seed.inquiryTitle,
+        subtitle: seed.tagline,
+        categorySlug: seed.primaryCategory,
+        limit: 3,
+        intensity: 'strong',
+      },
+      style: { paddingY: 'lg' },
+    },
+    {
+      id: randomUUID(),
+      type: 'socialProofWall',
+      props: {
+        eyebrow: 'collectors',
+        title: 'Trusted by buyers across Qatar.',
+        speed: 'medium',
+        reviews: [
+          {
+            quote: 'The print quality and framing were museum-grade. Shipping was quick and careful.',
+            author: 'Noora A.',
+            role: 'Doha',
+            quoteAr: 'جودة الطباعة والتأطير على مستوى المتاحف. الشحن كان سريع وبعناية.',
+            authorAr: 'نورة أ.',
+            roleAr: 'الدوحة',
+          },
+          {
+            quote: 'Commissioned a custom piece — the process was clear and the result stunning.',
+            author: 'Khalid M.',
+            role: 'Collector',
+            quoteAr: 'طلبت عمل مخصص — كانت العملية واضحة والنتيجة مذهلة.',
+            authorAr: 'خالد م.',
+            roleAr: 'مقتني',
+          },
+          {
+            quote: 'Bilingual store, easy checkout, and support replied on WhatsApp in minutes.',
+            author: 'Sara H.',
+            role: 'Al Rayyan',
+            quoteAr: 'متجر ثنائي اللغة، دفع سهل، والدعم رد على واتساب خلال دقائق.',
+            authorAr: 'سارة هـ.',
+            roleAr: 'الريان',
+          },
+        ],
+      },
+      style: { paddingY: 'lg' },
     },
     {
       id: randomUUID(),

@@ -29,6 +29,9 @@ import { TaqimBlock as RawTaqimBlock } from './blocks/TaqimBlock';
 import { DepthShowcaseBlock } from './blocks/DepthShowcaseBlock';
 import { AuroraRibbonBlock } from './blocks/AuroraRibbonBlock';
 import { PortalHeroBlock } from './blocks/PortalHeroBlock';
+import { ShaderHeroBlock } from './blocks/ShaderHeroBlock';
+import { ProductSpotlight3dBlock } from './blocks/ProductSpotlight3dBlock';
+import { SocialProofWallBlock } from './blocks/SocialProofWallBlock';
 import { CurvedLoopBlock } from './blocks/CurvedLoopBlock';
 import {
   Showcase1Block,
@@ -301,6 +304,12 @@ function renderBlock(block: Block, ctx: BlockContext): React.ReactNode {
       return <AuroraRibbonBlock block={block as never} ctx={ctx} />;
     case 'portalHero':
       return <PortalHeroBlock block={block as never} ctx={ctx} />;
+    case 'shaderHero':
+      return <ShaderHeroBlock block={block as never} ctx={ctx} />;
+    case 'productSpotlight3d':
+      return <ProductSpotlight3dBlock block={block as never} ctx={ctx} />;
+    case 'socialProofWall':
+      return <SocialProofWallBlock block={block as never} ctx={ctx} />;
     case 'curvedLoop':
       return <CurvedLoopBlock block={block as never} ctx={ctx} />;
     case 'showcase1':
