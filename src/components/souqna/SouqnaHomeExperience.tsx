@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SignedIn, SignedOut } from '@clerk/nextjs';
 import {
   siApplepay,
@@ -526,11 +526,12 @@ export function SouqnaHomeExperience({ locale }: Props) {
         </section>
 
         <section id="process" className="sq-section sq-process">
-          <div className="sq-section-head">
-            <div>
-              <h2>{c.processTitle as string}</h2>
-            </div>
-          </div>
+          <ParallaxScene tone="process" />
+          <ProcessStoryBand
+            locale={locale}
+            eyebrow={c.processEyebrow as string}
+            title={c.processTitle as string}
+          />
           <div className="sq-process-grid">
             {phases[locale].map(([n, title, body, tag]) => (
               <article key={n}>
@@ -546,6 +547,7 @@ export function SouqnaHomeExperience({ locale }: Props) {
         </section>
 
         <section id="atelier" className="sq-section sq-atelier">
+          <ParallaxScene tone="atelier" />
           <div className="sq-atelier-mark" aria-hidden>
             <ArchMark large />
           </div>
@@ -592,6 +594,165 @@ export function SouqnaHomeExperience({ locale }: Props) {
         </section>
         <Footer8 locale={locale} />
       </main>
+    </div>
+  );
+}
+
+/** Deterministic per-letter depth cycle for the story band headline. */
+const STORY_LETTER_DEPTHS = [1.15, 0.85, 1.4, 0.95, 1.3, 1.05, 1.5];
+
+/**
+ * Scroll-driven parallax opener for the "How Souqna works" section: the
+ * rooftop-souq scene drifts slowly while the brand word's letters each
+ * move at their own depth — assembling as the band centers, scattering
+ * as it leaves. Arabic keeps «سوقنا» whole (cursive shaping breaks if
+ * split), so it parallaxes as one layer there. Static under
+ * reduced-motion; the real section title stays a plain <h2> for
+ * semantics and anchor nav.
+ */
+function ProcessStoryBand({
+  locale,
+  eyebrow,
+  title,
+}: {
+  locale: Locale;
+  eyebrow: string;
+  title: string;
+}) {
+  const isAr = locale === 'ar';
+  const word = isAr ? 'سوقنا' : 'Souqna';
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const layers = Array.from(root.querySelectorAll<HTMLElement>('[data-pxs]'));
+    if (layers.length === 0) return;
+    const depths = layers.map((el) => Number(el.dataset.pxs) || 0);
+
+    let ticking = false;
+    const paint = () => {
+      ticking = false;
+      const vh = window.innerHeight;
+      const rect = root.getBoundingClientRect();
+      if (rect.bottom < -vh * 0.5 || rect.top > vh * 1.5) return;
+      const progress = (rect.top + rect.height / 2 - vh / 2) / vh;
+      const range = window.innerWidth < 640 ? 70 : 120;
+      for (let i = 0; i < layers.length; i++) {
+        const layer = layers[i];
+        if (!layer) continue;
+        layer.style.transform = `translate3d(0, ${(progress * (depths[i] ?? 0) * range).toFixed(1)}px, 0)`;
+      }
+    };
+    const onScroll = () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(paint);
+      }
+    };
+
+    paint();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
+  return (
+    <div ref={ref} className="sq-process-band">
+      <div className="sq-process-band-img" data-pxs="0.12" aria-hidden />
+      <div className="sq-process-band-veil" aria-hidden />
+      <p className="sq-process-band-eyebrow" data-pxs="0.85">
+        {eyebrow}
+      </p>
+      <div className="sq-process-band-word" aria-hidden>
+        {isAr ? (
+          <span data-pxs="1.25">{word}</span>
+        ) : (
+          Array.from(word).map((ch, i) => (
+            <span key={i} data-pxs={STORY_LETTER_DEPTHS[i % STORY_LETTER_DEPTHS.length]}>
+              {ch}
+            </span>
+          ))
+        )}
+      </div>
+      <h2 className="sq-process-band-title" data-pxs="1.05">
+        {title}
+      </h2>
+    </div>
+  );
+}
+
+/**
+ * Scroll-parallax scene behind #process and #atelier, in the hero
+ * film's visual language: amber dot-terrain, faint bokeh sky, and one
+ * hero object per section (draped abaya + gold pin / code terminal).
+ * Sky, terrain, pin, and terminal are glow-on-black plates composited
+ * with mix-blend-mode: screen — black disappears, so there are no
+ * cutout edges; only the abaya is a true alpha cutout. Layer depths
+ * ride data-pxs like ProcessStoryBand; under reduced-motion the JS
+ * never attaches and the scene stays a static still. Decorative only
+ * (aria-hidden) — copy stays legible by composition (objects oppose
+ * the text, terrain hugs the bottom), not by a darkening veil.
+ */
+function ParallaxScene({ tone }: { tone: 'process' | 'atelier' }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const layers = Array.from(root.querySelectorAll<HTMLElement>('[data-pxs]'));
+    if (layers.length === 0) return;
+    const depths = layers.map((el) => Number(el.dataset.pxs) || 0);
+
+    let ticking = false;
+    const paint = () => {
+      ticking = false;
+      const vh = window.innerHeight;
+      const rect = root.getBoundingClientRect();
+      if (rect.bottom < -vh * 0.6 || rect.top > vh * 1.6) return;
+      const progress = (rect.top + rect.height / 2 - vh / 2) / vh;
+      const range = window.innerWidth < 640 ? 56 : 100;
+      for (let i = 0; i < layers.length; i++) {
+        const layer = layers[i];
+        if (!layer) continue;
+        layer.style.transform = `translate3d(0, ${(progress * (depths[i] ?? 0) * range).toFixed(1)}px, 0)`;
+      }
+    };
+    const onScroll = () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(paint);
+      }
+    };
+
+    paint();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
+  return (
+    <div ref={ref} className={`sq-px sq-px-${tone}`} aria-hidden>
+      <div className="sq-px-sky" data-pxs="0.08" />
+      <div className="sq-px-terrain" data-pxs="0.3" />
+      {tone === 'process' ? (
+        <>
+          <div className="sq-px-pin" data-pxs="0.45" />
+          <div className="sq-px-abaya" data-pxs="0.55" />
+        </>
+      ) : (
+        <div className="sq-px-terminal" data-pxs="0.55" />
+      )}
     </div>
   );
 }
@@ -1908,9 +2069,24 @@ const homeStyles = `
     font-size: 12px;
   }
 
+  /* ─── Parallax scene sections ─────────────────────────────────────
+     #process and #atelier ride the amber dot-terrain scene, so both
+     lock to a fixed near-black ground with light cream text in BOTH
+     themes (the scene is a "photograph": it must not flip). Gold
+     accents warm up to match the amber plates. */
+  .sq-process,
+  .sq-atelier {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    background: #0D0B08;
+    --sq-gold: #E7C583;
+    --sq-gold-deep: #E7C583;
+  }
+
   .sq-process {
-    background: var(--sq-invert-bg);
-    color: var(--sq-invert-ink);
+    color: #F4EEE1;
+    --sq-invert-ink: #F4EEE1;
   }
 
   .sq-process .sq-muted,
@@ -1918,19 +2094,231 @@ const homeStyles = `
     color: var(--sq-gold);
   }
 
+  /* Scene container: full-bleed under the content. The :not(.sq-px)
+     guard lifts real content above it without touching the scene. */
+  .sq-process > :not(.sq-px),
+  .sq-atelier > :not(.sq-px) {
+    position: relative;
+    z-index: 1;
+  }
+
+  .sq-home .sq-px {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    max-width: none;
+    margin: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .sq-px-sky,
+  .sq-px-terrain,
+  .sq-px-pin,
+  .sq-px-abaya,
+  .sq-px-terminal {
+    position: absolute;
+    background-repeat: no-repeat;
+    will-change: transform;
+  }
+
+  .sq-px-sky {
+    inset: -6% 0;
+    background: url('/brand/px-amber-sky.webp') center / cover no-repeat;
+    mix-blend-mode: screen;
+    opacity: 0.9;
+  }
+
+  .sq-px-terrain {
+    inset: auto -3% -8% -3%;
+    height: 64%;
+    background: url('/brand/px-amber-terrain.webp') center bottom / cover no-repeat;
+    mix-blend-mode: screen;
+    -webkit-mask-image: radial-gradient(115% 105% at 50% 100%, #000 52%, transparent 97%);
+    mask-image: radial-gradient(115% 105% at 50% 100%, #000 52%, transparent 97%);
+  }
+
+  /* Flip via the standalone scale property — the parallax handler
+     owns transform, so a transform: scaleX(-1) would be clobbered
+     on the first painted frame. */
+  .sq-px-atelier .sq-px-sky,
+  .sq-px-atelier .sq-px-terrain {
+    scale: -1 1;
+  }
+
+  .sq-px-abaya {
+    right: 5%;
+    bottom: 14%;
+    width: min(30%, 380px);
+    aspect-ratio: 1;
+    background: url('/brand/px-abaya.webp') center / contain no-repeat;
+    filter: drop-shadow(0 30px 60px rgba(0, 0, 0, 0.55));
+  }
+
+  .sq-px-pin {
+    right: 2.5%;
+    bottom: 38%;
+    width: min(11%, 140px);
+    aspect-ratio: 550 / 820;
+    background: url('/brand/px-pin.webp') center / contain no-repeat;
+    mix-blend-mode: screen;
+  }
+
+  .sq-px-terminal {
+    left: 3%;
+    bottom: 8%;
+    width: min(36%, 430px);
+    aspect-ratio: 1;
+    background: url('/brand/px-terminal.webp') center / contain no-repeat;
+    mix-blend-mode: screen;
+  }
+
+  .sq-home[dir='rtl'] .sq-px-abaya {
+    right: auto;
+    left: 5%;
+  }
+
+  .sq-home[dir='rtl'] .sq-px-pin {
+    right: auto;
+    left: 2.5%;
+  }
+
+  .sq-home[dir='rtl'] .sq-px-terminal {
+    left: auto;
+    right: 3%;
+  }
+
+  @media (max-width: 640px) {
+    .sq-px-abaya {
+      right: 2%;
+      top: 3%;
+      bottom: auto;
+      width: 52%;
+    }
+    .sq-px-pin {
+      right: 3%;
+      top: 1.5%;
+      bottom: auto;
+      width: 21%;
+    }
+    .sq-px-terminal {
+      left: auto;
+      right: -6%;
+      bottom: 44%;
+      width: 58%;
+    }
+    .sq-home[dir='rtl'] .sq-px-abaya {
+      left: 2%;
+      right: auto;
+    }
+    .sq-home[dir='rtl'] .sq-px-pin {
+      left: 3%;
+      right: auto;
+    }
+    .sq-home[dir='rtl'] .sq-px-terminal {
+      right: auto;
+      left: -6%;
+    }
+  }
+
+  /* Parallax story band — fixed ink/cream palette in both themes: it
+     sits on a photograph, not the page ground. */
+  .sq-process-band {
+    position: relative;
+    overflow: hidden;
+    max-width: 1400px;
+    margin: 0 auto var(--sq-section-gap);
+    min-height: min(640px, 78vh);
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    text-align: center;
+    gap: clamp(12px, 2vw, 20px);
+    padding: clamp(48px, 8vw, 96px) clamp(20px, 4vw, 56px);
+    border-radius: 10px;
+    isolation: isolate;
+  }
+
+  /* The band floats directly on the section's parallax scene now, so
+     its own photo and veil are gone. Kept as transparent layers: the
+     img is still a registered no-op target for the band's scroll
+     handler, and the veil slot stays for future contrast needs. */
+  .sq-process-band-img {
+    position: absolute;
+    inset: -14% 0;
+    z-index: -2;
+    background: transparent;
+    will-change: transform;
+  }
+
+  .sq-process-band-veil {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: none;
+  }
+
+  .sq-process-band-eyebrow {
+    margin: 0;
+    color: rgba(232, 220, 196, 0.82);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    will-change: transform;
+  }
+
+  .sq-process-band-word {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    column-gap: 0.04em;
+    color: #f7f7f3;
+    font-size: clamp(64px, 11vw, 150px);
+    font-weight: 300;
+    line-height: 1;
+    text-shadow: 0 4px 40px rgba(10, 10, 10, 0.45);
+  }
+
+  .sq-process-band-word span {
+    display: inline-block;
+    will-change: transform;
+  }
+
+  .sq-home[dir='rtl'] .sq-process-band-word {
+    font-family: var(--font-arabic-serif);
+    font-weight: 700;
+  }
+
+  .sq-process-band .sq-process-band-title {
+    max-width: 30ch;
+    margin: 0;
+    color: rgba(247, 247, 243, 0.9);
+    font-size: clamp(17px, 2.2vw, 24px);
+    font-weight: 400;
+    line-height: 1.45;
+    text-wrap: balance;
+    will-change: transform;
+  }
+
   .sq-process-grid {
     max-width: 1400px;
     margin: 0 auto;
-    border-top: 1px solid color-mix(in srgb, var(--sq-invert-ink) 30%, transparent);
+    display: grid;
+    gap: 12px;
   }
 
+  /* Phase rows become quiet glass panels so they stay readable over
+     the glowing terrain the section bottom rides on. */
   .sq-process-grid article {
     display: grid;
     grid-template-columns: 60px 1fr 88px;
     gap: clamp(18px, 3vw, 26px);
-    padding: clamp(22px, 2.8vw, 26px) 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--sq-invert-ink) 20%, transparent);
+    padding: clamp(18px, 2.4vw, 24px) clamp(16px, 2vw, 24px);
     align-items: start;
+    background: rgba(13, 11, 8, 0.66);
+    border: 1px solid rgba(244, 238, 225, 0.13);
+    border-radius: 12px;
   }
 
   .sq-process-grid p,
@@ -1939,14 +2327,16 @@ const homeStyles = `
   }
 
   .sq-atelier {
-    position: relative;
-    overflow: hidden;
-    background: var(--sq-maroon);
-    color: var(--sq-bg);
+    /* Repaint the section's --sq-bg token so every rule that paints
+       text with var(--sq-bg) (h2, body copy, grid) lands on the scene's
+       fixed cream — in both themes. Ground comes from the shared
+       .sq-process/.sq-atelier scene block above. */
+    --sq-bg: #F4EEE1;
+    color: #F4EEE1;
     padding-block: clamp(40px, 5vw, 72px);
   }
 
-  .sq-atelier > * {
+  .sq-atelier > :not(.sq-px) {
     position: relative;
     z-index: 1;
     max-width: 1400px;
@@ -1984,10 +2374,17 @@ const homeStyles = `
   .sq-atelier-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: clamp(22px, 3vw, 30px);
+    gap: clamp(14px, 2vw, 20px);
     margin-top: clamp(26px, 3.2vw, 34px);
-    padding-top: clamp(18px, 2.4vw, 24px);
-    border-top: 1px solid color-mix(in srgb, var(--sq-bg) 36%, transparent);
+  }
+
+  /* Same glass treatment as the process phase rows: readable over the
+     glowing terrain without a section-wide veil. */
+  .sq-atelier-grid article {
+    background: rgba(13, 11, 8, 0.66);
+    border: 1px solid rgba(244, 238, 225, 0.13);
+    border-radius: 12px;
+    padding: clamp(16px, 2vw, 22px);
   }
 
   .sq-atelier-grid small {
