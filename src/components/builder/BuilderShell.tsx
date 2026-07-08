@@ -56,6 +56,12 @@ import { pollStorefrontDomain } from '@/app/actions/notifications';
 import { souqyEditBlock } from '@/app/actions/souqy';
 import { BlockInspector, type ProductOption } from './BlockInspector';
 import { SiteInspector } from './SiteInspector';
+import {
+  EditorModeProvider,
+  EditorModeToggle,
+  type EditorMode,
+} from './EditorModeContext';
+import { SetupChecklist, type ChecklistStep } from './SetupChecklist';
 import { SelectionToolbar, type SouqyEditResult } from './SelectionToolbar';
 import { BuilderOrientationHint } from './BuilderOrientationHint';
 import { OnboardingTour } from './OnboardingTour';
@@ -3155,6 +3161,27 @@ function BuilderShellInner({
   // page-wide site theme. Selecting any block snaps back to 'block' so
   // founders never have to remember to flip back.
   const [inspectorMode, setInspectorMode] = useState<'block' | 'site'>('block');
+  // Editor complexity: 'simple' (default) trims the inspectors down to
+  // the essentials; 'advanced' restores the full historical surface.
+  // Persisted per-browser so a founder's preference sticks across
+  // sessions. Read lazily to avoid a hydration flash of the wrong state.
+  const [editorMode, setEditorMode] = useState<EditorMode>('simple');
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('souqna:builder:editorMode');
+      if (saved === 'simple' || saved === 'advanced') setEditorMode(saved);
+    } catch {
+      /* private mode / disabled storage — keep the default */
+    }
+  }, []);
+  const changeEditorMode = useCallback((m: EditorMode) => {
+    setEditorMode(m);
+    try {
+      window.localStorage.setItem('souqna:builder:editorMode', m);
+    } catch {
+      /* ignore */
+    }
+  }, []);
   // Snap back to Block mode whenever something becomes selected. Lives
   // here (not at every setSelectedId call site) because there are six
   // call sites — undo/redo, duplicate, drag-drop, palette commands —
@@ -3396,6 +3423,95 @@ function BuilderShellInner({
     [blocks, update],
   );
 
+  // On-canvas inline edit: merge a single text field the founder typed
+  // directly in the preview iframe onto the matching block prop. Kept in
+  // a ref so the (mount-once) message listener always calls the latest
+  // closure without re-subscribing on every keystroke.
+  const applyInlineEdit = useCallback(
+    (id: string, field: string, value: string) => {
+      const b = blocks.find((x) => x.id === id);
+      if (!b) return;
+      const nextProps = { ...(b.props as Record<string, unknown>), [field]: value };
+      updateBlockProps(id, nextProps);
+      setSelectedId(id);
+    },
+    [blocks, updateBlockProps],
+  );
+  const applyInlineEditRef = useRef(applyInlineEdit);
+  useEffect(() => {
+    applyInlineEditRef.current = applyInlineEdit;
+  }, [applyInlineEdit]);
+
+  // Guided-setup steps for the left-panel checklist. Completion is
+  // derived from the same real signals the /account dashboard uses
+  // (products, logo, checkout, policies, publish). Actions either deep
+  // link to the relevant settings page or flip the rail in-builder.
+  const setupSteps = useMemo<ChecklistStep[]>(() => {
+    const hasProducts = productOptions.length > 0;
+    const hasLogo = Boolean(logoUrl);
+    const checkoutReady =
+      initialCheckout.enabled &&
+      initialCheckout.paymentMethods.length > 0 &&
+      initialCheckout.requiredPolicies.length > 0;
+    const hasPolicies = [
+      initialPolicies.terms,
+      initialPolicies.privacy,
+      initialPolicies.refund,
+    ].some((t) => (t ?? '').trim().length > 0);
+    return [
+      {
+        id: 'products',
+        label: 'Add your products',
+        hint: 'Add at least one product to sell.',
+        done: hasProducts,
+        href: `/account/products?store=${slug}`,
+        actionLabel: 'Add',
+      },
+      {
+        id: 'logo',
+        label: 'Upload your logo',
+        hint: 'Makes your store and order emails look professional.',
+        done: hasLogo,
+        href: `/account/settings/brand?store=${slug}`,
+        actionLabel: 'Upload',
+      },
+      {
+        id: 'policies',
+        label: 'Write your store policies',
+        hint: 'Terms, privacy and refunds build buyer trust.',
+        done: hasPolicies,
+        onAction: () => {
+          setInspectorMode('site');
+          setSelectedId(null);
+        },
+        actionLabel: 'Edit',
+      },
+      {
+        id: 'checkout',
+        label: 'Set up checkout',
+        hint: 'Choose how buyers pay and get their orders.',
+        done: checkoutReady,
+        href: `/account/settings/checkout?store=${slug}`,
+        actionLabel: 'Set up',
+      },
+      {
+        id: 'publish',
+        label: 'Publish your store',
+        hint: 'Make your storefront live for customers.',
+        done: isPublished,
+      },
+    ];
+  }, [
+    productOptions.length,
+    logoUrl,
+    initialCheckout,
+    initialPolicies,
+    isPublished,
+    slug,
+    setInspectorMode,
+    setSelectedId,
+  ]);
+
   const duplicateBlock = useCallback(
     (id: string) => {
       const idx = blocks.findIndex((b) => b.id === id);
@@ -3514,10 +3630,22 @@ function BuilderShellInner({
   useEffect(() => {
     function onMsg(ev: MessageEvent) {
       if (ev.origin !== window.location.origin) return;
-      const data = ev.data as { type?: string; blockId?: string } | null;
+      const data = ev.data as {
+        type?: string;
+        blockId?: string;
+        field?: string;
+        value?: string;
+      } | null;
       if (!data || typeof data !== 'object') return;
       if (data.type === 'souqna:select' && typeof data.blockId === 'string') {
         setSelectedId(data.blockId);
+      } else if (
+        data.type === 'souqna:edit' &&
+        typeof data.blockId === 'string' &&
+        typeof data.field === 'string' &&
+        typeof data.value === 'string'
+      ) {
+        applyInlineEditRef.current(data.blockId, data.field, data.value);
       }
     }
     window.addEventListener('message', onMsg);
@@ -4068,6 +4196,7 @@ function BuilderShellInner({
               ))}
             </nav>
             <div style={{ flex: 1, overflow: 'auto', padding: '16px 14px' }}>
+              <SetupChecklist steps={setupSteps} />
               {tab === 'pages' ? (
                 <PageSwitcher
                   slug={slug}
@@ -4367,6 +4496,9 @@ function BuilderShellInner({
                     if (v === 'site') setSelectedId(null);
                   }}
                 />
+                <div style={{ padding: '0 2px 2px' }}>
+                  <EditorModeToggle value={editorMode} onChange={changeEditorMode} />
+                </div>
                 <BuilderRecommendations
                   blocks={blocks}
                   selected={selected}
@@ -4384,6 +4516,7 @@ function BuilderShellInner({
                   }}
                   onPremiumRefresh={handleResetTemplate}
                 />
+                <EditorModeProvider value={{ mode: editorMode, setMode: changeEditorMode }}>
                 {inspectorMode === 'block' ? (
                   <BlockInspector
                     block={selected}
@@ -4424,6 +4557,7 @@ function BuilderShellInner({
                     onTemplateConfirmed={handleTemplateConfirmed}
                   />
                 )}
+                </EditorModeProvider>
               </>
             )}
           </aside>

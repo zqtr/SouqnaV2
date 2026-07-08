@@ -105,6 +105,7 @@ export function HeroBlock({ block, ctx }: BlockRenderProps<HeroProps>) {
       >
         {eyebrow ? (
           <div
+            data-edit-field={ctx.isPreview ? 'eyebrow' : undefined}
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 11,
@@ -120,6 +121,7 @@ export function HeroBlock({ block, ctx }: BlockRenderProps<HeroProps>) {
         <TextEffectRenderer
           as="h1"
           effect={block.style?.textEffect}
+          editField={ctx.isPreview ? 'title' : undefined}
           style={{
             fontFamily: serifFamily,
             fontStyle: 'italic',
@@ -134,6 +136,7 @@ export function HeroBlock({ block, ctx }: BlockRenderProps<HeroProps>) {
         </TextEffectRenderer>
         {props.tagline ? (
           <p
+            data-edit-field={ctx.isPreview ? 'tagline' : undefined}
             style={{
               fontFamily,
               fontSize: 'clamp(16px, 1.8vw, 20px)',

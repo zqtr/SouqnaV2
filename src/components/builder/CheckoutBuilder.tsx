@@ -283,6 +283,11 @@ export function CheckoutBuilderInspector({
   const t = copy(locale);
   const checkoutRef = useRef(checkout);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Monotonic save token. Every edit bumps it; a save only applies its
+  // server echo if it is still the latest — otherwise a slow or
+  // out-of-order response would overwrite the founder's newer choice and
+  // the control would visibly flip back and forth.
+  const saveSeqRef = useRef(0);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
@@ -303,6 +308,7 @@ export function CheckoutBuilderInspector({
     setSaveState('saving');
     setSaveMessage(null);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    const seq = ++saveSeqRef.current;
     saveTimerRef.current = setTimeout(() => {
       void updateCheckoutExperienceSettings({
         slug,
@@ -310,6 +316,9 @@ export function CheckoutBuilderInspector({
         experience: next.experience,
         thankYou: next.thankYou,
       }).then((result) => {
+        // A newer edit has superseded this save — drop its echo so the
+        // latest choice stays put.
+        if (seq !== saveSeqRef.current) return;
         if (result.status === 'success') {
           checkoutRef.current = result.checkout;
           onChange(result.checkout);

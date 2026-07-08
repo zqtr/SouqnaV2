@@ -263,6 +263,9 @@ export const TEXT_EFFECTS = [
   'text-scatter',
   '3d-letter-swap',
   'blur-highlight',
+  'dia-reveal',
+  'shine-sweep',
+  'gradient-flow',
 ] as const;
 export type TextEffect = (typeof TEXT_EFFECTS)[number];
 

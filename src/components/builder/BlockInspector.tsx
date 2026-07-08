@@ -31,6 +31,7 @@ import {
   type CommerceProductSort,
 } from '@/lib/blocks/commerce';
 import { CARD_EFFECTS, GALLERY_EFFECTS, TEXT_EFFECTS, isVariantBlock } from '@/lib/blocks/types';
+import { useIsSimple, useEditorMode, AdvancedReveal } from './EditorModeContext';
 import { BACKGROUND_EFFECT_PICKER_OPTIONS } from '@/lib/blocks/backgroundPicker';
 import type { Plan } from '@/lib/plans';
 import { MediaUploader } from './MediaUploader';
@@ -2610,6 +2611,8 @@ function StyleControls({
   onChange: (s: BlockStyle | undefined) => void;
 }) {
   const text = useInspectorText();
+  const isSimple = useIsSimple();
+  const { setMode } = useEditorMode();
   const s = style ?? {};
   const set = (patch: Partial<BlockStyle>) => {
     const next = { ...s, ...patch };
@@ -2657,7 +2660,7 @@ function StyleControls({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Variant ----------------------------------------------------- */}
-      {showVariantPicker ? (
+      {!isSimple && showVariantPicker ? (
         <Section label="Variant">
           <div
             style={{
@@ -2717,6 +2720,7 @@ function StyleControls({
         </Section>
       ) : null}
 
+      {!isSimple ? (
       <Section label="Backgrounds">
         <Field label="Motion">
           <div
@@ -2795,8 +2799,9 @@ function StyleControls({
           />
         </Field>
       </Section>
+      ) : null}
 
-      {showTextEffects ? (
+      {!isSimple && showTextEffects ? (
         <Section label="Text motion">
           <OptionGrid
             value={s.textEffect ?? 'none'}
@@ -2808,7 +2813,7 @@ function StyleControls({
         </Section>
       ) : null}
 
-      {showCardEffects ? (
+      {!isSimple && showCardEffects ? (
         <Section label="Card treatment">
           <OptionGrid
             value={s.cardEffect ?? 'none'}
@@ -2820,7 +2825,7 @@ function StyleControls({
         </Section>
       ) : null}
 
-      {showGalleryEffects ? (
+      {!isSimple && showGalleryEffects ? (
         <Section label="Gallery layout">
           <OptionGrid
             value={s.galleryEffect ?? 'none'}
@@ -3039,6 +3044,13 @@ function StyleControls({
           />
         </Field>
       </Section>
+
+      {isSimple ? (
+        <AdvancedReveal
+          onReveal={() => setMode('advanced')}
+          label="Show advanced style options"
+        />
+      ) : null}
     </div>
   );
 }

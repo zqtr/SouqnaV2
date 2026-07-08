@@ -3,6 +3,7 @@
 import { createElement, type CSSProperties, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import StaggeredText from '@/components/souqna-motion/staggered-text';
+import { DiaTextReveal } from '@/components/souqna-motion/dia-text-reveal';
 import type { TextEffect } from '@/lib/blocks/types';
 
 type Props = {
@@ -11,13 +12,59 @@ type Props = {
   children: ReactNode;
   style?: CSSProperties;
   className?: string;
+  /**
+   * When set (builder preview only), stamps `data-edit-field` on the
+   * rendered element so the canvas inline-editor can turn it into a
+   * contenteditable and write the value back to the block prop of this
+   * name. Applied on the plain and generic-motion paths — which is what
+   * Simple mode renders, since it hides the exotic text effects.
+   */
+  editField?: string;
 };
 
-export function TextEffectRenderer({ effect, as, children, style, className }: Props) {
+// Shared stylesheet for the gradient-clipped text effects (`shine-sweep`,
+// `gradient-flow`). Colour lives here (not inline) so the `@supports`
+// fallback can settle unsupported browsers on a solid, legible --sf-ink
+// instead of transparent text. Both loop and are palette-locked.
+const SHINE_STYLES = `
+.souqna-shine, .souqna-gflow { color: var(--sf-ink, #1f1b16); }
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .souqna-shine {
+    background-image: linear-gradient(100deg,
+      var(--sf-ink, #1f1b16) 0 40%,
+      color-mix(in srgb, var(--sf-accent, #c9a961) 88%, #fff) 50%,
+      var(--sf-ink, #1f1b16) 60% 100%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: souqna-shine-sweep 3.4s ease-in-out infinite;
+  }
+  .souqna-gflow {
+    background-image: linear-gradient(90deg,
+      var(--sf-accent, #c9a961),
+      var(--sf-ink, #1f1b16),
+      var(--sf-accent, #c9a961));
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: souqna-gflow 6s linear infinite;
+  }
+}
+@keyframes souqna-shine-sweep { 0% { background-position: 180% 0; } 100% { background-position: -80% 0; } }
+@keyframes souqna-gflow { 0% { background-position: 0 0; } 100% { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .souqna-shine, .souqna-gflow { animation: none; background: none; color: var(--sf-ink, #1f1b16); }
+}
+`;
+
+export function TextEffectRenderer({ effect, as, children, style, className, editField }: Props) {
   const reduced = useReducedMotion();
   const text = typeof children === 'string' ? children : '';
+  const editAttr = editField ? { 'data-edit-field': editField } : undefined;
   if (!effect || effect === 'none' || reduced || !text) {
-    return createElement(as, { style, className }, children);
+    return createElement(as, { style, className, ...editAttr }, children);
   }
 
   if (effect === 'staggered-text') {
@@ -56,6 +103,42 @@ export function TextEffectRenderer({ effect, as, children, style, className }: P
     );
   }
 
+  if (effect === 'dia-reveal') {
+    // A colour band sweeps across the copy and settles on --sf-ink. The
+    // heading element carries the caller's font styles; the inner span
+    // handles the gradient reveal and is SSR-safe (solid text until the
+    // client mounts).
+    return createElement(
+      as,
+      { style, className },
+      <DiaTextReveal text={text} duration={1.4} />,
+    );
+  }
+
+  if (effect === 'shine-sweep' || effect === 'gradient-flow') {
+    // Gradient-clipped text. Colour is owned by the injected class (never
+    // an inline style) so the `@supports` fallback to a solid --sf-ink
+    // can win when `background-clip: text` is unavailable — the text is
+    // never stranded transparent. We therefore strip any inline `color`
+    // the caller passed.
+    const sfxClass = effect === 'shine-sweep' ? 'souqna-shine' : 'souqna-gflow';
+    const styleNoColor: CSSProperties = { ...(style ?? {}) };
+    delete styleNoColor.color;
+    return (
+      <>
+        <style>{SHINE_STYLES}</style>
+        {createElement(
+          as,
+          {
+            style: styleNoColor,
+            className: [className, sfxClass].filter(Boolean).join(' '),
+          },
+          children,
+        )}
+      </>
+    );
+  }
+
   if (effect === 'glitch-text') {
     return (
       <>
@@ -86,6 +169,7 @@ export function TextEffectRenderer({ effect, as, children, style, className }: P
       initial={false}
       animate={motionProps}
       transition={{ duration: 0.72, ease: 'easeOut' }}
+      {...editAttr}
       style={{
         ...style,
         transformStyle: effect.includes('3d') ? 'preserve-3d' : undefined,

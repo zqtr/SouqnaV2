@@ -16,6 +16,7 @@ import { MediaUploader } from './MediaUploader';
 import { TemplateBrowserModal } from './TemplateBrowserModal';
 import { BackgroundPatternPicker } from './BackgroundPatternPicker';
 import { useBuilderCopy } from './BuilderCopyContext';
+import { useIsSimple, useEditorMode, AdvancedReveal } from './EditorModeContext';
 import type { Locale } from '@/i18n/locales';
 import type { StorefrontPolicies } from '@/lib/storefrontSettings';
 import { defaultInlinePolicyText, normalizePolicyDisplayMode } from '@/lib/storefrontPolicies';
@@ -108,6 +109,8 @@ export function SiteInspector({
 }: Props) {
   const { builder: copy } = useBuilderCopy();
   const siteText = useSiteInspectorText();
+  const isSimple = useIsSimple();
+  const { setMode } = useEditorMode();
   const [theme, setTheme] = useState<ThemeOverrides>(initialTheme);
   const initialPolicyDraft = useMemo(() => {
     const withDefault = (key: 'terms' | 'privacy' | 'refund', value: string | null) =>
@@ -546,6 +549,8 @@ export function SiteInspector({
         />
       </Group>
 
+      {!isSimple ? (
+      <>
       <Group label="Background motion">
         <div
           style={{
@@ -724,6 +729,10 @@ export function SiteInspector({
           </Group>
         </div>
       </details>
+      </>
+      ) : null}
+
+      {isSimple ? <AdvancedReveal onReveal={() => setMode('advanced')} /> : null}
     </div>
   );
 }
