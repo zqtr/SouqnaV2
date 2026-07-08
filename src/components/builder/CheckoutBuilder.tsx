@@ -1001,6 +1001,48 @@ function ColorField({
   onChange: (value: string | null) => void;
 }) {
   const colorValue = isHexColor(value) ? value : fallback;
+  // A native `<input type="color">` fires onChange on every pointer tick
+  // while dragging. Feeding each tick straight to the parent re-renders
+  // the whole builder and echoes a laggy controlled value back into this
+  // input, so the swatch fights the drag and appears to "switch between"
+  // colours. Instead we drive the input from local `draft` state, push to
+  // the parent on a light throttle for a live-ish preview, and always
+  // flush the final colour on release.
+  const [draft, setDraft] = useState(colorValue);
+  const draggingRef = useRef(false);
+  const lastPushRef = useRef(0);
+  const trailingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Adopt external changes (e.g. a preset was applied) — but never while
+  // the founder is mid-drag, which would yank the picker.
+  useEffect(() => {
+    if (!draggingRef.current) setDraft(colorValue);
+  }, [colorValue]);
+  useEffect(() => () => {
+    if (trailingRef.current) clearTimeout(trailingRef.current);
+  }, []);
+
+  const handleDrag = (next: string) => {
+    draggingRef.current = true;
+    setDraft(next);
+    const now = Date.now();
+    if (now - lastPushRef.current >= 90) {
+      lastPushRef.current = now;
+      onChange(next);
+    }
+    // Guarantee the resting colour lands even if the last tick fell
+    // inside the throttle window.
+    if (trailingRef.current) clearTimeout(trailingRef.current);
+    trailingRef.current = setTimeout(() => onChange(next), 130);
+  };
+
+  const commit = (next: string) => {
+    draggingRef.current = false;
+    if (trailingRef.current) clearTimeout(trailingRef.current);
+    setDraft(next);
+    onChange(next);
+  };
+
   return (
     <label
       style={{
@@ -1012,8 +1054,9 @@ function ColorField({
     >
       <input
         type="color"
-        value={colorValue}
-        onChange={(event) => onChange(event.target.value)}
+        value={draft}
+        onChange={(event) => handleDrag(event.target.value)}
+        onBlur={(event) => commit(event.target.value)}
         aria-label={label}
         style={{
           width: 34,
@@ -1026,7 +1069,7 @@ function ColorField({
         }}
       />
       <Input
-        value={value ?? ''}
+        value={draggingRef.current ? draft : (value ?? '')}
         onChange={(event) => {
           const next = event.target.value.trim();
           onChange(next.length > 0 ? next : null);
