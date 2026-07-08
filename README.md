@@ -75,3 +75,7 @@ Set `CRANL_RUNTIME_URL` and `CRANL_API_KEY` in Vercel, and set the same
 **Fanar / RunPod** - Souqy Chat can use a private OpenAI-compatible Fanar endpoint. Set `FANAR_API_URL`, `FANAR_API_KEY`, `FANAR_MODEL`, and `FANAR_TIMEOUT_MS`; RunPod vLLM endpoints usually use a base URL ending in `/openai/v1`.
 
 **Souqna Pulse** - Pulse scripts still exist in `package.json`, but `apps/pulse/` is not present in this checkout. Do not document or run Pulse as a supported local app until that source tree is restored.
+
+## License
+
+Souqna is open source under the [GNU AGPL-3.0](LICENSE). You are free to use, self-host, and modify it; if you run a modified version as a network service, the AGPL requires you to offer its users the modified source.

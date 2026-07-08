@@ -42,3 +42,9 @@ ds-bundle/
 .design-sync/.cache/
 .design-sync/learnings/
 .design-sync/node_modules
+
+# Local-only internal material (kept out of the public repo)
+Recommendations/
+docs/founder/
+docs/archive/
+tsconfig.tsbuildinfo

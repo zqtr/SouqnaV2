@@ -4,7 +4,7 @@
 
 هذا المجلد يضمّ شرحاً موجّهاً للمؤسّسين وجدول التكاملات الخاصّة بمستودع Souqna. اتفاقيات المطوّرين (المكدّس، ما يُسمح وما لا يُسمح) تجدها في [README.md](../README.ar.md) و [AGENTS.md](../AGENTS.md) في جذر المستودع.
 
-مساعدة المستخدم النهائي تُعرَض **داخل المنتج** على `/en/docs` و `/ar/docs` (انظر `src/app/[locale]/docs/`). **الصفحة التسويقية** ثنائية اللغة على النطاق الرئيسي هي `src/app/[locale]/page.tsx` وتُجمَّع في `src/components/souqna/SouqnaHomeExperience.tsx`. أبقِ وصف التطبيقات متطابقاً مع [`src/lib/apps/registry.ts`](../src/lib/apps/registry.ts)؛ عند تغيير أي تطبيق هناك، حدّث [founder/integration-matrix.ar.md](founder/integration-matrix.ar.md) وراجع نص الوثائق داخل الواجهة.
+مساعدة المستخدم النهائي تُعرَض **داخل المنتج** على `/en/docs` و `/ar/docs` (انظر `src/app/[locale]/docs/`). **الصفحة التسويقية** ثنائية اللغة على النطاق الرئيسي هي `src/app/[locale]/page.tsx` وتُجمَّع في `src/components/souqna/SouqnaHomeExperience.tsx`. أبقِ وصف التطبيقات متطابقاً مع [`src/lib/apps/registry.ts`](../src/lib/apps/registry.ts)؛ عند تغيير أي تطبيق هناك راجع نص الوثائق داخل الواجهة.
 
 الدليل، الصفحات القانونية، الدفتر، ووثائق المؤسس يجب أن تتبع نظام الصفحة الرئيسية الجديد:
 
@@ -13,15 +13,6 @@
 - أسطح شبكية هادئة، halftone فقط في الأقسام المقصودة، شعارات SVG أحادية اللون، بطاقات بنصف قطر 8px، أزرار كبسولية، ومن دون تضييق المسافات بين الحروف.
 - تجنّب البرتقالي والبنفسجي وتدرجات النيون والأزرق العام لواجهات SaaS. يجب أن تبقى Souqna رمادية/كريمية ومحلية وتشغيلية.
 - أسعار الخطط العامة الحالية: مجاني، Pro بسعر `QR 49/mo`، Pro+ بسعر `QR 145/mo`، Max+ بسعر `QR 235/mo`.
-
-## للمؤسّسين
-
-| المستند | الغرض |
-|---------|--------|
-| [product-overview.ar.md](founder/product-overview.ar.md) | مسارات الواجهة، البنّاء مقابل الموقع الحي، نموذج السوق، الفوترة |
-| [souqy-studio.md](founder/souqy-studio.md) | حالة Souqy Studio الحالية، عقود التشغيل، علاقة PortalHero، وقائمة التحقق |
-| [integration-matrix.ar.md](founder/integration-matrix.ar.md) | جدول التطبيقات (مرآة لـ `APP_REGISTRY` + قاعدة الصيانة) |
-| [extending-integrations.ar.md](founder/extending-integrations.ar.md) | قائمة تحقق لإضافة التكاملات |
 
 ## للتجّار
 
