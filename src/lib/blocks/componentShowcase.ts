@@ -457,6 +457,17 @@ function componentProps(type: BlockType): Record<string, unknown> {
         tone: 'ink',
         cta: { label: 'Explore products', href: '/products' },
       };
+    case 'parallaxStoryHero':
+      return {
+        eyebrow: 'From a name to the first sale',
+        title: 'Discover',
+        subtitle: 'The scene and every letter of the headline move at their own depth as the page scrolls.',
+        layout: 'immersive',
+        tone: 'ink',
+        intensity: 'medium',
+        backgroundImage: '/brand/parallax-souq-hero.jpg',
+        cta: { label: 'Explore products', href: '/products' },
+      };
     case 'productSpotlight3d':
       return {
         eyebrow: 'Featured',

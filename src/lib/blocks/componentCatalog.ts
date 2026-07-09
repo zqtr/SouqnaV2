@@ -126,6 +126,16 @@ export const COMPONENT_LIBRARY_GROUPS: ComponentLibraryGroup[] = [
           ar: 'واجهة افتتاحية لباقة ماكس+ بخلفية متدرجة متحركة (WebGL) خلف نص تحريري وزر واضح. تُحمّل عند الحاجة وتتحول لبديل مناسب على الجوال.',
         },
       },
+      {
+        type: 'parallaxStoryHero',
+        label: 'Parallax story hero',
+        hint: 'Scroll-driven layered scene',
+        tier: 'atelier',
+        description: {
+          en: 'A Max+ cinematic opener where the scene, optional cutout images, and each headline letter move at their own speed as visitors scroll.',
+          ar: 'واجهة افتتاحية سينمائية لباقة ماكس+ يتحرك فيها المشهد والصور المقصوصة وكل كلمة من العنوان بسرعة مختلفة أثناء تمرير الزائر.',
+        },
+      },
     ],
   },
   {
