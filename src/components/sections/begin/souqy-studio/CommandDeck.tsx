@@ -104,7 +104,8 @@ export function CommandDeck({
       )}
 
       <BorderBeam
-        size="pulse-inner"
+        size="md"
+        colorVariant="sunset"
         theme="dark"
         duration={2.3}
         strength={0.85}

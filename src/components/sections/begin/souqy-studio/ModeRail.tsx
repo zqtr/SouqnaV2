@@ -25,7 +25,7 @@ export function ModeRail({ activeTab, copy, onSelect }: Props) {
       </button>
       <div className="sqs-rail-modes" role="tablist" aria-label={copy.workspace}>
         {STUDIO_MODES.filter((mode) => mode.id !== 'code' || isSouqyIdeSliceEnabled('code-v1')).map(
-          (mode) => {
+          (mode, index) => {
             const Icon = mode.icon;
             const active = activeTab === mode.id;
             return (
@@ -35,11 +35,14 @@ export function ModeRail({ activeTab, copy, onSelect }: Props) {
                 role="tab"
                 aria-selected={active}
                 className={active ? 'sqs-rail-btn is-active' : 'sqs-rail-btn'}
-                title={copy.modeHints[mode.id]}
+                title={copy.modeLabels[mode.id]}
                 onClick={() => onSelect(mode.id)}
               >
-                <Icon size={17} />
-                <span>{copy.modeLabels[mode.id]}</span>
+                <Icon size={18} />
+                <b className="sqs-rail-num" aria-hidden>
+                  {index + 1}
+                </b>
+                <span className="sqs-rail-tip">{copy.modeLabels[mode.id]}</span>
               </button>
             );
           },

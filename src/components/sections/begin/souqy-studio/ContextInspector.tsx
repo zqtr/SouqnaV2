@@ -31,11 +31,27 @@ import type {
   StudioFormatKey,
   StudioQuality,
   StudioStatus,
+  StudioTab,
 } from './types';
+
+/** A single line in Souqy's realtime agent stream (code-mode panel). */
+export type AgentEvent = {
+  id: string;
+  kind: 'turn' | 'tool';
+  text: string;
+  detail?: string;
+  time?: string;
+  state: 'run' | 'done' | 'error';
+};
 
 type Props = {
   copy: StudioCopy;
   isRtl: boolean;
+  /** Active studio mode. In `code` the panel drops the image-generation
+   *  sections (model, size, settings, catalog, references, selected asset)
+   *  and shows only code-relevant context — no more poster tooling while
+   *  editing blocks.json. */
+  activeTab: StudioTab;
   isOpen: boolean;
   onClose: () => void;
   project: SouqyStudioProject | null;
@@ -62,6 +78,8 @@ type Props = {
   onRemoveReference: (id: string) => void;
   onAttachFiles: (files: FileList | null) => void;
   status: StudioStatus;
+  /** Live tool-call transcript from the code editor, rendered in code mode. */
+  agentEvents?: AgentEvent[];
   selectedAsset: SouqyStudioAsset | null;
   onEditAsset: (asset: SouqyStudioAsset) => void;
 };
@@ -69,6 +87,7 @@ type Props = {
 export function ContextInspector({
   copy,
   isRtl,
+  activeTab,
   isOpen,
   onClose,
   project,
@@ -95,10 +114,12 @@ export function ContextInspector({
   onRemoveReference,
   onAttachFiles,
   status,
+  agentEvents,
   selectedAsset,
   onEditAsset,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isCode = activeTab === 'code';
 
   return (
     <>
@@ -118,32 +139,91 @@ export function ContextInspector({
           </button>
         </div>
 
-        <section className="sqs-context-section">
-          <span className="sqs-context-kicker">
-            <Store size={11} />
-            {copy.sessionLabel}
-          </span>
-          {project ? (
-            <p className="sqs-context-status">{project.businessName}</p>
-          ) : (
-            <p className="sqs-context-empty">{copy.noProjects}</p>
-          )}
-          <label className="sqs-field">
-            <span>{copy.storefront}</span>
-            <select
-              value={selectedStorefrontSlug}
-              onChange={(event) => onSelectStorefront(event.target.value)}
-            >
-              <option value="">{copy.noStorefront}</option>
-              {storefronts.map((storefront) => (
-                <option key={storefront.slug} value={storefront.slug}>
-                  {storefront.businessName}
-                </option>
-              ))}
-            </select>
-          </label>
-        </section>
+        {!isCode ? (
+          <section className="sqs-context-section">
+            <span className="sqs-context-kicker">
+              <Store size={11} />
+              {copy.sessionLabel}
+            </span>
+            {project ? (
+              <p className="sqs-context-status">{project.businessName}</p>
+            ) : (
+              <p className="sqs-context-empty">{copy.noProjects}</p>
+            )}
+            <label className="sqs-field">
+              <span>{copy.storefront}</span>
+              <select
+                value={selectedStorefrontSlug}
+                onChange={(event) => onSelectStorefront(event.target.value)}
+              >
+                <option value="">{copy.noStorefront}</option>
+                {storefronts.map((storefront) => (
+                  <option key={storefront.slug} value={storefront.slug}>
+                    {storefront.businessName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+        ) : (
+          <div className="sqs-agent">
+            <div className="sqs-agent-stream">
+              {agentEvents && agentEvents.length > 0 ? (
+                agentEvents.map((ev) => (
+                  <div
+                    key={ev.id}
+                    className={`sqs-agent-row ${
+                      ev.kind === 'turn'
+                        ? 'is-turn'
+                        : ev.state === 'run'
+                          ? 'is-run'
+                          : ev.state === 'error'
+                            ? 'is-error'
+                            : 'is-done'
+                    }`}
+                  >
+                    <span className="ic">
+                      {ev.kind === 'turn'
+                        ? '›'
+                        : ev.state === 'run'
+                          ? '•'
+                          : ev.state === 'error'
+                            ? '✕'
+                            : '✓'}
+                    </span>
+                    <span className="tx">
+                      {ev.text}
+                      {ev.detail ? <em> · {ev.detail}</em> : null}
+                    </span>
+                    {ev.time ? <span className="tm">{ev.time}</span> : null}
+                  </div>
+                ))
+              ) : (
+                <>
+                  {project ? (
+                    <div className="sqs-agent-row is-done">
+                      <span className="ic">✓</span>
+                      <span className="tx">
+                        Session started · <em>{project.businessName}</em>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="sqs-agent-row">
+                      <span className="ic">›</span>
+                      <span className="tx">{copy.noStorefront}</span>
+                    </div>
+                  )}
+                  <p className="sqs-agent-hint">
+                    Ask Souqy in the editor — each step lands here as it runs.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
+        {!isCode ? (
+          <>
         <section className="sqs-context-section">
           <span className="sqs-context-kicker">
             <Cpu size={11} />
@@ -333,14 +413,20 @@ export function ContextInspector({
           </div>
         </section>
 
-        <section className="sqs-context-section">
-          <span className="sqs-context-kicker">
-            <Activity size={11} />
-            {copy.statusLabel}
-          </span>
-          <p className="sqs-context-status">{status.message || copy.statusIdle}</p>
-        </section>
+          </>
+        ) : null}
 
+        {!isCode ? (
+          <section className="sqs-context-section">
+            <span className="sqs-context-kicker">
+              <Activity size={11} />
+              {copy.statusLabel}
+            </span>
+            <p className="sqs-context-status">{status.message || copy.statusIdle}</p>
+          </section>
+        ) : null}
+
+        {!isCode ? (
         <section className="sqs-context-section">
           <span className="sqs-context-kicker">
             <ImagePlus size={11} />
@@ -354,6 +440,7 @@ export function ContextInspector({
             <p className="sqs-context-empty">{copy.noSelection}</p>
           )}
         </section>
+        ) : null}
       </aside>
     </>
   );

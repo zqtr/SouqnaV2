@@ -13,6 +13,7 @@ import {
   type SouqyStudioModelId,
 } from '@/lib/souqy-studio/modelCatalog';
 import { CREATION_TYPES, FORMAT_PRESETS, STUDIO_MODES } from './catalog';
+import { isSouqyIdeSliceEnabled } from '@/lib/souqy-ide/flags';
 import { studioCopy } from './copy';
 import {
   aspectLabelForFormat,
@@ -30,7 +31,7 @@ import { studioTheme } from './theme';
 import { AgentThread } from './AgentThread';
 import { AssetWorkbench } from './AssetWorkbench';
 import { CommandDeck } from './CommandDeck';
-import { ContextInspector } from './ContextInspector';
+import { ContextInspector, type AgentEvent } from './ContextInspector';
 import { ModeRail } from './ModeRail';
 import { ProjectsPanel } from './ProjectsPanel';
 import dynamic from 'next/dynamic';
@@ -102,6 +103,25 @@ export function StudioShell({ locale, initialTab }: Props) {
   const [hasSessionStarted, setHasSessionStarted] = useState(false);
   const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
   const [isContextOpen, setIsContextOpen] = useState(false);
+  // Live tool-call transcript streamed up from the code editor, rendered in
+  // the code-mode agent panel.
+  const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
+  // Console command palette (⌘K / Ctrl+K).
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState('');
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsPaletteOpen((open) => !open);
+      } else if (event.key === 'Escape') {
+        setIsPaletteOpen(false);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const [webPreviewKey, setWebPreviewKey] = useState(0);
   const [webPrompt, setWebPrompt] = useState('');
   const [webStatusMessage, setWebStatusMessage] = useState('');
@@ -855,24 +875,17 @@ export function StudioShell({ locale, initialTab }: Props) {
   ]
     .filter(Boolean)
     .join(' ');
-  const statusToneClass =
-    composerBusy || isWebDesigning
-      ? 'is-busy'
-      : status.tone === 'error'
-        ? 'is-error'
-        : status.tone === 'done'
-          ? 'is-done'
-          : '';
-  const headStatusMessage =
-    activeTab === 'web'
-      ? isWebDesigning
-        ? copy.webDesigning
-        : webStatusMessage || copy.statusIdle
-      : composerBusy
-        ? activeTab === 'chat'
-          ? copy.chatThinking
-          : copy.creating
-        : status.message || copy.statusIdle;
+
+  const paletteCommands = [
+    ...STUDIO_MODES.filter(
+      (mode) => mode.id !== 'code' || isSouqyIdeSliceEnabled('code-v1'),
+    ).map((mode) => ({
+      id: `go-${mode.id}`,
+      label: `Go to ${copy.modeLabels[mode.id]}`,
+      run: () => selectMode(mode.id),
+    })),
+    { id: 'context', label: 'Open context panel', run: () => setIsContextOpen(true) },
+  ];
 
   return (
     <section className={shellClassName} data-theme="dark" dir={isRtl ? 'rtl' : 'ltr'}>
@@ -892,20 +905,36 @@ export function StudioShell({ locale, initialTab }: Props) {
         <div className="sqs-vignette" />
       </div>
 
+      <div className="sqs-topbar" dir="ltr">
+        <button type="button" className="sqs-topbar-cmd" onClick={() => setIsPaletteOpen(true)}>
+          <span className="p">›</span>
+          <span className="ph">Type a command or ask Souqy…</span>
+          <span className="k">⌘K</span>
+        </button>
+        <span className="sqs-topbar-spacer" />
+        <span className="sqs-topbar-chip">
+          model <b>sonnet-5</b>
+        </span>
+        <span className="sqs-topbar-chip">
+          store <b>{selectedStorefrontSlug || '—'}</b>
+        </span>
+        <span className="sqs-topbar-chip">
+          <i className="d" aria-hidden /> <b>live</b>
+        </span>
+      </div>
+
       <ModeRail activeTab={activeTab} copy={copy} onSelect={selectMode} />
 
       <main className="sqs-stage">
         <header className="sqs-stage-head">
           <div className="sqs-stage-title">
-            <small>{copy.eyebrow}</small>
             <h1>{copy.modeLabels[activeTab]}</h1>
+            <span className="sqs-stage-crumb" aria-hidden>
+              ›
+            </span>
             <p>{copy.modeHints[activeTab]}</p>
           </div>
           <div className="sqs-stage-tools">
-            <div className={`sqs-stage-status ${statusToneClass}`} role="status" aria-live="polite">
-              <span className="sqs-status-dot" aria-hidden />
-              <span>{headStatusMessage}</span>
-            </div>
             <button
               type="button"
               className="sqs-context-toggle"
@@ -979,7 +1008,12 @@ export function StudioShell({ locale, initialTab }: Props) {
             />
           ) : null}
           {activeTab === 'code' ? (
-            <IdeWorkbench copy={copy} isRtl={isRtl} storefrontSlug={webStorefront?.slug ?? null} />
+            <IdeWorkbench
+              copy={copy}
+              isRtl={isRtl}
+              storefrontSlug={webStorefront?.slug ?? null}
+              onAgentEvents={setAgentEvents}
+            />
           ) : null}
           {activeTab === 'web' ? (
             <WebPreview
@@ -1020,11 +1054,30 @@ export function StudioShell({ locale, initialTab }: Props) {
             onAttachFiles={addReferenceImages}
           />
         ) : null}
+
+        <div className="sqs-statusline" role="status" dir="ltr">
+          <span className="sqs-status-seg is-mode">{copy.modeLabels[activeTab]}</span>
+          {selectedStorefrontSlug ? (
+            <span className="sqs-status-seg">{selectedStorefrontSlug}</span>
+          ) : null}
+          <span className="sqs-status-spacer" />
+          <span className="sqs-status-hint">
+            <kbd>⌘K</kbd> commands
+          </span>
+          <span className="sqs-status-hint">
+            <kbd>⌘⏎</kbd> run
+          </span>
+          <span className="sqs-status-hint">
+            <kbd>⌘S</kbd> save
+          </span>
+          <span className="sqs-status-seg is-mark">Souqy Studio</span>
+        </div>
       </main>
 
       <ContextInspector
         copy={copy}
         isRtl={isRtl}
+        activeTab={activeTab}
         isOpen={isContextOpen}
         onClose={() => setIsContextOpen(false)}
         project={project}
@@ -1051,9 +1104,52 @@ export function StudioShell({ locale, initialTab }: Props) {
         onRemoveReference={removeReference}
         onAttachFiles={addReferenceImages}
         status={status}
+        agentEvents={agentEvents}
         selectedAsset={selectedAsset}
         onEditAsset={(asset) => void prepareAssetForEdit(asset)}
       />
+      {isPaletteOpen ? (
+        <div
+          className="sqs-palette-backdrop"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setIsPaletteOpen(false);
+          }}
+        >
+          <div className="sqs-palette" role="dialog" aria-label="Command palette">
+            <div className="sqs-palette-input">
+              <span aria-hidden>⌘</span>
+              {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+              <input
+                autoFocus
+                value={paletteQuery}
+                onChange={(event) => setPaletteQuery(event.target.value)}
+                placeholder="Type a command…"
+                aria-label="Command"
+              />
+            </div>
+            <div className="sqs-palette-list">
+              {paletteCommands
+                .filter((command) =>
+                  command.label.toLowerCase().includes(paletteQuery.toLowerCase()),
+                )
+                .map((command) => (
+                  <button
+                    key={command.id}
+                    type="button"
+                    className="sqs-palette-item"
+                    onClick={() => {
+                      command.run();
+                      setIsPaletteOpen(false);
+                      setPaletteQuery('');
+                    }}
+                  >
+                    {command.label}
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

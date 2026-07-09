@@ -103,7 +103,8 @@ export function WebPreview({
           <small>{copy.live}</small>
         </div>
         <BorderBeam
-          size="pulse-inner"
+          size="md"
+          colorVariant="sunset"
           theme="dark"
           duration={2.3}
           strength={0.85}

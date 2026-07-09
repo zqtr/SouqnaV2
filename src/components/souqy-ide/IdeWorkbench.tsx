@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { Check, Code2, Globe2, PanelLeft, RefreshCw, Save, Sparkles, X } from 'lucide-react';
+import { ArrowUp, Check, Globe2, RefreshCw, Save, Sparkles, X } from 'lucide-react';
 import { BorderBeam } from 'border-beam';
 import DitherHalftoneSystem from '@/components/souqna-motion/DitherHalftoneSystem';
 import { loadIdeBlocks, type IdePageSummary } from '@/app/actions/souqyIde';
@@ -18,14 +18,19 @@ import {
 import { souqyIdeErrorMessage } from '@/lib/souqy-ide/errors';
 import { parsePreviewChildMessage, postToPreview } from '@/lib/souqy-ide/previewProtocol';
 import type { StudioCopy } from '@/components/sections/begin/souqy-studio/copy';
+import type { AgentEvent } from '@/components/sections/begin/souqy-studio/ContextInspector';
 import { CodeEditor } from './CodeEditor';
 import { ComponentTree } from './ComponentTree';
 import { ProposalDiff } from './ProposalDiff';
+import { SouqyPulse } from './SouqyPulse';
 
 type Props = {
   copy: StudioCopy;
   isRtl: boolean;
   storefrontSlug: string | null;
+  /** Streams Souqy's run as a tool-call transcript for the studio's
+   *  code-mode agent panel. */
+  onAgentEvents?: (events: AgentEvent[]) => void;
 };
 
 type DocState = {
@@ -50,7 +55,26 @@ function buildDoc(text: string): DocState {
   };
 }
 
-export function IdeWorkbench({ copy, isRtl, storefrontSlug }: Props) {
+// Calm, Codex-style activity lines shown while Souqy works — one short
+// phrase at a time instead of a loud loader. Simulated client-side for
+// now (the edit/transform actions don't stream real steps yet).
+const IDE_ACTIVITY = {
+  think: {
+    en: ['Reading the block', 'Sending to Souqy', 'Drafting the change', 'Checking the schema'],
+    ar: ['قراءة المكوّن', 'الإرسال إلى سوقي', 'صياغة التعديل', 'التحقق من الصيغة'],
+  },
+  build: {
+    en: [
+      'Reading storefront blocks',
+      'Designing the layout',
+      'Generating components',
+      'Building the preview',
+    ],
+    ar: ['قراءة مكونات المتجر', 'تصميم التخطيط', 'توليد المكونات', 'بناء المعاينة'],
+  },
+} as const;
+
+export function IdeWorkbench({ copy, isRtl, storefrontSlug, onAgentEvents }: Props) {
   const [pages, setPages] = useState<IdePageSummary[]>([]);
   const [pageId, setPageId] = useState('');
   const [doc, setDoc] = useState<DocState>({ text: '[]', ranges: [], parseError: null });
@@ -61,9 +85,9 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug }: Props) {
   const [banner, setBanner] = useState<{ tone: 'error' | 'done'; message: string } | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
   const [isVeiling, setIsVeiling] = useState(false);
-  const [showTree, setShowTree] = useState(false);
-  const [showCode, setShowCode] = useState(false);
   const [previewMode, setPreviewMode] = useState<'draft' | 'live'>('draft');
+  // Right pane tab: the live preview or the raw blocks.json editor.
+  const [viewTab, setViewTab] = useState<'preview' | 'code'>('preview');
   const [promptText, setPromptText] = useState('');
   const [isAsking, setIsAsking] = useState(false);
   const [isTransforming, setIsTransforming] = useState(false);
@@ -71,8 +95,76 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug }: Props) {
   const veilTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
+  // Realtime tool-call transcript surfaced in the studio's code-mode agent
+  // panel. Session rows are seeded on load; run steps stream in below.
+  const [transcript, setTranscript] = useState<AgentEvent[]>([]);
+  const runRequestRef = useRef('');
+  const pushLine = useCallback(
+    (text: string, state: AgentEvent['state'] = 'done') =>
+      setTranscript((prev) => [
+        ...prev,
+        { id: `line-${Date.now()}-${prev.length}`, kind: 'tool', text, state },
+      ]),
+    [],
+  );
+  useEffect(() => {
+    onAgentEvents?.(transcript);
+  }, [transcript, onAgentEvents]);
+
   const locale = isRtl ? ('ar' as const) : ('en' as const);
   const isGenerating = isAsking || isTransforming;
+
+  // Advance the activity line one step at a time while Souqy works.
+  const [activity, setActivity] = useState('');
+  useEffect(() => {
+    if (!isGenerating) {
+      setActivity('');
+      return;
+    }
+    const steps = (isTransforming ? IDE_ACTIVITY.build : IDE_ACTIVITY.think)[locale];
+    let i = 0;
+    setActivity(steps[0]);
+    const id = window.setInterval(() => {
+      i = Math.min(i + 1, steps.length - 1);
+      setActivity(steps[i]!);
+    }, 1300);
+    return () => window.clearInterval(id);
+  }, [isGenerating, isTransforming, locale]);
+
+  // Stream the run into the agent panel: a user turn, then each tool step
+  // flipping from running to done. Timing is simulated (the actions don't
+  // stream real steps yet) but the transcript reflects the real run's start,
+  // end, and outcome.
+  useEffect(() => {
+    if (!isGenerating) return;
+    const steps = (isTransforming ? IDE_ACTIVITY.build : IDE_ACTIVITY.think)[locale];
+    const dur = () => `${(0.2 + Math.random() * 0.7).toFixed(1)}s`;
+    const turnId = `turn-${Date.now()}`;
+    setTranscript((prev) => [
+      ...prev,
+      { id: `${turnId}-req`, kind: 'turn', text: runRequestRef.current || steps[0]!, state: 'done' },
+      { id: `${turnId}-0`, kind: 'tool', text: steps[0]!, state: 'run' },
+    ]);
+    let i = 0;
+    const id = window.setInterval(() => {
+      i += 1;
+      setTranscript((prev) => {
+        const next = prev.map((e) =>
+          e.state === 'run' ? { ...e, state: 'done' as const, time: dur() } : e,
+        );
+        if (i < steps.length) {
+          next.push({ id: `${turnId}-${i}`, kind: 'tool', text: steps[i]!, state: 'run' });
+        }
+        return next;
+      });
+    }, 1100);
+    return () => {
+      window.clearInterval(id);
+      setTranscript((prev) =>
+        prev.map((e) => (e.state === 'run' ? { ...e, state: 'done' as const, time: dur() } : e)),
+      );
+    };
+  }, [isGenerating, isTransforming, locale]);
 
   const loadPage = useCallback(
     async (slug: string, targetPageId?: string) => {
@@ -91,6 +183,25 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug }: Props) {
         setIsDirty(false);
         // Hard-remount the preview when the loaded page changes.
         setPreviewKey((current) => current + 1);
+        // Seed the agent transcript with this session's opening rows.
+        setTranscript([
+          {
+            id: `sess-${state.pageId}`,
+            kind: 'tool',
+            text: locale === 'ar' ? 'بدأت الجلسة' : 'Session started',
+            detail: `${slug} · ${state.pageId}`,
+            state: 'done',
+          },
+          {
+            id: `idx-${state.pageId}`,
+            kind: 'tool',
+            text:
+              locale === 'ar'
+                ? `فهرسة ${state.blocks.length} مكوّن`
+                : `Indexed ${state.blocks.length} blocks`,
+            state: 'done',
+          },
+        ]);
       } catch (error) {
         setBanner({ tone: 'error', message: souqyIdeErrorMessage(error, locale) });
       } finally {
@@ -215,10 +326,10 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug }: Props) {
           apply: false,
         });
         if (result.status !== 'ok') {
-          setBanner({
-            tone: 'error',
-            message: 'message' in result && result.message ? result.message : copy.ideAskFailed,
-          });
+          const message =
+            'message' in result && result.message ? result.message : copy.ideAskFailed;
+          setBanner({ tone: 'error', message });
+          pushLine(message, 'error');
           return;
         }
         setProposal({
@@ -228,13 +339,16 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug }: Props) {
           proposedBlock: result.block as unknown as Record<string, unknown>,
         });
         setPromptText('');
+        pushLine(locale === 'ar' ? 'المسودة جاهزة — راجع الفرق' : 'Draft ready — review the diff');
       } catch (error) {
-        setBanner({ tone: 'error', message: souqyIdeErrorMessage(error, locale) });
+        const message = souqyIdeErrorMessage(error, locale);
+        setBanner({ tone: 'error', message });
+        pushLine(message, 'error');
       } finally {
         setIsAsking(false);
       }
     },
-    [parsedBlocks, selectedIndex, storefrontSlug, pageId, copy, locale],
+    [parsedBlocks, selectedIndex, storefrontSlug, pageId, copy, locale, pushLine],
   );
 
   const handleTransform = useCallback(
@@ -250,29 +364,49 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug }: Props) {
         const result = await souqyDesignStorefront({ slug: storefrontSlug, request });
         if (result.status === 'error') {
           setBanner({ tone: 'error', message: result.message });
+          pushLine(result.message, 'error');
           return;
         }
         setPromptText('');
         setBanner({ tone: 'done', message: copy.ideTransformed });
+        pushLine(
+          locale === 'ar' ? 'أُعيد بناء المتجر — حُدّثت المعاينة' : 'Rebuilt storefront — preview updated',
+        );
         // The transformed site lives on the public storefront, not the
         // block-draft preview — switch there and hard-remount.
         setPreviewMode('live');
         setPreviewKey((current) => current + 1);
       } catch (error) {
-        setBanner({ tone: 'error', message: souqyIdeErrorMessage(error, locale) });
+        const message = souqyIdeErrorMessage(error, locale);
+        setBanner({ tone: 'error', message });
+        pushLine(message, 'error');
       } finally {
         setIsTransforming(false);
       }
     },
-    [storefrontSlug, copy, locale],
+    [storefrontSlug, copy, locale, pushLine],
   );
 
   const submitPrompt = useCallback(() => {
     const request = promptText.trim();
     if (!request || isGenerating || proposal) return;
+    runRequestRef.current = request;
     if (selectedIndex >= 0) void handleAskSouqy(request);
     else void handleTransform(request);
   }, [promptText, isGenerating, proposal, selectedIndex, handleAskSouqy, handleTransform]);
+
+  // Approximate added/removed line counts for the proposal's diff card badge.
+  const diffCounts = useMemo(() => {
+    if (!proposal) return { added: 0, removed: 0 };
+    const original = proposal.originalText.split('\n');
+    const proposed = proposal.proposedText.split('\n');
+    const originalSet = new Set(original);
+    const proposedSet = new Set(proposed);
+    return {
+      added: proposed.filter((line) => !originalSet.has(line)).length,
+      removed: original.filter((line) => !proposedSet.has(line)).length,
+    };
+  }, [proposal]);
 
   const acceptProposal = useCallback(() => {
     if (!proposal || !parsedBlocks) return;
@@ -307,182 +441,323 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug }: Props) {
   const previewSrc =
     previewMode === 'live' ? `/brief/${encodeURIComponent(storefrontSlug)}` : draftSrc;
 
-  return (
-    <section className="sqs-ide" aria-label={copy.modeLabels.code} dir="ltr">
-      <div className="sqs-ide-toolbar" dir={isRtl ? 'rtl' : 'ltr'}>
-        <div className="sqs-ide-toolbar-title">
-          <button
-            type="button"
-            className={showTree ? 'sqs-ide-icon-btn is-active' : 'sqs-ide-icon-btn'}
-            aria-pressed={showTree}
-            aria-label={copy.ideComponents}
-            title={copy.ideComponents}
-            onClick={() => setShowTree((value) => !value)}
-          >
-            <PanelLeft size={14} />
-          </button>
-          <button
-            type="button"
-            className={showCode ? 'sqs-ide-icon-btn is-active' : 'sqs-ide-icon-btn'}
-            aria-pressed={showCode}
-            aria-label={copy.modeLabels.code}
-            title={copy.modeLabels.code}
-            onClick={() => setShowCode((value) => !value)}
-          >
-            <Code2 size={14} />
-          </button>
-          <small>{copy.modeLabels.code}</small>
-          <strong>{storefrontSlug}/blocks.json</strong>
-          {isDirty ? <span className="sqs-ide-dirty" aria-label={copy.ideUnsaved} /> : null}
-        </div>
-        <div className="sqs-ide-toolbar-actions">
-          {banner ? (
-            <span className={`sqs-ide-banner is-${banner.tone}`} role="status">
-              {banner.message}
-            </span>
-          ) : doc.parseError ? (
-            <span className="sqs-ide-banner is-error" role="status">
-              {copy.ideInvalidJson}
-            </span>
-          ) : null}
-          <button
-            type="button"
-            className={previewMode === 'live' ? 'sqs-ide-icon-btn is-active' : 'sqs-ide-icon-btn'}
-            aria-pressed={previewMode === 'live'}
-            title={previewMode === 'live' ? copy.ideLivePreview : copy.ideDraftPreview}
-            onClick={() => {
-              setPreviewMode((mode) => (mode === 'live' ? 'draft' : 'live'));
-              setPreviewKey((current) => current + 1);
-            }}
-          >
-            <Globe2 size={13} />
-            <span>{previewMode === 'live' ? copy.ideLivePreview : copy.ideDraftPreview}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => void loadPage(storefrontSlug, pageId)}
-            disabled={isLoading}
-            aria-label={copy.refresh}
-          >
-            <RefreshCw size={13} />
-          </button>
-          <button
-            type="button"
-            className="sqs-ide-save"
-            onClick={() => void handleSave()}
-            disabled={isSaving || isLoading || Boolean(doc.parseError) || !isDirty}
-          >
-            <Save size={13} />
-            <span>{isSaving ? copy.ideSaving : copy.ideSave}</span>
-          </button>
-        </div>
-      </div>
+  const blockCount = parsedBlocks?.length ?? 0;
 
-      <PanelGroup direction="horizontal" className="sqs-ide-panes" autoSaveId="souqy-ide-panes">
-        {showTree ? (
-          <>
-            <Panel defaultSize={18} minSize={12} className="sqs-ide-pane" order={1}>
-              <ComponentTree
-                copy={copy}
-                pages={pages}
-                activePageId={pageId}
-                blocks={parsedBlocks ?? []}
-                selectedIndex={selectedIndex}
-                onSelectPage={(next) => void loadPage(storefrontSlug, next)}
-                onSelectBlock={selectBlock}
-              />
-            </Panel>
-            <PanelResizeHandle className="sqs-ide-handle" />
-          </>
-        ) : null}
-        {showCode || proposal ? (
-          <>
-            <Panel defaultSize={44} minSize={25} className="sqs-ide-pane" order={2}>
-              {proposal ? (
-                <>
-                  <div className="sqs-ide-diffbar" dir={isRtl ? 'rtl' : 'ltr'}>
-                    <small>{copy.ideProposalTitle}</small>
-                    <div>
-                      <button type="button" className="is-accept" onClick={acceptProposal}>
-                        <Check size={13} />
-                        <span>{copy.ideAccept}</span>
-                      </button>
-                      <button type="button" className="is-reject" onClick={() => setProposal(null)}>
-                        <X size={13} />
-                        <span>{copy.ideReject}</span>
-                      </button>
-                    </div>
-                  </div>
-                  <ProposalDiff original={proposal.originalText} proposed={proposal.proposedText} />
-                </>
+  return (
+    <section className="sqs-ide sqs-ide-v2" aria-label={copy.modeLabels.code} dir="ltr">
+      <PanelGroup direction="horizontal" className="sqs-ide-panes" autoSaveId="souqy-ide-v2">
+        {/* LEFT — Souqy conversation */}
+        <Panel
+          defaultSize={38}
+          minSize={26}
+          maxSize={54}
+          className="sqs-ide-pane sqs-ide-convo-pane"
+          order={1}
+        >
+          <div className="sqs-ide-convo" dir={isRtl ? 'rtl' : 'ltr'}>
+            <header className="sqs-ide-convo-head">
+              <span className="k">{copy.sessionLabel}</span>
+              <strong>{activePage?.title || storefrontSlug}</strong>
+              <button
+                type="button"
+                className="sqs-ide-icon-btn"
+                onClick={() => void loadPage(storefrontSlug, pageId)}
+                disabled={isLoading}
+                aria-label={copy.refresh}
+                title={copy.refresh}
+              >
+                <RefreshCw size={13} />
+              </button>
+            </header>
+
+            <div className="sqs-ide-convo-log">
+              {transcript.length === 0 ? (
+                <p className="sqs-ide-convo-empty">
+                  {locale === 'ar'
+                    ? 'اطلب من سوقي أي تغيير — ستظهر الخطوات هنا خطوة بخطوة.'
+                    : 'Ask Souqy for any change — the steps stream here as it works.'}
+                </p>
               ) : (
-                <CodeEditor
-                  value={doc.text}
-                  isRtlUi={isRtl}
-                  selectedRange={selectedRange}
-                  onChange={handleEditorChange}
-                  onCursorLine={handleCursorLine}
-                  onSave={() => void handleSave()}
-                />
+                transcript.map((ev) =>
+                  ev.kind === 'turn' ? (
+                    <div key={ev.id} className="sqs-ide-you">
+                      <span className="av" aria-hidden>
+                        {locale === 'ar' ? 'أنت' : 'You'}
+                      </span>
+                      <p>{ev.text}</p>
+                    </div>
+                  ) : (
+                    <div
+                      key={ev.id}
+                      className={`sqs-ide-step ${
+                        ev.state === 'run'
+                          ? 'is-run'
+                          : ev.state === 'error'
+                            ? 'is-error'
+                            : 'is-done'
+                      }`}
+                    >
+                      <span className="ic" aria-hidden>
+                        {ev.state === 'run' ? '•' : ev.state === 'error' ? '✕' : '✓'}
+                      </span>
+                      <span className="tx">{ev.text}</span>
+                      {ev.detail ? <span className="dt">{ev.detail}</span> : null}
+                      {ev.time ? <span className="tm">{ev.time}</span> : null}
+                    </div>
+                  ),
+                )
               )}
-            </Panel>
-            <PanelResizeHandle className="sqs-ide-handle" />
-          </>
-        ) : null}
-        <Panel defaultSize={38} minSize={20} className="sqs-ide-pane" order={3}>
-          <div className="sqs-ide-preview">
-            <iframe
-              key={previewKey}
-              ref={iframeRef}
-              src={previewSrc}
-              title={`${copy.modeLabels.code}: ${storefrontSlug}`}
-            />
-            {isVeiling || isTransforming ? (
-              <div className="sqs-ide-veil" aria-hidden>
-                <DitherHalftoneSystem
-                  mode={isTransforming ? 'loading' : 'transition'}
-                  intensity={isTransforming ? 0.4 : 0.3}
-                  speed={1.6}
-                  quality="low"
-                />
+
+              {proposal ? (
+                <div className="sqs-ide-diffcard">
+                  <div className="sqs-ide-diffcard-head">
+                    <span className="ic" aria-hidden>
+                      ✎
+                    </span>
+                    <strong>{copy.ideProposalTitle}</strong>
+                    <span className="tm">
+                      +{diffCounts.added} −{diffCounts.removed}
+                    </span>
+                  </div>
+                  <div className="sqs-ide-diffcard-body">
+                    <ProposalDiff
+                      original={proposal.originalText}
+                      proposed={proposal.proposedText}
+                    />
+                  </div>
+                  <div className="sqs-ide-diffcard-actions">
+                    <button type="button" className="is-accept" onClick={acceptProposal}>
+                      <Check size={13} />
+                      <span>{copy.ideAccept}</span>
+                    </button>
+                    <button type="button" className="is-reject" onClick={() => setProposal(null)}>
+                      <X size={13} />
+                      <span>{copy.ideReject}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="sqs-ide-convo-dock">
+              <div className="sqs-ide-promptbar" dir={isRtl ? 'rtl' : 'ltr'}>
+                <BorderBeam
+                  size="line"
+                  colorVariant="sunset"
+                  theme="dark"
+                  duration={2.3}
+                  strength={0.85}
+                  active={isGenerating}
+                  className="sqs-ide-prompt-beam"
+                >
+                  {isGenerating ? (
+                    <div className="sqs-ide-prompt is-busy">
+                      <div className="sqs-ide-prompt-row">
+                        <SouqyPulse size={18} />
+                        <span className="sqs-ide-prompt-busy">
+                          {isTransforming ? copy.ideBusyBuilding : copy.ideBusyThinking}
+                          {activity ? <span className="dim">{` · ${activity}`}</span> : null}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="sqs-ide-prompt">
+                      <div className="sqs-ide-prompt-row">
+                        <Sparkles size={15} className="sqs-ide-prompt-spark" aria-hidden />
+                        <textarea
+                          className="sqs-ide-prompt-input"
+                          value={promptText}
+                          rows={1}
+                          placeholder={
+                            selectedIndex >= 0
+                              ? copy.ideAskPlaceholder
+                              : copy.ideTransformPlaceholder
+                          }
+                          onChange={(event) => {
+                            setPromptText(event.target.value);
+                            const el = event.target;
+                            el.style.height = 'auto';
+                            el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !event.shiftKey) {
+                              event.preventDefault();
+                              submitPrompt();
+                            }
+                          }}
+                        />
+                        <BorderBeam
+                          size="sm"
+                          colorVariant="sunset"
+                          theme="dark"
+                          active={promptText.trim().length >= 3 && !proposal}
+                        >
+                          <button
+                            type="button"
+                            className="sqs-ide-send"
+                            aria-label={copy.ideAsk}
+                            disabled={promptText.trim().length < 3 || Boolean(proposal)}
+                            onClick={submitPrompt}
+                          >
+                            <ArrowUp size={17} />
+                          </button>
+                        </BorderBeam>
+                      </div>
+                      <div className="sqs-ide-prompt-hint">
+                        <span>
+                          {selectedIndex >= 0
+                            ? locale === 'ar'
+                              ? 'يحرّر سوقي المكوّن المحدد'
+                              : 'Souqy edits the selected block'
+                            : locale === 'ar'
+                              ? 'يعيد سوقي تصميم المتجر بالكامل'
+                              : 'Souqy redesigns the whole storefront'}
+                        </span>
+                        <span className="sqs-ide-prompt-keys">
+                          <kbd>⏎</kbd> {locale === 'ar' ? 'إرسال' : 'send'}
+                          <em>·</em>
+                          <kbd>⇧⏎</kbd> {locale === 'ar' ? 'سطر' : 'newline'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </BorderBeam>
               </div>
-            ) : null}
+              <div className="sqs-ide-convo-foot">
+                <span>
+                  @ {storefrontSlug} · {blockCount} {locale === 'ar' ? 'مكوّن' : 'blocks'}
+                </span>
+                {banner ? (
+                  <span className={`sqs-ide-convo-flag is-${banner.tone}`}>{banner.message}</span>
+                ) : null}
+              </div>
+            </div>
           </div>
         </Panel>
-      </PanelGroup>
 
-      <div className="sqs-ide-promptbar" dir={isRtl ? 'rtl' : 'ltr'}>
-        <BorderBeam
-          size="pulse-inner"
-          theme="dark"
-          duration={2.3}
-          strength={0.85}
-          active={isGenerating}
-          className="sqs-ide-prompt-beam"
-        >
-          <div className="sqs-ide-prompt">
-            <Sparkles size={14} aria-hidden />
-            <input
-              value={promptText}
-              placeholder={
-                selectedIndex >= 0 ? copy.ideAskPlaceholder : copy.ideTransformPlaceholder
-              }
-              disabled={isGenerating}
-              onChange={(event) => setPromptText(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') submitPrompt();
-              }}
-            />
-            <button
-              type="button"
-              disabled={isGenerating || promptText.trim().length < 3 || Boolean(proposal)}
-              onClick={submitPrompt}
+        <PanelResizeHandle className="sqs-ide-handle" />
+
+        {/* RIGHT — preview / code */}
+        <Panel defaultSize={62} minSize={40} className="sqs-ide-pane sqs-ide-view-pane" order={2}>
+          <header className="sqs-ide-viewhead" dir={isRtl ? 'rtl' : 'ltr'}>
+            <div className="sqs-ide-tabs" role="tablist" dir="ltr">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={viewTab === 'preview'}
+                className={viewTab === 'preview' ? 'is-active' : ''}
+                onClick={() => setViewTab('preview')}
+              >
+                {locale === 'ar' ? 'معاينة' : 'Preview'}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={viewTab === 'code'}
+                className={viewTab === 'code' ? 'is-active' : ''}
+                onClick={() => setViewTab('code')}
+              >
+                {copy.modeLabels.code}
+              </button>
+            </div>
+            <span className="sqs-ide-url" dir="ltr">
+              <i className={previewMode === 'live' ? 'is-live' : ''} aria-hidden />
+              {storefrontSlug}
+            </span>
+            <div className="sqs-ide-viewactions">
+              <button
+                type="button"
+                className={previewMode === 'live' ? 'sqs-ide-icon-btn is-active' : 'sqs-ide-icon-btn'}
+                aria-pressed={previewMode === 'live'}
+                title={previewMode === 'live' ? copy.ideLivePreview : copy.ideDraftPreview}
+                onClick={() => {
+                  setPreviewMode((mode) => (mode === 'live' ? 'draft' : 'live'));
+                  setPreviewKey((current) => current + 1);
+                }}
+              >
+                <Globe2 size={13} />
+                <span>{previewMode === 'live' ? copy.ideLivePreview : copy.ideDraftPreview}</span>
+              </button>
+              <button
+                type="button"
+                className="sqs-ide-save"
+                onClick={() => void handleSave()}
+                disabled={isSaving || isLoading || Boolean(doc.parseError) || !isDirty}
+              >
+                <Save size={13} />
+                <span>{isSaving ? copy.ideSaving : copy.ideSave}</span>
+              </button>
+            </div>
+          </header>
+
+          {viewTab === 'preview' ? (
+            <div className="sqs-ide-preview">
+              <iframe
+                key={previewKey}
+                ref={iframeRef}
+                src={previewSrc}
+                title={`${copy.modeLabels.code}: ${storefrontSlug}`}
+              />
+              {isVeiling || isTransforming ? (
+                <div className="sqs-ide-veil" aria-hidden>
+                  <DitherHalftoneSystem
+                    mode={isTransforming ? 'loading' : 'transition'}
+                    intensity={isTransforming ? 0.4 : 0.3}
+                    speed={1.6}
+                    quality="low"
+                  />
+                </div>
+              ) : null}
+              {isLoading || isSaving ? (
+                <div className="sqs-ide-preview-chip">
+                  <SouqyPulse size={18} />
+                  <span>{isSaving ? copy.ideBusyManaging : copy.ideBusyLoading}</span>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <PanelGroup
+              direction="horizontal"
+              className="sqs-ide-codepanes"
+              autoSaveId="souqy-ide-code"
             >
-              {isTransforming ? copy.ideTransforming : isAsking ? copy.ideAsking : copy.ideAsk}
-            </button>
-          </div>
-        </BorderBeam>
-      </div>
+              <Panel defaultSize={26} minSize={15} className="sqs-ide-pane" order={1}>
+                <ComponentTree
+                  copy={copy}
+                  pages={pages}
+                  activePageId={pageId}
+                  blocks={parsedBlocks ?? []}
+                  selectedIndex={selectedIndex}
+                  onSelectPage={(next) => void loadPage(storefrontSlug, next)}
+                  onSelectBlock={selectBlock}
+                />
+              </Panel>
+              <PanelResizeHandle className="sqs-ide-handle" />
+              <Panel defaultSize={74} minSize={40} className="sqs-ide-pane" order={2}>
+                <div className="sqs-ide-codehead" dir="ltr">
+                  <strong>{storefrontSlug}/blocks.json</strong>
+                  {isDirty ? <span className="sqs-ide-dirty" aria-label={copy.ideUnsaved} /> : null}
+                  {doc.parseError ? (
+                    <span className="sqs-ide-banner is-error" role="status">
+                      {copy.ideInvalidJson}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="sqs-ide-codebody">
+                  <CodeEditor
+                    value={doc.text}
+                    isRtlUi={isRtl}
+                    selectedRange={selectedRange}
+                    onChange={handleEditorChange}
+                    onCursorLine={handleCursorLine}
+                    onSave={() => void handleSave()}
+                  />
+                </div>
+              </Panel>
+            </PanelGroup>
+          )}
+        </Panel>
+      </PanelGroup>
     </section>
   );
 }
