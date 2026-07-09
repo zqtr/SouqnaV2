@@ -118,6 +118,8 @@ export const BLOCK_TYPES = [
   'productSpotlight3d',
   /** Pro+ animated, hover-pausing marquee of bilingual customer reviews. */
   'socialProofWall',
+  /** Max+ scroll-driven multi-layer parallax hero with per-letter headline scatter. */
+  'parallaxStoryHero',
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
@@ -148,6 +150,28 @@ export type BlockStyle = {
   /** Gallery/layout treatment for image collections. */
   galleryEffect?: GalleryEffect;
   align?: 'start' | 'center' | 'end';
+  /**
+   * Text size multiplier (0.6–1.8, default 1). Applied by BlockFrame as
+   * `--sf-font-scale`; text-bearing blocks multiply their clamp() sizes
+   * by it, so headings and body copy scale together per block.
+   */
+  fontScale?: number;
+  /**
+   * Colorion text FX accent overrides (hex). `fxColor` drives the
+   * primary effect accent (`--ink-2`); `fxColor2` the secondary
+   * (`--ink-3`, which otherwise blends the accent with the palette
+   * ink). Applied by BlockFrame as `--fx-accent` / `--fx-accent-2`, so
+   * unset values keep the palette-locked defaults.
+   */
+  fxColor?: string;
+  fxColor2?: string;
+  /**
+   * Colorion text FX speed multiplier (0.25–3, default 1). Applied by
+   * BlockFrame as `--fx-speed`; the generated stylesheet divides every
+   * animation duration/delay by it, so 2 runs twice as fast and 0.5
+   * half speed with per-letter staggers keeping their rhythm.
+   */
+  fxSpeed?: number;
   /**
    * Per-block surface mode. `inherit` (default) follows the storefront's
    * `themeBehaviour`; `light` / `dark` swap the palette triplet for this
@@ -266,6 +290,67 @@ export const TEXT_EFFECTS = [
   'dia-reveal',
   'shine-sweep',
   'gradient-flow',
+  // Colorion FX — 57 pure-CSS effects (MIT, text-effects.colorion.co).
+  // Labels, plan tiers, picker categories and markup recipes live in
+  // `src/lib/blocks/textFx.ts`; the stylesheet is
+  // `src/components/storefront/blocks/text-fx.css`.
+  'fx-aurora',
+  'fx-glitch',
+  'fx-typewriter',
+  'fx-neon',
+  'fx-liquid',
+  'fx-chrome',
+  'fx-focus',
+  'fx-wave',
+  'fx-sliced',
+  'fx-decoder',
+  'fx-scanner',
+  'fx-ember',
+  'fx-echo',
+  'fx-extrude',
+  'fx-contour',
+  'fx-spectrum',
+  'fx-jitter',
+  'fx-anaglyph',
+  'fx-flap',
+  'fx-crt',
+  'fx-pop',
+  'fx-spotlight',
+  'fx-elastic',
+  'fx-mirror',
+  'fx-ransom',
+  'fx-melt',
+  'fx-heartbeat',
+  'fx-marker',
+  'fx-sundial',
+  'fx-negative',
+  'fx-hologram',
+  'fx-foil',
+  'fx-pixel',
+  'fx-starlight',
+  'fx-blueprint',
+  'fx-vapor',
+  'fx-kinetic',
+  'fx-blackout',
+  'fx-magnetic',
+  'fx-mesh',
+  'fx-iridescent',
+  'fx-glass',
+  'fx-datastream',
+  'fx-orbit',
+  'fx-prismcut',
+  'fx-softblur',
+  'fx-laser',
+  'fx-microchip',
+  'fx-heatmap',
+  'fx-parallax',
+  'fx-inktrap',
+  'fx-topographic',
+  'fx-signal',
+  'fx-portal',
+  'fx-tiltshift',
+  'fx-duotone',
+  'fx-glyphrain',
 ] as const;
 export type TextEffect = (typeof TEXT_EFFECTS)[number];
 
@@ -1246,6 +1331,25 @@ export type SocialProofWallProps = {
   speed?: 'slow' | 'medium' | 'fast';
 };
 
+export type ParallaxStoryHeroProps = {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  cta?: Cta;
+  /** Souqna-owned colourway for the built-in scene layers (mirrors shaderHero). */
+  tone?: 'cream' | 'ink' | 'gold';
+  /** Compact = editorial band; immersive fills more of the first viewport. */
+  layout?: 'compact' | 'immersive';
+  /** Scroll travel of the layers. */
+  intensity?: 'subtle' | 'medium' | 'strong';
+  /** Optional full-bleed photo behind the scene (slow layer). */
+  backgroundImage?: string;
+  /** Optional transparent-PNG cutout that drifts sideways mid-scene. */
+  midgroundImage?: string;
+  /** Optional transparent-PNG cutout stacked above the headline (fast layer). */
+  foregroundImage?: string;
+};
+
 export type CurvedLoopProps = {
   /** Text rendered repeatedly along the animated curve. */
   marqueeText: string;
@@ -1333,6 +1437,7 @@ export type BlockPropsByType = {
   shaderHero: ShaderHeroProps;
   productSpotlight3d: ProductSpotlight3dProps;
   socialProofWall: SocialProofWallProps;
+  parallaxStoryHero: ParallaxStoryHeroProps;
 };
 
 /**

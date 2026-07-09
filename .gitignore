@@ -48,3 +48,6 @@ Recommendations/
 docs/founder/
 docs/archive/
 tsconfig.tsbuildinfo
+
+# Screen recordings / local demo captures
+videos/

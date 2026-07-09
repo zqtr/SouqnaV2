@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { UserButton } from '@clerk/nextjs';
@@ -26,6 +26,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { isVariantBlock } from '@/lib/blocks/types';
+import { getTextFx } from '@/lib/blocks/textFx';
 import type {
   Block,
   BLOCK_TYPES,
@@ -2661,8 +2662,38 @@ const SOUQNA_KEYFRAMES = `
 .souqna-publish-spinner {
   animation: souqna-spin 760ms linear infinite;
 }
+/* Drawer entrances. The drawers appear via display:none → flex (which
+   can't transition), so a keyframe animation on the -open class gives
+   them a slide+fade the moment they mount. Closing stays instant —
+   the class is removed and display goes back to none. */
+@keyframes souqna-drawer-in-left {
+  from { transform: translateX(-32px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+@keyframes souqna-drawer-in-right {
+  from { transform: translateX(32px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+.souqna-builder-aside-left.souqna-drawer-open {
+  animation: souqna-drawer-in-left 240ms cubic-bezier(0.32, 0.72, 0.33, 1);
+}
+.souqna-builder-aside-right.souqna-drawer-open {
+  animation: souqna-drawer-in-right 240ms cubic-bezier(0.32, 0.72, 0.33, 1);
+}
+/* Device toggle: glide the preview frame between desktop/tablet/phone
+   widths instead of snapping. */
+.souqna-device-stage {
+  transition: min-width 260ms cubic-bezier(0.32, 0.72, 0.33, 1);
+}
+.souqna-device-frame {
+  transition: width 260ms cubic-bezier(0.32, 0.72, 0.33, 1);
+}
 @media (prefers-reduced-motion: reduce) {
   .souqna-publish-spinner { animation: none !important; }
+  .souqna-builder-aside-left.souqna-drawer-open,
+  .souqna-builder-aside-right.souqna-drawer-open { animation: none !important; }
+  .souqna-device-stage,
+  .souqna-device-frame { transition: none !important; }
 }
 .souqna-library-tile:hover {
   transform: translateY(-1px);
@@ -3147,6 +3178,12 @@ function BuilderShellInner({
   const [productIndexDraft, setProductIndexDraft] =
     useState<ProductIndexSettings>(initialProductIndex);
   const [iframeKey, setIframeKey] = useState(0);
+  // False until the preview iframe's document fires `load`. While false
+  // the iframe sits at opacity 0 over a shimmer placeholder, so cold
+  // loads and full remounts fade in instead of flashing a white box.
+  // Soft refreshes (`souqna:reload` → router.refresh) don't re-fire
+  // `load`, so this only gates real document loads.
+  const [iframeLoaded, setIframeLoaded] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [publishPhase, setPublishPhase] = useState<PublishPhase>('idle');
   const [publishedAtState, setPublishedAtState] = useState<string | null>(publishedAt);
@@ -3248,7 +3285,20 @@ function BuilderShellInner({
   // `future`; redo pops `future`. Capped at 60 states to bound memory.
   const past = useRef<Block[][]>([]);
   const future = useRef<Block[][]>([]);
-  const skipHistoryRef = useRef(false);
+  // Coalesces typing bursts into a single undo entry. Edits that pass
+  // the same coalesce key (e.g. `props:<blockId>`) within 900ms of each
+  // other skip the history push — the entry at the top of `past` is
+  // already the pre-burst state, so one Cmd+Z reverts the whole burst
+  // instead of one character at a time.
+  const lastEditRef = useRef<{ key: string; at: number } | null>(null);
+
+  // Remount the iframe with a fresh document (full reload, not a soft
+  // RSC refresh) and re-arm the load fade so the swap reads as an
+  // intentional transition instead of a white flash.
+  const reloadIframe = useCallback(() => {
+    setIframeLoaded(false);
+    setIframeKey((k) => k + 1);
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -3258,27 +3308,44 @@ function BuilderShellInner({
 
   // ------- persistence (debounced) ----------------------------------------
 
+  // True while a saveDraftBlocks round-trip is in flight. A plain ref
+  // (not a saveState mirror) because the beforeunload guard below must
+  // see the flag drop the moment the await resolves — an intentional
+  // `window.location.reload()` right after a flushed save would
+  // otherwise still see stale state and throw up a leave-site prompt.
+  const saveInFlightRef = useRef(false);
+
   const persist = useCallback(
     async (next: Block[]) => {
+      saveInFlightRef.current = true;
       setSaveState('saving');
-      const cleaned = sanitizeBlocksForSave(next);
-      const res = await saveDraftBlocks({
-        slug,
-        pageId: activePageId,
-        blocks: cleaned as unknown as Parameters<typeof saveDraftBlocks>[0]['blocks'],
-        theme: null,
-      });
-      if (res.status === 'success') {
-        setSaveState('saved');
-        iframeRef.current?.contentWindow?.postMessage(
-          { type: 'souqna:reload' },
-          window.location.origin,
-        );
-      } else {
-        // Log the server's reason so it's visible in the browser console even
-        // when the chip can only flash a generic error state.
-        console.error('[BuilderShell] save failed:', 'message' in res ? res.message : res);
+      try {
+        const cleaned = sanitizeBlocksForSave(next);
+        const res = await saveDraftBlocks({
+          slug,
+          pageId: activePageId,
+          blocks: cleaned as unknown as Parameters<typeof saveDraftBlocks>[0]['blocks'],
+          theme: null,
+        });
+        if (res.status === 'success') {
+          setSaveState('saved');
+          iframeRef.current?.contentWindow?.postMessage(
+            { type: 'souqna:reload' },
+            window.location.origin,
+          );
+        } else {
+          // Log the server's reason so it's visible in the browser console even
+          // when the chip can only flash a generic error state.
+          console.error('[BuilderShell] save failed:', 'message' in res ? res.message : res);
+          setSaveState('error');
+        }
+      } catch (err) {
+        // A thrown action (network drop, aborted fetch) previously left
+        // the chip stuck on "saving" forever.
+        console.error('[BuilderShell] save failed:', err);
         setSaveState('error');
+      } finally {
+        saveInFlightRef.current = false;
       }
     },
     [activePageId, slug],
@@ -3288,11 +3355,29 @@ function BuilderShellInner({
     (next: Block[]) => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
+        // Null before firing so "timer pending" checks (flush, the
+        // beforeunload guard) don't keep seeing a timer that already ran.
+        saveTimer.current = null;
         void persist(next);
       }, 300);
     },
     [persist],
   );
+
+  // Warn before the tab closes while an edit hasn't landed yet — either
+  // still sitting in the debounce window or mid save round-trip. Without
+  // this, closing within ~300ms of a keystroke silently drops the edit.
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (saveTimer.current !== null || saveInFlightRef.current) {
+        e.preventDefault();
+        // Chrome still requires returnValue to show the prompt.
+        e.returnValue = '';
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   // Force-flush any pending debounced save and wait for it to land. Used
   // before page-switch navigations so the founder never loses unsaved
@@ -3317,14 +3402,44 @@ function BuilderShellInner({
     [flushPendingSave, locale],
   );
 
+  // Post `souqna:patch` for every string prop that differs between two
+  // block trees, so the preview text updates the instant state changes
+  // (typing, undo, redo) instead of after the save → refresh round-trip.
+  // Fields without a `[data-edit-field]` node no-op in the bridge and
+  // wait for the refresh like before; structural changes always do.
+  const postTextPatches = useCallback((from: Block[], to: Block[]) => {
+    const frame = iframeRef.current?.contentWindow;
+    if (!frame) return;
+    const fromById = new Map(from.map((b) => [b.id, b]));
+    for (const b of to) {
+      const was = fromById.get(b.id);
+      if (!was || was === b) continue;
+      const prevProps = was.props as Record<string, unknown>;
+      const nextProps = b.props as Record<string, unknown>;
+      for (const [field, value] of Object.entries(nextProps)) {
+        if (typeof value === 'string' && prevProps[field] !== value) {
+          frame.postMessage(
+            { type: 'souqna:patch', blockId: b.id, field, value },
+            window.location.origin,
+          );
+        }
+      }
+    }
+  }, []);
+
   const update = useCallback(
-    (next: Block[]) => {
-      if (!skipHistoryRef.current) {
+    (next: Block[], coalesceKey?: string) => {
+      const now = Date.now();
+      const last = lastEditRef.current;
+      const coalesce = Boolean(
+        coalesceKey && last && last.key === coalesceKey && now - last.at < 900,
+      );
+      if (!coalesce) {
         past.current.push(blocksRef.current);
         if (past.current.length > 60) past.current.shift();
-        future.current = [];
       }
-      skipHistoryRef.current = false;
+      future.current = [];
+      lastEditRef.current = coalesceKey ? { key: coalesceKey, at: now } : null;
       setBlocks(next);
       queuePersist(next);
     },
@@ -3335,21 +3450,39 @@ function BuilderShellInner({
     const prev = past.current.pop();
     if (!prev) return;
     future.current.push(blocksRef.current);
-    skipHistoryRef.current = true;
+    // Break any in-flight typing burst — edits after an undo must push
+    // fresh history or redo/undo would silently eat them.
+    lastEditRef.current = null;
+    postTextPatches(blocksRef.current, prev);
     setBlocks(prev);
     queuePersist(prev);
-  }, [queuePersist]);
+  }, [postTextPatches, queuePersist]);
 
   const redo = useCallback(() => {
     const next = future.current.pop();
     if (!next) return;
     past.current.push(blocksRef.current);
-    skipHistoryRef.current = true;
+    lastEditRef.current = null;
+    postTextPatches(blocksRef.current, next);
     setBlocks(next);
     queuePersist(next);
-  }, [queuePersist]);
+  }, [postTextPatches, queuePersist]);
 
   // ------- block ops ------------------------------------------------------
+  // Every op reads `blocksRef.current` (not the `blocks` closure) so the
+  // callbacks stay referentially stable across keystrokes. That's what
+  // lets the memoized panels (library, outline rows, top bar) skip
+  // re-rendering while the founder types in the inspector.
+
+  // Ask the preview to smooth-scroll to a block. The bridge retries for
+  // a few seconds, which covers blocks that only exist in the iframe
+  // after the debounced save + refresh lands (fresh adds, duplicates).
+  const scrollPreviewToBlock = useCallback((blockId: string) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'souqna:scroll', blockId },
+      window.location.origin,
+    );
+  }, []);
 
   const addBlock = useCallback(
     (type: BlockType, atIndex?: number, options: BlockCreateOptions = {}) => {
@@ -3364,12 +3497,13 @@ function BuilderShellInner({
         return;
       }
       const block = createBlock(type, productOptions, options);
-      const next = [...blocks];
+      const next = [...blocksRef.current];
       const idx = typeof atIndex === 'number' ? atIndex : next.length;
       next.splice(idx, 0, block);
       update(next);
       setSelectedId(block.id);
       setTab('outline');
+      scrollPreviewToBlock(block.id);
       // Flag the new row so it pulses + scrolls into view in the
       // outline. Replaces any in-flight glow timer so two quick adds
       // don't leave the older one stuck in the highlighted state.
@@ -3380,47 +3514,102 @@ function BuilderShellInner({
         justAddedTimerRef.current = null;
       }, JUST_ADDED_GLOW_MS);
     },
-    [blocks, currentPlan, editingSystemPage, installedAppIds, productOptions, router, update],
+    [
+      currentPlan,
+      editingSystemPage,
+      installedAppIds,
+      productOptions,
+      router,
+      scrollPreviewToBlock,
+      update,
+    ],
   );
 
   const removeBlock = useCallback(
     (id: string) => {
-      const next = blocks.filter((b) => b.id !== id);
+      const next = blocksRef.current.filter((b) => b.id !== id);
       update(next);
-      if (selectedId === id) setSelectedId(next[0]?.id ?? null);
+      setSelectedId((sel) => (sel === id ? (next[0]?.id ?? null) : sel));
     },
-    [blocks, selectedId, update],
+    [update],
   );
 
   const moveBlock = useCallback(
     (id: string, dir: -1 | 1) => {
-      const idx = blocks.findIndex((b) => b.id === id);
+      const current = blocksRef.current;
+      const idx = current.findIndex((b) => b.id === id);
       if (idx === -1) return;
       const target = idx + dir;
-      if (target < 0 || target >= blocks.length) return;
-      const next = blocks.slice();
+      if (target < 0 || target >= current.length) return;
+      const next = current.slice();
       const [item] = next.splice(idx, 1);
       if (!item) return;
       next.splice(target, 0, item);
       update(next);
     },
-    [blocks, update],
+    [update],
   );
 
   const updateBlockProps = useCallback(
     (id: string, nextProps: Record<string, unknown>) => {
-      const next = blocks.map((b) => (b.id === id ? ({ ...b, props: nextProps } as Block) : b));
-      update(next);
+      const current = blocksRef.current;
+      const next = current.map((b) => (b.id === id ? ({ ...b, props: nextProps } as Block) : b));
+      update(next, `props:${id}`);
+      // Optimistic canvas update: typing in the inspector shows up in
+      // the preview immediately instead of after the save round-trip.
+      postTextPatches(current, next);
     },
-    [blocks, update],
+    [postTextPatches, update],
+  );
+
+  // A just-picked Colorion text effect takes a while to reach the canvas
+  // (debounced save → POST → `souqna:reload` → server re-render), so the
+  // picker shows a spinner on the tile until the effect class actually
+  // appears in the preview DOM. Same-origin iframe, so we can poll it.
+  const [pendingFx, setPendingFx] = useState<{ blockId: string; effect: string } | null>(null);
+  const pendingFxTimer = useRef<number | null>(null);
+  const trackFxApplied = useCallback((blockId: string, effect: string) => {
+    const fx = getTextFx(effect);
+    if (!fx) return; // studio/none effects have no reliable DOM marker
+    if (pendingFxTimer.current !== null) window.clearInterval(pendingFxTimer.current);
+    setPendingFx({ blockId, effect });
+    const startedAt = Date.now();
+    pendingFxTimer.current = window.setInterval(() => {
+      let applied = false;
+      try {
+        // window.CSS, not the dnd-kit `CSS` helper imported above.
+        const root = iframeRef.current?.contentDocument?.querySelector(
+          `[data-block-id="${window.CSS.escape(blockId)}"]`,
+        );
+        applied = !!root?.querySelector(`.fx-${fx.slug}`);
+      } catch {
+        applied = true; // iframe detached/unreadable — don't spin forever
+      }
+      if (applied || Date.now() - startedAt > 30000) {
+        if (pendingFxTimer.current !== null) window.clearInterval(pendingFxTimer.current);
+        pendingFxTimer.current = null;
+        setPendingFx(null);
+      }
+    }, 350);
+  }, []);
+  useEffect(
+    () => () => {
+      if (pendingFxTimer.current !== null) window.clearInterval(pendingFxTimer.current);
+    },
+    [],
   );
 
   const updateBlockStyle = useCallback(
     (id: string, nextStyle: Block['style']) => {
-      const next = blocks.map((b) => (b.id === id ? ({ ...b, style: nextStyle } as Block) : b));
-      update(next);
+      const prevEffect = blocksRef.current.find((b) => b.id === id)?.style?.textEffect;
+      const next = blocksRef.current.map((b) =>
+        b.id === id ? ({ ...b, style: nextStyle } as Block) : b,
+      );
+      update(next, `style:${id}`);
+      const nextEffect = nextStyle?.textEffect;
+      if (nextEffect && nextEffect !== prevEffect) trackFxApplied(id, nextEffect);
     },
-    [blocks, update],
+    [trackFxApplied, update],
   );
 
   // On-canvas inline edit: merge a single text field the founder typed
@@ -3429,13 +3618,13 @@ function BuilderShellInner({
   // closure without re-subscribing on every keystroke.
   const applyInlineEdit = useCallback(
     (id: string, field: string, value: string) => {
-      const b = blocks.find((x) => x.id === id);
+      const b = blocksRef.current.find((x) => x.id === id);
       if (!b) return;
       const nextProps = { ...(b.props as Record<string, unknown>), [field]: value };
       updateBlockProps(id, nextProps);
       setSelectedId(id);
     },
-    [blocks, updateBlockProps],
+    [updateBlockProps],
   );
   const applyInlineEditRef = useRef(applyInlineEdit);
   useEffect(() => {
@@ -3514,18 +3703,20 @@ function BuilderShellInner({
 
   const duplicateBlock = useCallback(
     (id: string) => {
-      const idx = blocks.findIndex((b) => b.id === id);
+      const current = blocksRef.current;
+      const idx = current.findIndex((b) => b.id === id);
       if (idx === -1) return;
-      const original = blocks[idx];
+      const original = current[idx];
       if (!original) return;
       const copy: Block = JSON.parse(JSON.stringify(original));
       copy.id = newId();
-      const next = [...blocks];
+      const next = [...current];
       next.splice(idx + 1, 0, copy);
       update(next);
       setSelectedId(copy.id);
+      scrollPreviewToBlock(copy.id);
     },
-    [blocks, update],
+    [scrollPreviewToBlock, update],
   );
 
   // ------- DnD ------------------------------------------------------------
@@ -3754,13 +3945,13 @@ function BuilderShellInner({
     if (res.status === 'success' && res.blocks) {
       setBlocks(res.blocks);
       setSelectedId(res.blocks[0]?.id ?? null);
-      setIframeKey((k) => k + 1);
+      reloadIframe();
       setSaveState('saved');
       startTransition(() => router.refresh());
     } else {
       setSaveState('error');
     }
-  }, [copy.publish.discardConfirm, router, slug]);
+  }, [copy.publish.discardConfirm, reloadIframe, router, slug]);
 
   const handleResetTemplate = useCallback(async () => {
     if (
@@ -3774,13 +3965,13 @@ function BuilderShellInner({
     if (res.status === 'success' && res.blocks) {
       setBlocks(res.blocks);
       setSelectedId(res.blocks[0]?.id ?? null);
-      setIframeKey((k) => k + 1);
+      reloadIframe();
       setSaveState('saved');
       startTransition(() => router.refresh());
     } else {
       setSaveState('error');
     }
-  }, [router, slug]);
+  }, [reloadIframe, router, slug]);
 
   // Called by `SiteInspector` after `switchBuilderTemplate` lands. The
   // server has already persisted + published the freshly seeded blocks
@@ -3799,15 +3990,15 @@ function BuilderShellInner({
       // back into now that the canvas has been wholesale replaced.
       past.current = [];
       future.current = [];
-      skipHistoryRef.current = true;
+      lastEditRef.current = null;
       setBlocks(nextBlocks);
       setSelectedId(nextBlocks[0]?.id ?? null);
       setInspectorMode('block');
-      setIframeKey((k) => k + 1);
+      reloadIframe();
       setSaveState('saved');
       startTransition(() => router.refresh());
     },
-    [router],
+    [reloadIframe, router],
   );
 
   // ------- keyboard shortcuts ---------------------------------------------
@@ -3837,6 +4028,14 @@ function BuilderShellInner({
       const id = selectedId;
       if (!id) return;
 
+      // Esc clears the selection (and with it the preview highlight +
+      // floating toolbar). Skipped while a drawer/sheet is open so Esc
+      // keeps meaning "close that" there.
+      if (e.key === 'Escape' && !navMenuOpen && !leftDrawerOpen && !rightDrawerOpen) {
+        setSelectedId(null);
+        return;
+      }
+
       if (e.key === 'Backspace' || e.key === 'Delete') {
         e.preventDefault();
         removeBlock(id);
@@ -3853,7 +4052,17 @@ function BuilderShellInner({
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [duplicateBlock, moveBlock, redo, removeBlock, selectedId, undo]);
+  }, [
+    duplicateBlock,
+    leftDrawerOpen,
+    moveBlock,
+    navMenuOpen,
+    redo,
+    removeBlock,
+    rightDrawerOpen,
+    selectedId,
+    undo,
+  ]);
 
   const selected = useMemo(
     () => blocks.find((b) => b.id === selectedId) ?? null,
@@ -3949,15 +4158,34 @@ function BuilderShellInner({
         hint: `#${i + 1}`,
         onSelect: () => {
           setSelectedId(b.id);
-          // Best-effort scroll inside the preview iframe via existing bridge.
-          const iframe = document.querySelector(
-            'iframe[data-preview-frame]',
-          ) as HTMLIFrameElement | null;
-          iframe?.contentWindow?.postMessage({ kind: 'scrollToBlock', id: b.id }, '*');
+          scrollPreviewToBlock(b.id);
         },
       })),
-    [blockLabels, blocks, copy.outline.aria, locale],
+    [blockLabels, blocks, copy.outline.aria, locale, scrollPreviewToBlock],
   );
+
+  // Outline-row click: select AND scroll the preview to the block, so
+  // the outline doubles as canvas navigation. Clicks *inside* the
+  // iframe deliberately don't scroll (the block is already on screen —
+  // scroll-jacking there would fight the founder's own scrolling).
+  const selectFromOutline = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      scrollPreviewToBlock(id);
+    },
+    [scrollPreviewToBlock],
+  );
+
+  // Stable handlers for the memoized top bar / library panel — inline
+  // arrows here would defeat their React.memo on every shell render.
+  const toggleLeftDrawer = useCallback(() => setLeftDrawerOpen((v) => !v), []);
+  const toggleRightDrawer = useCallback(() => setRightDrawerOpen((v) => !v), []);
+  const openNavMenu = useCallback(() => setNavMenuOpen(true), []);
+  const handleLibraryAdd = useCallback(
+    (item: LibraryItem) => addBlock(item.type, undefined, { variant: item.variant, tier: item.tier }),
+    [addBlock],
+  );
+  const handleConnectApp = useCallback(() => setTab('apps'), []);
 
   return (
     <DndContext
@@ -4047,9 +4275,9 @@ function BuilderShellInner({
           onPublish={handlePublish}
           onResetTemplate={handleResetTemplate}
           onBeforeLocaleChange={flushPendingSave}
-          onToggleLeftPanel={() => setLeftDrawerOpen((v) => !v)}
-          onToggleRightPanel={() => setRightDrawerOpen((v) => !v)}
-          onOpenNavMenu={() => setNavMenuOpen(true)}
+          onToggleLeftPanel={toggleLeftDrawer}
+          onToggleRightPanel={toggleRightDrawer}
+          onOpenNavMenu={openNavMenu}
         />
 
         <BuilderNavSheet
@@ -4208,7 +4436,7 @@ function BuilderShellInner({
                   }}
                   onSystemPageEnabledChange={(page, enabled) => {
                     setProductIndexDraft((current) => ({ ...current, enabled }));
-                    setIframeKey((key) => key + 1);
+                    reloadIframe();
                   }}
                   onBeforeSwitch={flushPendingSave}
                   giphyStorefrontSlug={giphyStorefrontSlug}
@@ -4216,12 +4444,10 @@ function BuilderShellInner({
               ) : tab === 'library' ? (
                 <LibraryPanel
                   groups={libraryGroups}
-                  onAdd={(item) =>
-                    addBlock(item.type, undefined, { variant: item.variant, tier: item.tier })
-                  }
+                  onAdd={handleLibraryAdd}
                   currentPlan={currentPlan}
                   installedAppIds={installedAppIds}
-                  onConnectApp={() => setTab('apps')}
+                  onConnectApp={handleConnectApp}
                 />
               ) : tab === 'apps' ? (
                 <AppsPanel
@@ -4235,7 +4461,7 @@ function BuilderShellInner({
                   blockLabels={blockLabels}
                   locale={locale}
                   selectedId={selectedId}
-                  onSelect={setSelectedId}
+                  onSelect={selectFromOutline}
                   onMove={moveBlock}
                   onDelete={removeBlock}
                   onDuplicate={duplicateBlock}
@@ -4333,7 +4559,6 @@ function BuilderShellInner({
                   flex: 1,
                   display: 'flex',
                   justifyContent: 'center',
-                  transition: 'width 200ms ease',
                 }}
               >
                 <div
@@ -4385,6 +4610,25 @@ function BuilderShellInner({
                           }}
                         />
                       ) : null}
+                      {!iframeLoaded ? (
+                        // Shimmer placeholder under the still-transparent
+                        // iframe so a cold preview load reads as "loading"
+                        // instead of a blank white box. Unmounts once the
+                        // document lands (no idle animation cost after).
+                        <span
+                          aria-hidden
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            borderRadius: 16,
+                            border: '1px solid var(--bld-iframe-border)',
+                            background:
+                              'linear-gradient(100deg, var(--bld-tile-bg) 40%, var(--bld-accent-soft) 50%, var(--bld-tile-bg) 60%), var(--bld-surface-strong)',
+                            backgroundSize: '200% 100%',
+                            animation: 'souqna-scrub 1.4s linear infinite',
+                          }}
+                        />
+                      ) : null}
                       <iframe
                         ref={iframeRef}
                         key={iframeKey}
@@ -4396,6 +4640,7 @@ function BuilderShellInner({
                         title="storefront preview"
                         data-preview-frame
                         className="souqna-builder-iframe"
+                        onLoad={() => setIframeLoaded(true)}
                         style={{
                           width: '100%',
                           maxWidth: '100%',
@@ -4405,6 +4650,13 @@ function BuilderShellInner({
                           borderRadius: 16,
                           background: '#fff',
                           boxShadow: '0 22px 70px var(--bld-panel-shadow)',
+                          // Fade the document in over the shimmer once it
+                          // has actually loaded (soft RSC refreshes don't
+                          // re-fire `load`, so this only runs on real
+                          // document swaps).
+                          position: 'relative',
+                          opacity: iframeLoaded ? 1 : 0,
+                          transition: 'opacity 280ms ease',
                           // Iframes swallow pointer events from the parent
                           // document, which would defeat the canvas drop
                           // target. While dragging from the library we let
@@ -4536,6 +4788,11 @@ function BuilderShellInner({
                     }))}
                     giphyStorefrontSlug={giphyStorefrontSlug}
                     currentPlan={currentPlan}
+                    pendingTextEffect={
+                      selected && pendingFx?.blockId === selected.id
+                        ? pendingFx.effect
+                        : undefined
+                    }
                   />
                 ) : (
                   <SiteInspector
@@ -4840,7 +5097,10 @@ function DeviceGlyph({ device }: { device: Device }) {
  * Discard, Theme, Products, Plugins, Theme toggle) so the bar stays
  * dense even at narrow widths.
  */
-function BuilderTopBar({
+// Memoized (with the stable handlers the shell hoists for it) so
+// per-keystroke block edits don't re-render the whole toolbar — it only
+// re-renders when save/publish state or the device actually changes.
+const BuilderTopBar = memo(function BuilderTopBar({
   locale,
   slug,
   businessName,
@@ -5291,7 +5551,7 @@ function BuilderTopBar({
       </div>
     </header>
   );
-}
+});
 
 function LocaleToggle({
   locale,
@@ -5949,7 +6209,9 @@ function CanvasDropZone({
   );
 }
 
-function LibraryPanel({
+// Memoized: the library never changes while the founder edits blocks,
+// so it must not re-render (dozens of SVG mini-previews) per keystroke.
+const LibraryPanel = memo(function LibraryPanel({
   groups,
   onAdd,
   currentPlan,
@@ -6021,7 +6283,7 @@ function LibraryPanel({
       ))}
     </div>
   );
-}
+});
 
 function LibraryTile({
   item,
@@ -6261,7 +6523,10 @@ function EmptyOutlineDropzone({
   );
 }
 
-function OutlineRow({
+// Memoized so editing one block's props only re-renders that block's
+// row — the shell's block-op callbacks are referentially stable, and
+// untouched Block objects keep their identity across edits.
+const OutlineRow = memo(function OutlineRow({
   block,
   blockLabels,
   locale,
@@ -6310,6 +6575,14 @@ function OutlineRow({
     });
     return () => window.cancelAnimationFrame(id);
   }, [justAdded]);
+  // Keep the selected row visible: clicking a block in the preview (or
+  // opening the outline tab with a selection already made) reveals the
+  // matching row. `nearest` makes this a no-op when it's already on
+  // screen, so outline-originated clicks never cause a jump.
+  useEffect(() => {
+    if (!selected) return;
+    rowElRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selected]);
   const liStyle: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -6411,7 +6684,7 @@ function OutlineRow({
       </div>
     </li>
   );
-}
+});
 
 function RowIconBtn({
   ariaLabel,
@@ -6796,6 +7069,21 @@ function createBlock(
           subtitle: 'A living gradient sets the tone, then product and service sections do the selling.',
           layout: 'immersive',
           tone: 'ink',
+          cta: { label: 'Explore products', href: '/products' },
+        },
+      };
+    case 'parallaxStoryHero':
+      return {
+        id,
+        type,
+        props: {
+          eyebrow: 'From a name to the first sale',
+          title: 'Discover',
+          subtitle: 'A cinematic opener — the scene and every headline letter move at their own depth as visitors scroll.',
+          layout: 'immersive',
+          tone: 'ink',
+          intensity: 'medium',
+          backgroundImage: '/brand/parallax-souq-hero.jpg',
           cta: { label: 'Explore products', href: '/products' },
         },
       };

@@ -32,6 +32,7 @@ import { PortalHeroBlock } from './blocks/PortalHeroBlock';
 import { ShaderHeroBlock } from './blocks/ShaderHeroBlock';
 import { ProductSpotlight3dBlock } from './blocks/ProductSpotlight3dBlock';
 import { SocialProofWallBlock } from './blocks/SocialProofWallBlock';
+import { ParallaxStoryHeroBlock } from './blocks/ParallaxStoryHeroBlock';
 import { CurvedLoopBlock } from './blocks/CurvedLoopBlock';
 import {
   Showcase1Block,
@@ -205,6 +206,12 @@ function BlockFrame({
   if (style.textColor) css.color = COLOR_KEYWORDS[style.textColor] ?? style.textColor;
   if (style.align)
     css.textAlign = style.align === 'start' ? 'left' : style.align === 'end' ? 'right' : 'center';
+  if (typeof style.fontScale === 'number' && style.fontScale !== 1)
+    (css as Record<string, string | number>)['--sf-font-scale'] = style.fontScale;
+  if (style.fxColor) (css as Record<string, string>)['--fx-accent'] = style.fxColor;
+  if (style.fxColor2) (css as Record<string, string>)['--fx-accent-2'] = style.fxColor2;
+  if (typeof style.fxSpeed === 'number' && style.fxSpeed !== 1)
+    (css as Record<string, string | number>)['--fx-speed'] = style.fxSpeed;
 
   // Layout primitives. `block` (default) leaves the wrapper as a
   // standard stacked section; `flex` / `grid` switch the wrapper to that
@@ -310,6 +317,8 @@ function renderBlock(block: Block, ctx: BlockContext): React.ReactNode {
       return <ProductSpotlight3dBlock block={block as never} ctx={ctx} />;
     case 'socialProofWall':
       return <SocialProofWallBlock block={block as never} ctx={ctx} />;
+    case 'parallaxStoryHero':
+      return <ParallaxStoryHeroBlock block={block as never} ctx={ctx} />;
     case 'curvedLoop':
       return <CurvedLoopBlock block={block as never} ctx={ctx} />;
     case 'showcase1':

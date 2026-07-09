@@ -4,7 +4,9 @@ import { createElement, type CSSProperties, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import StaggeredText from '@/components/souqna-motion/staggered-text';
 import { DiaTextReveal } from '@/components/souqna-motion/dia-text-reveal';
+import { getTextFx } from '@/lib/blocks/textFx';
 import type { TextEffect } from '@/lib/blocks/types';
+import './text-fx.css';
 
 type Props = {
   effect?: TextEffect;
@@ -65,6 +67,38 @@ export function TextEffectRenderer({ effect, as, children, style, className, edi
   const editAttr = editField ? { 'data-edit-field': editField } : undefined;
   if (!effect || effect === 'none' || reduced || !text) {
     return createElement(as, { style, className, ...editAttr }, children);
+  }
+
+  const fx = getTextFx(effect);
+  if (fx) {
+    // Colorion FX — pure-CSS classes from ./text-fx.css. `.souqna-tfx`
+    // maps the upstream colour tokens onto the merchant palette; the
+    // markup recipe decides how the copy is laid out (see textFx.ts).
+    // `--fx-chars` feeds width/stagger maths (typewriter reveal span).
+    const fxClass = [className, 'souqna-tfx', `fx-${fx.slug}`].filter(Boolean).join(' ');
+    const fxStyle = { ...style, '--fx-chars': text.length } as CSSProperties;
+    if (fx.markup === 'letters') {
+      // Per-glyph stagger. Arabic (and other joining scripts) is split
+      // per word instead — glyphs in separate elements lose their
+      // contextual shaping and render as disconnected letter forms.
+      const byWord = /[؀-ۿݐ-ݿ]/.test(text);
+      const units = byWord ? text.split(/(\s+)/).filter(Boolean) : [...text];
+      return createElement(
+        as,
+        { style: fxStyle, className: fxClass, role: 'img', 'aria-label': text },
+        units.map((unit, i) =>
+          createElement(
+            'b',
+            { key: i, 'aria-hidden': true, style: { '--i': i } as CSSProperties },
+            /^\s+$/.test(unit) ? '\u00A0' : unit,
+          ),
+        ),
+      );
+    }
+    if (fx.markup === 'data-text') {
+      return createElement(as, { style: fxStyle, className: fxClass, 'data-text': text, ...editAttr }, children);
+    }
+    return createElement(as, { style: fxStyle, className: fxClass, ...editAttr }, children);
   }
 
   if (effect === 'staggered-text') {

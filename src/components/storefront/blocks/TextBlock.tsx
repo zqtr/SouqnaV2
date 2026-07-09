@@ -39,7 +39,7 @@ export function TextBlock({ block, ctx }: BlockRenderProps<TextProps>) {
             fontFamily: serifFamily,
             fontStyle: 'italic',
             fontWeight: 400,
-            fontSize: 'clamp(24px, 3.6vw, 40px)',
+            fontSize: 'calc(clamp(24px, 3.6vw, 40px) * var(--sf-font-scale, 1))',
             lineHeight: 1.15,
             margin: '0 0 16px',
           }}
@@ -47,11 +47,16 @@ export function TextBlock({ block, ctx }: BlockRenderProps<TextProps>) {
           {props.heading}
         </TextEffectRenderer>
       ) : null}
-      <div
+      {/* The text effect rides the heading when there is one; on a
+          body-only block it applies to the body itself, so a standalone
+          paragraph still animates. */}
+      <TextEffectRenderer
+        as="div"
+        effect={props.heading ? undefined : block.style?.textEffect}
         style={{
           fontFamily: emphasis === 'serif' ? serifFamily : fontFamily,
           fontStyle: emphasis === 'serif' ? 'italic' : 'normal',
-          fontSize: 'clamp(15px, 1.6vw, 18px)',
+          fontSize: 'calc(clamp(15px, 1.6vw, 18px) * var(--sf-font-scale, 1))',
           lineHeight: 1.65,
           color: 'color-mix(in srgb, var(--sf-ink) 80%, transparent)',
           maxWidth: align === 'center' ? 640 : 720,
@@ -60,7 +65,7 @@ export function TextBlock({ block, ctx }: BlockRenderProps<TextProps>) {
         }}
       >
         {props.body}
-      </div>
+      </TextEffectRenderer>
     </section>
   );
 }

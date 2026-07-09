@@ -72,6 +72,16 @@ const styleSchema = z
     cardEffect: z.enum(CARD_EFFECTS).optional(),
     galleryEffect: z.enum(GALLERY_EFFECTS).optional(),
     align: z.enum(['start', 'center', 'end']).optional(),
+    fontScale: z.number().min(0.6).max(1.8).optional(),
+    fxColor: z
+      .string()
+      .regex(/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/)
+      .optional(),
+    fxColor2: z
+      .string()
+      .regex(/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/)
+      .optional(),
+    fxSpeed: z.number().min(0.25).max(3).optional(),
     colorScheme: z.enum(['inherit', 'light', 'dark']).optional(),
 
     // Layout primitives mirror BlockStyle in types.ts. All optional so
@@ -589,6 +599,21 @@ const socialProofWallProps = z
   })
   .strict();
 
+const parallaxStoryHeroProps = z
+  .object({
+    eyebrow: z.string().trim().max(80).optional(),
+    title: z.string().trim().min(1).max(120),
+    subtitle: z.string().trim().max(420).optional(),
+    cta: ctaSchema.optional(),
+    tone: z.enum(['cream', 'ink', 'gold']).optional(),
+    layout: z.enum(['compact', 'immersive']).optional(),
+    intensity: z.enum(['subtle', 'medium', 'strong']).optional(),
+    backgroundImage: z.string().trim().max(2048).optional(),
+    midgroundImage: z.string().trim().max(2048).optional(),
+    foregroundImage: z.string().trim().max(2048).optional(),
+  })
+  .strict();
+
 const curvedLoopProps = z
   .object({
     marqueeText: z.string().trim().min(1).max(260).default('Add Text Here'),
@@ -1051,6 +1076,7 @@ export const blockPropsByType = {
   shaderHero: shaderHeroProps,
   productSpotlight3d: productSpotlight3dProps,
   socialProofWall: socialProofWallProps,
+  parallaxStoryHero: parallaxStoryHeroProps,
   curvedLoop: curvedLoopProps,
   showcase1: showcase1Props,
   showcase2: showcase2Props,
@@ -1150,6 +1176,11 @@ export const blockSchema = z.discriminatedUnion('type', [
     ...baseBlock,
     type: z.literal('socialProofWall'),
     props: socialProofWallProps,
+  }),
+  z.object({
+    ...baseBlock,
+    type: z.literal('parallaxStoryHero'),
+    props: parallaxStoryHeroProps,
   }),
   z.object({
     ...baseBlock,

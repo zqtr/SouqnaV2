@@ -126,7 +126,7 @@ export function HeroBlock({ block, ctx }: BlockRenderProps<HeroProps>) {
             fontFamily: serifFamily,
             fontStyle: 'italic',
             fontWeight: 400,
-            fontSize: 'clamp(40px, 8vw, 96px)',
+            fontSize: 'calc(clamp(40px, 8vw, 96px) * var(--sf-font-scale, 1))',
             lineHeight: isRtl ? 1.18 : 1,
             margin: 0,
             maxWidth: 980,
@@ -139,7 +139,7 @@ export function HeroBlock({ block, ctx }: BlockRenderProps<HeroProps>) {
             data-edit-field={ctx.isPreview ? 'tagline' : undefined}
             style={{
               fontFamily,
-              fontSize: 'clamp(16px, 1.8vw, 20px)',
+              fontSize: 'calc(clamp(16px, 1.8vw, 20px) * var(--sf-font-scale, 1))',
               lineHeight: 1.5,
               maxWidth: 640,
               margin: '24px auto 0',
@@ -205,7 +205,7 @@ export function HeroBlock({ block, ctx }: BlockRenderProps<HeroProps>) {
             fontFamily: serifFamily,
             fontStyle: 'italic',
             fontWeight: 400,
-            fontSize: 'clamp(40px, 7vw, 88px)',
+            fontSize: 'calc(clamp(40px, 7vw, 88px) * var(--sf-font-scale, 1))',
             lineHeight: isRtl ? 1.18 : 0.98,
             letterSpacing: isRtl ? '-0.005em' : '-0.03em',
             margin: 0,
@@ -219,7 +219,7 @@ export function HeroBlock({ block, ctx }: BlockRenderProps<HeroProps>) {
             style={{
               fontFamily,
               fontWeight: 300,
-              fontSize: 'clamp(16px, 1.8vw, 20px)',
+              fontSize: 'calc(clamp(16px, 1.8vw, 20px) * var(--sf-font-scale, 1))',
               lineHeight: 1.5,
               margin: 0,
               maxWidth: 640,
@@ -281,7 +281,7 @@ export function HeroBlock({ block, ctx }: BlockRenderProps<HeroProps>) {
           fontFamily: serifFamily,
           fontStyle: 'italic',
           fontWeight: 400,
-          fontSize: 'clamp(48px, 9vw, 132px)',
+          fontSize: 'calc(clamp(48px, 9vw, 132px) * var(--sf-font-scale, 1))',
           lineHeight: isRtl ? 1.18 : 0.96,
           letterSpacing: isRtl ? '-0.005em' : '-0.035em',
           margin: '18px 0 0',
@@ -296,7 +296,7 @@ export function HeroBlock({ block, ctx }: BlockRenderProps<HeroProps>) {
           style={{
             fontFamily,
             fontWeight: 300,
-            fontSize: 'clamp(18px, 2.2vw, 24px)',
+            fontSize: 'calc(clamp(18px, 2.2vw, 24px) * var(--sf-font-scale, 1))',
             lineHeight: 1.45,
             margin: '32px auto 0',
             maxWidth: 720,

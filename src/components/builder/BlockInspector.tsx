@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   Block,
   BlockStyle,
@@ -33,7 +33,10 @@ import {
 import { CARD_EFFECTS, GALLERY_EFFECTS, TEXT_EFFECTS, isVariantBlock } from '@/lib/blocks/types';
 import { useIsSimple, useEditorMode, AdvancedReveal } from './EditorModeContext';
 import { BACKGROUND_EFFECT_PICKER_OPTIONS } from '@/lib/blocks/backgroundPicker';
-import type { Plan } from '@/lib/plans';
+import { TEXT_FX, TEXT_FX_CATEGORY_LABELS, getTextFx, type TextFxCategory } from '@/lib/blocks/textFx';
+import { TextEffectRenderer } from '@/components/storefront/blocks/TextEffectRenderer';
+import { palettes } from '@/lib/palettes';
+import { PLAN_LIMITS, planAtLeast, type Plan } from '@/lib/plans';
 import { MediaUploader } from './MediaUploader';
 import { BackgroundPatternPicker } from './BackgroundPatternPicker';
 import { useBuilderCopy } from './BuilderCopyContext';
@@ -84,6 +87,10 @@ type Props = {
   /** Caller's billing tier. Visual variants are free; this remains for
    *  surrounding builder surfaces that still receive the active plan. */
   currentPlan?: Plan;
+  /** Effect id the shell is still waiting to see rendered in the preview
+   *  iframe — the matching picker tile shows a small spinner until the
+   *  saved draft round-trip lands on the canvas. */
+  pendingTextEffect?: string;
 };
 
 /**
@@ -146,6 +153,7 @@ const BLOCK_CATEGORY: Record<
   shaderHero: 'motion',
   productSpotlight3d: 'commerce',
   socialProofWall: 'motion',
+  parallaxStoryHero: 'motion',
   curvedLoop: 'motion',
   showcase1: 'motion',
   showcase2: 'motion',
@@ -282,6 +290,7 @@ const TITLES: Record<Block['type'], string> = {
   shaderHero: 'Shader hero',
   productSpotlight3d: 'Product spotlight 3D',
   socialProofWall: 'Social proof wall',
+  parallaxStoryHero: 'Parallax story hero',
   curvedLoop: 'Curved loop',
   showcase1: 'Case switcher',
   showcase2: 'Image marquee',
@@ -355,8 +364,10 @@ const VARIANT_OPTIONS: Array<{
 
 const BACKGROUND_EFFECT_OPTIONS = BACKGROUND_EFFECT_PICKER_OPTIONS;
 
+// The classic studio effects keep the flat grid; the Colorion FX library
+// (`fx-*` ids) renders below it as categorised, tier-badged groups.
 const TEXT_EFFECT_OPTIONS: Array<{ id: TextEffect; label: string; blurb: string }> =
-  TEXT_EFFECTS.map((id) => ({
+  TEXT_EFFECTS.filter((id) => !id.startsWith('fx-')).map((id) => ({
     id,
     label: labelFromId(id),
     blurb: id === 'none' ? 'Use normal text.' : `${labelFromId(id)} motion treatment.`,
@@ -404,6 +415,10 @@ export function BlockInspector({
   storefrontSlug,
   blockOutline,
   giphyStorefrontSlug,
+  // Default to the most restrictive tier so a call site that forgets to
+  // pass the plan locks premium FX rather than giving them away.
+  currentPlan = 'free',
+  pendingTextEffect,
 }: Props) {
   const { builder: copy } = useBuilderCopy();
   const blockLabels = copy.blockLabels as Record<Block['type'], string>;
@@ -521,7 +536,13 @@ export function BlockInspector({
           storefrontSlug,
         })
       ) : (
-        <StyleControls blockType={block.type} style={block.style} onChange={onChangeStyle} />
+        <StyleControls
+          blockType={block.type}
+          style={block.style}
+          onChange={onChangeStyle}
+          currentPlan={currentPlan}
+          pendingTextEffect={pendingTextEffect}
+        />
       )}
     </div>
   );
@@ -1590,6 +1611,90 @@ function renderForm(
           </Field>
         </Section>
       );
+    case 'parallaxStoryHero':
+      return (
+        <Section>
+          <Field label="Eyebrow">
+            <TextInput value={str(p.eyebrow)} onChange={(v) => set('eyebrow', v)} />
+          </Field>
+          <Field label="Title">
+            <TextInput value={str(p.title)} onChange={(v) => set('title', v)} />
+          </Field>
+          <Field label="Subtitle">
+            <TextArea value={str(p.subtitle)} onChange={(v) => set('subtitle', v)} rows={2} />
+          </Field>
+          <Field label="Tone">
+            <SegmentedControl
+              value={str(p.tone) || 'ink'}
+              onChange={(v) => set('tone', v)}
+              options={[
+                { value: 'cream', label: 'Cream' },
+                { value: 'ink', label: 'Ink' },
+                { value: 'gold', label: 'Gold' },
+              ]}
+            />
+          </Field>
+          <Field label="Layout">
+            <SegmentedControl
+              value={str(p.layout) || 'immersive'}
+              onChange={(v) => set('layout', v)}
+              options={[
+                { value: 'compact', label: 'Compact' },
+                { value: 'immersive', label: 'Immersive' },
+              ]}
+            />
+          </Field>
+          <Field label="Parallax strength">
+            <SegmentedControl
+              value={str(p.intensity) || 'medium'}
+              onChange={(v) => set('intensity', v)}
+              options={[
+                { value: 'subtle', label: 'Subtle' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'strong', label: 'Strong' },
+              ]}
+            />
+          </Field>
+          <Field label="Background photo (optional)">
+            <MediaUploader
+              value={str(p.backgroundImage)}
+              onChange={(url) => set('backgroundImage', url)}
+              namespace="parallax-hero-bg"
+              storefrontSlug={storefrontSlug}
+              giphyStorefrontSlug={ctx.giphyStorefrontSlug}
+            />
+          </Field>
+          <Field label="Midground cutout (optional)">
+            <MediaUploader
+              value={str(p.midgroundImage)}
+              onChange={(url) => set('midgroundImage', url)}
+              namespace="parallax-hero-mid"
+              storefrontSlug={storefrontSlug}
+              giphyStorefrontSlug={ctx.giphyStorefrontSlug}
+            />
+          </Field>
+          <Field label="Foreground cutout (optional)">
+            <MediaUploader
+              value={str(p.foregroundImage)}
+              onChange={(url) => set('foregroundImage', url)}
+              namespace="parallax-hero-fg"
+              storefrontSlug={storefrontSlug}
+              giphyStorefrontSlug={ctx.giphyStorefrontSlug}
+            />
+          </Field>
+          <p
+            style={{
+              fontSize: 11,
+              color: 'var(--bld-text-muted)',
+              margin: '4px 0 0',
+              lineHeight: 1.55,
+            }}
+          >
+            Layers move at different speeds as visitors scroll; the headline scatters per letter.
+            Cutouts work best as transparent PNGs. Static under reduced-motion.
+          </p>
+        </Section>
+      );
     case 'productSpotlight3d':
       return (
         <Section>
@@ -2605,10 +2710,16 @@ function StyleControls({
   blockType,
   style,
   onChange,
+  currentPlan,
+  pendingTextEffect,
 }: {
   blockType: Block['type'];
   style: BlockStyle | undefined;
   onChange: (s: BlockStyle | undefined) => void;
+  /** Billing tier — drives the locked state on premium Colorion FX. */
+  currentPlan: Plan;
+  /** FX id still making its way onto the canvas — spins its tile. */
+  pendingTextEffect?: string;
 }) {
   const text = useInspectorText();
   const isSimple = useIsSimple();
@@ -2801,18 +2912,6 @@ function StyleControls({
       </Section>
       ) : null}
 
-      {!isSimple && showTextEffects ? (
-        <Section label="Text motion">
-          <OptionGrid
-            value={s.textEffect ?? 'none'}
-            options={TEXT_EFFECT_OPTIONS}
-            onChange={(value) =>
-              set({ textEffect: value === 'none' ? undefined : (value as TextEffect) })
-            }
-          />
-        </Section>
-      ) : null}
-
       {!isSimple && showCardEffects ? (
         <Section label="Card treatment">
           <OptionGrid
@@ -2957,7 +3056,77 @@ function StyleControls({
             <AlignmentGrid hAlign={s.align ?? 'start'} onChange={(h) => set({ align: h })} />
           </div>
         )}
+        {showTextEffects ? (
+          <Field label="Text size">
+            <TextSizeStepper
+              value={s.fontScale ?? 1}
+              onChange={(v) => set({ fontScale: v === 1 ? undefined : v })}
+            />
+          </Field>
+        ) : null}
       </Section>
+
+      {/* Text motion — available in Simple mode too, right under
+          Alignment, so effects are one click away when editing text. */}
+      {showTextEffects ? (
+        <Section label="Text motion">
+          {!isSimple ? (
+            <OptionGrid
+              value={s.textEffect ?? 'none'}
+              options={TEXT_EFFECT_OPTIONS}
+              onChange={(value) =>
+                set({ textEffect: value === 'none' ? undefined : (value as TextEffect) })
+              }
+            />
+          ) : null}
+          <TextFxPicker
+            value={s.textEffect ?? 'none'}
+            currentPlan={currentPlan}
+            fxColor={s.fxColor}
+            fxColor2={s.fxColor2}
+            fxSpeed={s.fxSpeed}
+            pendingId={pendingTextEffect}
+            onChange={(value) => set({ textEffect: value === 'none' ? undefined : value })}
+          />
+          {getTextFx(s.textEffect) ? (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Field label="Effect colours">
+                <FxColorRow
+                  fxColor={s.fxColor}
+                  fxColor2={s.fxColor2}
+                  onChange={(patch) => set(patch)}
+                />
+              </Field>
+              <Field label="Effect speed">
+                <FxSpeedStepper
+                  value={s.fxSpeed ?? 1}
+                  onChange={(v) => set({ fxSpeed: v === 1 ? undefined : v })}
+                />
+              </Field>
+            </div>
+          ) : null}
+          {isSimple && (s.textEffect ?? 'none') !== 'none' ? (
+            <button
+              type="button"
+              onClick={() => set({ textEffect: undefined })}
+              style={{
+                marginTop: 8,
+                padding: '7px 10px',
+                borderRadius: 6,
+                border: '1px solid var(--bld-input-border)',
+                background: 'var(--bld-tile-bg)',
+                color: 'var(--bld-text-muted)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-sans)',
+                fontSize: 11.5,
+                fontWeight: 600,
+              }}
+            >
+              {text.option('Remove effect')}
+            </button>
+          ) : null}
+        </Section>
+      ) : null}
 
       {/* Spacing ---------------------------------------------------- */}
       <Section label="Spacing">
@@ -6305,6 +6474,563 @@ function OptionGrid<T extends string>({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Text size stepper — A− / percentage / A+ over `style.fontScale`
+ * (0.6–1.8 in 0.1 steps, 1 = the block's designed size). Clicking the
+ * percentage resets to 100%. Kept deliberately simpler than a px input:
+ * blocks size type with responsive clamp() expressions, so a multiplier
+ * is the only honest control.
+ */
+function TextSizeStepper({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const text = useInspectorText();
+  const step = (dir: -1 | 1) => {
+    const next = Math.round((value + dir * 0.1) * 10) / 10;
+    onChange(Math.min(1.8, Math.max(0.6, next)));
+  };
+  const btnStyle: React.CSSProperties = {
+    width: 34,
+    padding: '7px 0',
+    borderRadius: 6,
+    border: '1px solid var(--bld-input-border)',
+    background: 'var(--bld-tile-bg)',
+    color: 'var(--bld-input-text)',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-sans)',
+    fontWeight: 650,
+    lineHeight: 1,
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
+      <button
+        type="button"
+        aria-label="Smaller text"
+        disabled={value <= 0.6}
+        onClick={() => step(-1)}
+        style={{ ...btnStyle, fontSize: 11, opacity: value <= 0.6 ? 0.45 : 1 }}
+      >
+        A−
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(1)}
+        title={text.option('Reset to 100%')}
+        style={{
+          flex: 1,
+          padding: '7px 0',
+          borderRadius: 6,
+          border: '1px solid var(--bld-input-border)',
+          background: 'var(--bld-input-bg, transparent)',
+          color: value === 1 ? 'var(--bld-text-muted)' : 'var(--bld-input-text)',
+          cursor: 'pointer',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.04em',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {Math.round(value * 100)}%
+      </button>
+      <button
+        type="button"
+        aria-label="Larger text"
+        disabled={value >= 1.8}
+        onClick={() => step(1)}
+        style={{ ...btnStyle, fontSize: 14, opacity: value >= 1.8 ? 0.45 : 1 }}
+      >
+        A+
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Effect speed stepper — − / multiplier / + over `style.fxSpeed`
+ * (preset stops from ¼× to 3×, 1× = the effect's designed pace).
+ * Clicking the multiplier resets to 1×. Mirrors TextSizeStepper.
+ */
+const FX_SPEED_STOPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3] as const;
+
+function FxSpeedStepper({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const text = useInspectorText();
+  const idx = FX_SPEED_STOPS.reduce(
+    (best, stop, i) =>
+      Math.abs(stop - value) < Math.abs((FX_SPEED_STOPS[best] ?? 1) - value) ? i : best,
+    0,
+  );
+  const step = (dir: -1 | 1) => {
+    onChange(
+      FX_SPEED_STOPS[Math.min(FX_SPEED_STOPS.length - 1, Math.max(0, idx + dir))] ?? 1,
+    );
+  };
+  const btnStyle: React.CSSProperties = {
+    width: 34,
+    padding: '7px 0',
+    borderRadius: 6,
+    border: '1px solid var(--bld-input-border)',
+    background: 'var(--bld-tile-bg)',
+    color: 'var(--bld-input-text)',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-sans)',
+    fontWeight: 650,
+    fontSize: 13,
+    lineHeight: 1,
+  };
+  const label = `${FX_SPEED_STOPS[idx]}×`.replace('0.', '.');
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
+      <button
+        type="button"
+        aria-label="Slower"
+        disabled={idx === 0}
+        onClick={() => step(-1)}
+        style={{ ...btnStyle, opacity: idx === 0 ? 0.45 : 1 }}
+      >
+        −
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(1)}
+        title={text.option('Reset to 1×')}
+        style={{
+          flex: 1,
+          padding: '7px 0',
+          borderRadius: 6,
+          border: '1px solid var(--bld-input-border)',
+          background: 'var(--bld-input-bg, transparent)',
+          color: idx === 3 ? 'var(--bld-text-muted)' : 'var(--bld-input-text)',
+          cursor: 'pointer',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.04em',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {label}
+      </button>
+      <button
+        type="button"
+        aria-label="Faster"
+        disabled={idx === FX_SPEED_STOPS.length - 1}
+        onClick={() => step(1)}
+        style={{ ...btnStyle, opacity: idx === FX_SPEED_STOPS.length - 1 ? 0.45 : 1 }}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+/* Pause the live FX previews while their tile is scrolled out of view —
+ * 57 concurrent CSS animations would tax the GPU for tiles nobody sees.
+ * `content-visibility` additionally skips layout/paint entirely. */
+const TEXT_FX_TILE_STYLES = `
+[data-fx-tile] { content-visibility: auto; contain-intrinsic-size: auto 78px; }
+[data-fx-tile][data-fx-offscreen] .souqna-tfx,
+[data-fx-tile][data-fx-offscreen] .souqna-tfx *,
+[data-fx-tile][data-fx-offscreen] .souqna-tfx::before,
+[data-fx-tile][data-fx-offscreen] .souqna-tfx::after,
+[data-fx-tile][data-fx-offscreen] .souqna-tfx *::before,
+[data-fx-tile][data-fx-offscreen] .souqna-tfx *::after {
+  animation-play-state: paused !important;
+}
+@keyframes fx-tile-spin { to { transform: rotate(360deg); } }
+.fx-tile-spinner {
+  position: absolute;
+  top: 5px;
+  inset-inline-end: 5px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--sf-ink) 25%, transparent);
+  border-top-color: var(--sf-ink);
+  animation: fx-tile-spin .7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fx-tile-spinner { animation-duration: 1.6s; }
+}
+`;
+
+/**
+ * Colorion FX picker — the 57-effect library rendered as categorised
+ * groups with a live animated preview per tile (the effect applied to a
+ * sample word on the storefront palette ground, so it reads the way it
+ * will on canvas — deliberately our own skin, not colorion's dark demo
+ * cards). Tiles carry the same tier pill + locked treatment as the
+ * chrome pickers in SiteInspector; locked tiles still preview (that's
+ * the upsell) but are disabled with a "{tier} required" tooltip.
+ * Clicking the active tile toggles the effect back off.
+ */
+function TextFxPicker({
+  value,
+  currentPlan,
+  onChange,
+  fxColor,
+  fxColor2,
+  fxSpeed,
+  pendingId,
+}: {
+  value: string;
+  currentPlan: Plan;
+  onChange: (value: TextEffect | 'none') => void;
+  /** Founder colour/speed overrides — previews honour them live. */
+  fxColor?: string;
+  fxColor2?: string;
+  fxSpeed?: number;
+  /** FX id still travelling to the canvas — its tile shows a spinner. */
+  pendingId?: string;
+}) {
+  const text = useInspectorText();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState('');
+  const [hideLocked, setHideLocked] = useState(false);
+
+  const anyLocked = useMemo(
+    () => TEXT_FX.some((fx) => !planAtLeast(currentPlan, fx.tier)),
+    [currentPlan],
+  );
+
+  // Filtered view — search matches label, slug, blurb and category
+  // name; "My plan" trims the list to what the current plan unlocks.
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return TEXT_FX.filter((fx) => {
+      if (hideLocked && !planAtLeast(currentPlan, fx.tier)) return false;
+      if (!q) return true;
+      return (
+        fx.label.toLowerCase().includes(q) ||
+        fx.slug.includes(q) ||
+        fx.blurb.toLowerCase().includes(q) ||
+        TEXT_FX_CATEGORY_LABELS[fx.category].toLowerCase().includes(q)
+      );
+    });
+  }, [query, hideLocked, currentPlan]);
+
+  // Re-observe whenever the filtered set changes — filtering remounts
+  // tiles, and an unobserved tile would animate forever offscreen.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const en of entries)
+          en.target.toggleAttribute('data-fx-offscreen', !en.isIntersecting);
+      },
+      { rootMargin: '100px' },
+    );
+    root.querySelectorAll('[data-fx-tile]').forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [visible]);
+
+  // Preview stages render on the storefront palette (same sand_gold
+  // default as BackgroundPatternPicker) so effects read in context, and
+  // pick up the founder's effect-colour/speed overrides immediately.
+  const stageVars = useMemo(() => {
+    const triplet = palettes.sand_gold.light;
+    const vars: Record<string, string> = {
+      '--sf-ground': triplet.ground,
+      '--sf-ink': triplet.ink,
+      '--sf-accent': triplet.accent,
+    };
+    if (fxColor) vars['--fx-accent'] = fxColor;
+    if (fxColor2) vars['--fx-accent-2'] = fxColor2;
+    if (typeof fxSpeed === 'number' && fxSpeed !== 1) vars['--fx-speed'] = String(fxSpeed);
+    return vars as React.CSSProperties;
+  }, [fxColor, fxColor2, fxSpeed]);
+
+  return (
+    <div
+      ref={rootRef}
+      style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10, ...stageVars }}
+    >
+      <style>{TEXT_FX_TILE_STYLES}</style>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={text.label('Search effects…')}
+          aria-label="Search text effects"
+          style={{ ...inputStyle(), flex: 1, minWidth: 0 }}
+        />
+        {anyLocked ? (
+          <button
+            type="button"
+            aria-pressed={hideLocked}
+            onClick={() => setHideLocked((v) => !v)}
+            title={text.option('Only show effects your plan includes')}
+            style={{
+              flexShrink: 0,
+              padding: '0 10px',
+              borderRadius: 6,
+              border: hideLocked
+                ? '1px solid var(--bld-accent)'
+                : '1px solid var(--bld-input-border)',
+              background: hideLocked ? 'var(--bld-accent-soft)' : 'var(--bld-tile-bg)',
+              color: hideLocked ? 'var(--bld-input-text)' : 'var(--bld-text-muted)',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-sans)',
+              fontSize: 10.5,
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {text.option('My plan')}
+          </button>
+        ) : null}
+      </div>
+      {visible.length === 0 ? (
+        <div
+          style={{
+            padding: '14px 4px',
+            textAlign: 'center',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 11.5,
+            color: 'var(--bld-text-muted)',
+          }}
+        >
+          {text.option('No effects match')}
+        </div>
+      ) : null}
+      {(Object.keys(TEXT_FX_CATEGORY_LABELS) as TextFxCategory[])
+        .filter((cat) => visible.some((fx) => fx.category === cat))
+        .map((cat) => (
+        <div key={cat} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--bld-text-muted)',
+            }}
+          >
+            {text.option(TEXT_FX_CATEGORY_LABELS[cat])}
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 6,
+            }}
+          >
+            {visible.filter((fx) => fx.category === cat).map((fx) => {
+              const active = value === fx.id;
+              const locked = !planAtLeast(currentPlan, fx.tier);
+              const tierLabel = PLAN_LIMITS[fx.tier].label;
+              return (
+                <button
+                  key={fx.id}
+                  data-fx-tile=""
+                  type="button"
+                  disabled={locked}
+                  aria-busy={pendingId === fx.id || undefined}
+                  onClick={() => onChange(active ? 'none' : fx.id)}
+                  title={locked ? `${fx.blurb} ${tierLabel} required.` : fx.blurb}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 5,
+                    padding: 5,
+                    borderRadius: 7,
+                    border: active
+                      ? '1px solid var(--bld-accent)'
+                      : '1px solid var(--bld-input-border)',
+                    background: active ? 'var(--bld-accent-soft)' : 'var(--bld-tile-bg)',
+                    cursor: locked ? 'not-allowed' : 'pointer',
+                    opacity: locked ? 0.6 : 1,
+                    minWidth: 0,
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: 'relative',
+                      display: 'grid',
+                      placeItems: 'center',
+                      height: 44,
+                      width: '100%',
+                      borderRadius: 5,
+                      background: 'var(--sf-ground)',
+                      color: 'var(--sf-ink)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {pendingId === fx.id ? <span className="fx-tile-spinner" /> : null}
+                    <TextEffectRenderer
+                      as="span"
+                      effect={fx.id}
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 650,
+                        lineHeight: 1.15,
+                        whiteSpace: 'nowrap',
+                        fontFamily: 'var(--font-sans)',
+                      }}
+                    >
+                      Souqna
+                    </TextEffectRenderer>
+                  </span>
+                  <span
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 6,
+                      width: '100%',
+                      minWidth: 0,
+                      paddingInline: 3,
+                    }}
+                  >
+                    <span
+                      style={{
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        textAlign: 'start',
+                        fontFamily: 'var(--font-sans)',
+                        fontSize: 10.5,
+                        fontWeight: 600,
+                        color: locked ? 'var(--bld-text-faint)' : 'var(--bld-input-text)',
+                      }}
+                    >
+                      {fx.label}
+                    </span>
+                    {fx.tier !== 'free' ? (
+                      <span
+                        style={{
+                          flexShrink: 0,
+                          borderRadius: 999,
+                          padding: '2px 6px',
+                          border: '1px solid var(--bld-accent-line)',
+                          background: active ? 'var(--bld-accent)' : 'var(--bld-chip-bg)',
+                          color: active ? 'var(--bld-accent-ink)' : 'var(--bld-text-muted)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 8,
+                          letterSpacing: '0.08em',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {tierLabel}
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Effect colour override row — two swatches over `style.fxColor` /
+ * `fxColor2` (the FX accent pair) plus a reset back to the palette
+ * defaults. Native colour inputs; state updates are synchronous local
+ * builder state, so controlled values don't fight the drag.
+ */
+function FxColorRow({
+  fxColor,
+  fxColor2,
+  onChange,
+}: {
+  fxColor?: string;
+  fxColor2?: string;
+  onChange: (patch: { fxColor?: string; fxColor2?: string }) => void;
+}) {
+  const text = useInspectorText();
+  const swatch = (
+    label: string,
+    val: string | undefined,
+    fallback: string,
+    commit: (v: string) => void,
+  ) => (
+    <label
+      style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 7,
+        padding: '5px 8px',
+        borderRadius: 6,
+        border: '1px solid var(--bld-input-border)',
+        background: 'var(--bld-tile-bg)',
+        cursor: 'pointer',
+        minWidth: 0,
+      }}
+    >
+      <input
+        type="color"
+        value={val ?? fallback}
+        onChange={(e) => commit(e.target.value)}
+        aria-label={label}
+        style={{
+          width: 24,
+          height: 24,
+          padding: 0,
+          border: 'none',
+          background: 'transparent',
+          cursor: 'pointer',
+        }}
+      />
+      <span
+        style={{
+          fontFamily: 'var(--font-sans)',
+          fontSize: 10.5,
+          fontWeight: 600,
+          color: val ? 'var(--bld-input-text)' : 'var(--bld-text-muted)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {text.option(label)}
+      </span>
+    </label>
+  );
+  const paletteAccent = palettes.sand_gold.light.accent;
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
+      {swatch('Colour A', fxColor, paletteAccent, (v) => onChange({ fxColor: v }))}
+      {swatch('Colour B', fxColor2, paletteAccent, (v) => onChange({ fxColor2: v }))}
+      {fxColor || fxColor2 ? (
+        <button
+          type="button"
+          onClick={() => onChange({ fxColor: undefined, fxColor2: undefined })}
+          title={text.option('Back to palette colours')}
+          style={{
+            padding: '5px 10px',
+            borderRadius: 6,
+            border: '1px solid var(--bld-input-border)',
+            background: 'var(--bld-tile-bg)',
+            color: 'var(--bld-text-muted)',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 10.5,
+            fontWeight: 600,
+          }}
+        >
+          {text.option('Reset')}
+        </button>
+      ) : null}
     </div>
   );
 }
