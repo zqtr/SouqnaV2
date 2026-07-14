@@ -535,6 +535,7 @@ function componentProps(type: BlockType): Record<string, unknown> {
     case 'ecommerce5':
     case 'ecommerce6':
     case 'ecommerce7':
+    case 'ecommerce9':
       return createEcommerceProps(type);
     case 'shadcnNavbar':
     case 'shadcnHero':
@@ -700,6 +701,8 @@ function ecommerceTitle(type: BlockType): string {
       return 'Category shop with tabs';
     case 'ecommerce7':
       return 'Visual category tiles';
+    case 'ecommerce9':
+      return 'Animated quick-add grid';
     default:
       return 'Commerce component';
   }

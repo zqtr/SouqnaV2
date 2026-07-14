@@ -7,6 +7,7 @@ import Ecommerce4 from '@/components/ecommerce-4';
 import Ecommerce5 from '@/components/ecommerce-5';
 import Ecommerce6 from '@/components/ecommerce-6';
 import Ecommerce7 from '@/components/ecommerce-7';
+import Ecommerce9 from '@/components/ecommerce-9';
 import { resolveCommerceProductSource } from '@/lib/blocks/commerce';
 import { isVideoMediaUrl } from '@/lib/media';
 import type { Product } from '@/lib/products';
@@ -22,6 +23,7 @@ import type {
   Ecommerce5Props,
   Ecommerce6Props,
   Ecommerce7Props,
+  Ecommerce9Props,
 } from '@/lib/blocks/types';
 import { productPathSegment } from './helpers';
 
@@ -51,6 +53,10 @@ export function Ecommerce6Block({ block, ctx }: BlockRenderProps<Ecommerce6Props
 
 export function Ecommerce7Block({ block, ctx }: BlockRenderProps<Ecommerce7Props>) {
   return <Ecommerce7 {...withResolvedProducts(block.props, ctx.products, ctx.storefrontBaseHref, 'tiles')} dir={ctx.isRtl ? 'rtl' : 'ltr'} />;
+}
+
+export function Ecommerce9Block({ block, ctx }: BlockRenderProps<Ecommerce9Props>) {
+  return <Ecommerce9 {...withResolvedProducts(block.props, ctx.products, ctx.storefrontBaseHref)} dir={ctx.isRtl ? 'rtl' : 'ltr'} />;
 }
 
 type EcommerceResolutionMode = 'default' | 'filters' | 'categoryShop' | 'tiles';

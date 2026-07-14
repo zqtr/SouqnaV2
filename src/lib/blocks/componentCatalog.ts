@@ -340,6 +340,16 @@ export const COMPONENT_LIBRARY_GROUPS: ComponentLibraryGroup[] = [
         },
       },
       {
+        type: 'ecommerce9',
+        label: 'Quick-add grid',
+        hint: 'Animated filters, hover quick-add',
+        tier: 'atelier',
+        description: {
+          en: 'An animated collection grid with category filter pills and a hover quick-add overlay so shoppers add sizes to the cart in one tap.',
+          ar: 'شبكة مجموعة متحركة مع أزرار تصفية حسب الفئة وطبقة إضافة سريعة عند المرور ليضيف المتسوق المقاس إلى السلة بلمسة واحدة.',
+        },
+      },
+      {
         type: 'menu',
         label: 'Menu',
         hint: 'Cafe-style price list',

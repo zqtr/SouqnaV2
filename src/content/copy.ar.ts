@@ -1106,6 +1106,7 @@ export const copyAr = {
       ecommerce5: 'رف تحريري',
       ecommerce6: 'متجر فئات',
       ecommerce7: 'بطاقات فئات',
+      ecommerce9: 'شبكة إضافة سريعة',
     },
     library: {
       groups: {
@@ -1134,6 +1135,7 @@ export const copyAr = {
         ecommerce5: { label: 'رف تحريري', hint: 'رف' },
         ecommerce6: { label: 'متجر فئات', hint: 'فئات' },
         ecommerce7: { label: 'بطاقات فئات', hint: 'بطاقات' },
+        ecommerce9: { label: 'شبكة إضافة سريعة', hint: 'إضافة سريعة' },
         menu: { label: 'قائمة أسعار', hint: 'أسعار' },
         serviceList: { label: 'خدمات', hint: 'بطاقات' },
         calendar: { label: 'تقويم', hint: 'تواريخ' },

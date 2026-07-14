@@ -49,6 +49,7 @@ import {
   Ecommerce5Block,
   Ecommerce6Block,
   Ecommerce7Block,
+  Ecommerce9Block,
 } from './blocks/EcommerceBlocks';
 import {
   ShadcnCategoriesBlock,
@@ -345,6 +346,8 @@ function renderBlock(block: Block, ctx: BlockContext): React.ReactNode {
       return <Ecommerce6Block block={block as never} ctx={ctx} />;
     case 'ecommerce7':
       return <Ecommerce7Block block={block as never} ctx={ctx} />;
+    case 'ecommerce9':
+      return <Ecommerce9Block block={block as never} ctx={ctx} />;
     case 'shadcnNavbar':
       return <ShadcnNavbarBlock block={block as never} ctx={ctx} />;
     case 'shadcnHero':

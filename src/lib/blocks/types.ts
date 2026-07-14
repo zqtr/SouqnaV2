@@ -88,6 +88,8 @@ export const BLOCK_TYPES = [
   'ecommerce6',
   /** Premium ecommerce category tile grid. */
   'ecommerce7',
+  /** Premium ecommerce animated quick-add grid. */
+  'ecommerce9',
   /** Souqna Pro+/Max+ storefront navbar treatment. */
   'shadcnNavbar',
   /** Souqna Pro+/Max+ ecommerce hero family. */
@@ -963,6 +965,7 @@ export type Ecommerce4Props = EcommerceBlockProps;
 export type Ecommerce5Props = EcommerceBlockProps;
 export type Ecommerce6Props = EcommerceBlockProps;
 export type Ecommerce7Props = EcommerceBlockProps;
+export type Ecommerce9Props = EcommerceBlockProps;
 
 export const SHADCN_NAVBAR_VARIANTS = ['ecommerce-navbar2'] as const;
 export const SHADCN_HERO_VARIANTS = ['ecommerce-hero1', 'ecommerce-hero3', 'ecommerce-hero6'] as const;
@@ -1422,6 +1425,7 @@ export type BlockPropsByType = {
   ecommerce5: Ecommerce5Props;
   ecommerce6: Ecommerce6Props;
   ecommerce7: Ecommerce7Props;
+  ecommerce9: Ecommerce9Props;
   shadcnNavbar: ShadcnNavbarProps;
   shadcnHero: ShadcnHeroProps;
   shadcnTrustStrip: ShadcnTrustStripProps;

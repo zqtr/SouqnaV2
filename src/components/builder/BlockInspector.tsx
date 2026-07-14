@@ -122,6 +122,7 @@ const BLOCK_CATEGORY: Record<
   ecommerce5: 'commerce',
   ecommerce6: 'commerce',
   ecommerce7: 'commerce',
+  ecommerce9: 'commerce',
   shadcnNavbar: 'commerce',
   shadcnHero: 'commerce',
   shadcnTrustStrip: 'commerce',
@@ -272,6 +273,7 @@ const TITLES: Record<Block['type'], string> = {
   ecommerce5: 'Editorial shelf',
   ecommerce6: 'Category shop',
   ecommerce7: 'Category tiles',
+  ecommerce9: 'Quick-add grid',
   shadcnNavbar: 'Premium navbar',
   shadcnHero: 'Premium hero',
   shadcnTrustStrip: 'Trust strip',
@@ -1960,6 +1962,7 @@ function renderForm(
     case 'ecommerce5':
     case 'ecommerce6':
     case 'ecommerce7':
+    case 'ecommerce9':
       return (
         <EcommerceBlockEditor
           props={p}

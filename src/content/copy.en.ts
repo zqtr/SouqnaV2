@@ -1114,6 +1114,7 @@ export const copyEn = {
       ecommerce5: 'Editorial shelf',
       ecommerce6: 'Category shop',
       ecommerce7: 'Category tiles',
+      ecommerce9: 'Quick-add grid',
     },
     library: {
       groups: {
@@ -1142,6 +1143,7 @@ export const copyEn = {
         ecommerce5: { label: 'Editorial shelf', hint: 'Shelf' },
         ecommerce6: { label: 'Category shop', hint: 'Categories' },
         ecommerce7: { label: 'Category tiles', hint: 'Tiles' },
+        ecommerce9: { label: 'Quick-add grid', hint: 'Quick add' },
         menu: { label: 'Menu', hint: 'Prices' },
         serviceList: { label: 'Services', hint: 'Cards' },
         calendar: { label: 'Calendar', hint: 'Dates' },

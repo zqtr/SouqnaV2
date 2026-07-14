@@ -112,7 +112,7 @@ const FALLBACK_CATEGORIES: EcommerceCategory[] = [
   },
 ];
 
-function normalizeProducts(products?: EcommerceProduct[]) {
+export function normalizeProducts(products?: EcommerceProduct[]) {
   if (products === undefined) return FALLBACK_PRODUCTS;
   return products.filter((product) => product.name?.trim() || product.imageUrl);
 }
@@ -302,7 +302,7 @@ function CommerceHeader({
       {cta?.label ? (
         <a
           href={cta.href || '#'}
-          className="inline-flex w-fit items-center gap-2 rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-950 hover:text-white dark:border-neutral-700 dark:text-white dark:hover:bg-white dark:hover:text-neutral-950"
+          className="inline-flex w-fit items-center gap-2 rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-950 hover:text-white"
         >
           {cta.label}
           <ArrowRight className="h-4 w-4 rtl:rotate-180" />
@@ -428,8 +428,8 @@ function CategoryShop({
             onClick={() => setActive(tab.id)}
             className={`rounded-full border px-4 py-2 text-sm font-medium ${
               (current?.id ?? active) === tab.id
-                ? 'border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-950'
-                : 'border-neutral-300 text-neutral-600 dark:border-neutral-700 dark:text-neutral-300'
+                ? 'border-neutral-950 bg-neutral-950 text-white'
+                : 'border-neutral-300 text-neutral-600'
             }`}
           >
             {tab.label}
@@ -607,8 +607,8 @@ function FilterGroup({
             onClick={() => onChange(option.id)}
             className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
               value === option.id
-                ? 'bg-neutral-950 text-white dark:bg-white dark:text-neutral-950'
-                : 'bg-neutral-100 text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
+                ? 'bg-neutral-950 text-white'
+                : 'bg-neutral-100 text-neutral-700'
             }`}
           >
             {option.label}

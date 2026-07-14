@@ -646,6 +646,12 @@ const LIBRARY_GROUPS: LibraryGroup[] = [
         hint: 'Tabbed visual category grid',
         tier: 'pro',
       },
+      {
+        type: 'ecommerce9',
+        label: 'Quick-add grid',
+        hint: 'Animated filters, hover quick-add',
+        tier: 'atelier',
+      },
       { type: 'menu', label: 'Menu', hint: 'Cafe-style price list' },
       { type: 'serviceList', label: 'Services', hint: 'Bordered service cards' },
       { type: 'calendar', label: 'Calendar', hint: 'Dated agenda' },
@@ -2473,6 +2479,7 @@ function BlockMiniPreview({
     case 'ecommerce5':
     case 'ecommerce6':
     case 'ecommerce7':
+    case 'ecommerce9':
       return (
         <div
           style={{
@@ -2498,7 +2505,7 @@ function BlockMiniPreview({
               >
                 <div
                   style={{
-                    aspectRatio: type === 'ecommerce7' ? '4 / 5' : '4 / 3',
+                    aspectRatio: type === 'ecommerce7' || type === 'ecommerce9' ? '4 / 5' : '4 / 3',
                     borderRadius: isDrag ? 8 : 3,
                     background: `linear-gradient(145deg, ${sandFaint}, ${i % 2 ? maroon : '#5586bd'}55)`,
                     border: `1px solid ${sandFaint}`,
@@ -7325,6 +7332,7 @@ function createBlock(
     case 'ecommerce5':
     case 'ecommerce6':
     case 'ecommerce7':
+    case 'ecommerce9':
       return {
         id,
         type,
@@ -7508,6 +7516,7 @@ function createEcommerceBlockProps(
     ecommerce5: 'Editorial product shelf',
     ecommerce6: 'Category shop',
     ecommerce7: 'Shop by category',
+    ecommerce9: 'Shop the edit',
   };
 
   const activeProductIds = productOptions
@@ -7852,6 +7861,7 @@ function BuilderRecommendations({
       'ecommerce5',
       'ecommerce6',
       'ecommerce7',
+      'ecommerce9',
       'shadcnCategories',
       'shadcnProductCard',
       'shadcnProductList',
