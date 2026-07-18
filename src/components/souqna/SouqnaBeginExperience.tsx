@@ -3,6 +3,7 @@
 import {
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   useTransition,
@@ -22,11 +23,22 @@ import {
 } from '@/app/actions/createBrief';
 import type { Locale } from '@/i18n/locales';
 import type { BusinessType, TemplateId } from '@/lib/brief';
+import type { IgProfile, StoreSuggestions } from '@/lib/instagram/types';
 import { getTemplateIndustrySeed } from '@/lib/blocks/templateIndustrySeed';
 import { palettes } from '@/lib/palettes';
 import { sortedTemplateIdsForPicker, templatePresets } from '@/lib/templates';
+import { importInstagramProducts } from '@/app/actions/instagramImport';
+import { saveStorefrontSettings } from '@/app/actions/storefrontSettings';
+import { InstagramImportStep } from '@/components/souqna/instagram-import/InstagramImportStep';
+import {
+  clearImportState,
+  importReducer,
+  initialImportState,
+  persistImportState,
+  restoreImportState,
+} from '@/components/souqna/instagram-import/importMachine';
 
-type StepKey = 'identity' | 'activity' | 'template' | 'payment' | 'confirmation';
+type StepKey = 'import' | 'identity' | 'activity' | 'template' | 'payment' | 'confirmation';
 type FawranMode = 'fawran_number' | 'commercial_registration';
 type FawranCrType = 'CL' | 'ER' | 'IB';
 type LocalSlugStatus = SlugAvailability | { status: 'idle' } | { status: 'offline'; slug: string };
@@ -47,7 +59,14 @@ const FALLBACK_PREVIEW_PRODUCT: PreviewProduct = {
 
 const StarSwipe = dynamic(() => import('@/components/star-swipe'), { ssr: false });
 
-const STEP_KEYS: StepKey[] = ['identity', 'activity', 'template', 'payment', 'confirmation'];
+const STEP_KEYS: StepKey[] = [
+  'import',
+  'identity',
+  'activity',
+  'template',
+  'payment',
+  'confirmation',
+];
 const FAWRAN_CR_TYPES: FawranCrType[] = ['CL', 'ER', 'IB'];
 
 const ACTIVITIES: Array<{ id: BusinessType; en: string; ar: string }> = [
@@ -114,18 +133,27 @@ const TEMPLATE_FEATURES: Record<TemplateId, { en: string[]; ar: string[] }> = {
 
 const TEMPLATE_PICKER_IDS: TemplateId[] = sortedTemplateIdsForPicker();
 
+const AR_DIGIT_GLYPHS = '٠١٢٣٤٥٦٧٨٩';
+const toArDigits = (n: number) =>
+  String(n).replace(/\d/gu, (d) => AR_DIGIT_GLYPHS[Number(d)] ?? d);
+
 const COPY = {
   en: {
     pill: 'Start a store',
     intro: 'Four small questions, then your workspace opens.',
     body: 'Pick a name, point your subdomain, choose what you sell, and select a storefront direction. We open a workplace for you on the other side.',
-    stepCount: (n: number) => `Step ${n} of 5 · About a minute`,
+    stepCount: (n: number) => `Step ${n} of ${STEP_KEYS.length} · About a minute`,
     back: 'Back',
     next: 'Continue',
     create: 'Create account',
     createWebstore: 'Create webstore',
     creating: 'Creating…',
     steps: {
+      import: {
+        title: 'Already selling on Instagram?',
+        side: 'Bring your shop with you.',
+        body: 'Type your handle and the AI reads your posts, drafts your products, and asks about anything it can’t tell — prices, sizes, what’s actually for sale. Skip it if you’re starting fresh.',
+      },
       identity: {
         title: 'What are you calling it?',
         side: 'Your name, your address.',
@@ -200,13 +228,21 @@ const COPY = {
     pill: 'افتح متجرك',
     intro: 'أربعة أسئلة قصيرة ثم يفتح مكان عملك.',
     body: 'اختر اسماً، حدد دومين متجرك، اختر إيش تبيع، وحدد اتجاه الواجهة. الجهة الثانية يفتح لك مكان عمل كامل.',
-    stepCount: (n: number) => `Step ${n} of 5 · About a minute`,
+    // Em dash, not a middot: '·' beside Arabic-Indic digits reads as
+    // '٠' (zero) — 'الخطوة ١ من ٦٠'.
+    stepCount: (n: number) =>
+      `الخطوة ${toArDigits(n)} من ${toArDigits(STEP_KEYS.length)} — أقل من دقيقة`,
     back: 'رجوع',
     next: 'تابع',
     create: 'افتح الحساب',
     createWebstore: 'أنشئ المتجر',
     creating: 'جاري الإنشاء…',
     steps: {
+      import: {
+        title: 'تبيع على إنستغرام؟',
+        side: 'انقل متجرك معك.',
+        body: 'اكتب معرّفك وسيقرأ الذكاء منشوراتك، يجهّز منتجاتك، ويسألك عمّا لا يعرفه — الأسعار والمقاسات وما يُباع فعلاً. تخطَّ الخطوة إن كنت تبدأ من الصفر.',
+      },
       identity: {
         title: 'ما اسم البراند؟',
         side: 'اسمك وعنوانك.',
@@ -617,9 +653,15 @@ function TemplateChoice({
 export function SouqnaBeginExperience({
   locale,
   isSignedIn = false,
+  igImport = { provider: false, ai: false },
+  resume = false,
 }: {
   locale: Locale;
   isSignedIn?: boolean;
+  /** Server-computed capabilities for the Instagram import step. */
+  igImport?: { provider: boolean; ai: boolean };
+  /** True when returning from sign-up with a confirmed import draft. */
+  resume?: boolean;
 }) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -634,6 +676,11 @@ export function SouqnaBeginExperience({
   const [slugStatus, setSlugStatus] = useState<LocalSlugStatus>({ status: 'idle' });
   const [logoName, setLogoName] = useState('');
   const [logoPreview, setLogoPreview] = useState('');
+  // Hosted logo URL sent to createBrief — set by the Instagram import
+  // (re-hosted profile picture); a manual file pick clears it because
+  // object URLs can't be persisted.
+  const [logoUrl, setLogoUrl] = useState('');
+  const [importState, dispatchImport] = useReducer(importReducer, initialImportState);
   const [activity, setActivity] = useState<BusinessType>('graphic_design');
   const [templateId, setTemplateId] = useState<TemplateId>('atrium');
   const [fawranMode, setFawranMode] = useState<FawranMode>('fawran_number');
@@ -651,11 +698,72 @@ export function SouqnaBeginExperience({
   const activeKey: StepKey = STEP_KEYS[stepIndex] ?? 'identity';
   const brandInitial = (brandName.trim() || 'S').slice(0, 1).toUpperCase();
 
+  // Set synchronously when a resume-restore happens; the slug autofill
+  // effect below must read it via ref, not state — under StrictMode's
+  // double-invoked effects its second (stale-closure) run would
+  // otherwise queue a setSlug('') AFTER the restore's setSlug.
+  const restoredRef = useRef(false);
+
   useEffect(() => {
-    if (slugTouched) return;
+    if (slugTouched || restoredRef.current) return;
     setSlug(slugify(brandName));
     setSlugStatus({ status: 'idle' });
   }, [brandName, slugTouched]);
+
+  // Returning from sign-up with a confirmed Instagram import
+  // (`/begin?resume=1`): restore the import + the saved intake draft and
+  // land on the confirmation step so the merchant just hits Create.
+  useEffect(() => {
+    if (!resume || restoredRef.current) return;
+    const restored = restoreImportState();
+    if (!restored) return;
+    restoredRef.current = true;
+    dispatchImport({ type: 'restore', state: restored });
+    applyImportPrefill(restored);
+    try {
+      const raw = window.localStorage.getItem('souqna-begin-draft');
+      if (raw) {
+        // Draft values are what the merchant actually typed — they win
+        // over the profile-derived prefill (same tick, later set wins).
+        const draft = JSON.parse(raw) as Record<string, unknown>;
+        if (typeof draft.brandName === 'string' && draft.brandName.trim()) {
+          setBrandName(draft.brandName);
+        }
+        if (typeof draft.slug === 'string' && draft.slug.length >= 3) {
+          setSlugTouched(true);
+          setSlug(draft.slug);
+        }
+        if (typeof draft.logoUrl === 'string' && draft.logoUrl) {
+          setLogoUrl(draft.logoUrl);
+          setLogoPreview(draft.logoUrl);
+        }
+        if (
+          typeof draft.activity === 'string' &&
+          ACTIVITIES.some((item) => item.id === draft.activity)
+        ) {
+          setActivity(draft.activity as BusinessType);
+        }
+        if (
+          typeof draft.templateId === 'string' &&
+          TEMPLATE_PICKER_IDS.includes(draft.templateId as TemplateId)
+        ) {
+          setTemplateId(draft.templateId as TemplateId);
+        }
+        if (draft.fawranMode === 'fawran_number' || draft.fawranMode === 'commercial_registration') {
+          setFawranMode(draft.fawranMode);
+        }
+        if (typeof draft.fawranNumber === 'string') setFawranNumber(draft.fawranNumber);
+        if (FAWRAN_CR_TYPES.includes(draft.fawranCrType as FawranCrType)) {
+          setFawranCrType(draft.fawranCrType as FawranCrType);
+        }
+        if (typeof draft.crNumber === 'string') setCrNumber(draft.crNumber);
+      }
+    } catch {
+      // Corrupted draft — the merchant re-enters the few fields.
+    }
+    setStepIndex(STEP_KEYS.length - 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot restore on mount
+  }, [resume]);
 
   useEffect(() => {
     return () => {
@@ -670,6 +778,9 @@ export function SouqnaBeginExperience({
   }, []);
 
   const canContinue = useMemo(() => {
+    if (activeKey === 'import') {
+      return importState.phase === 'confirmed' || importState.phase === 'skipped';
+    }
     if (activeKey === 'identity') {
       return brandName.trim().length > 0 && slug.length >= 3 && /^[a-z0-9-]+$/.test(slug);
     }
@@ -681,7 +792,17 @@ export function SouqnaBeginExperience({
         : crNumber.trim().length > 0;
     }
     return true;
-  }, [activeKey, activity, brandName, crNumber, fawranMode, fawranNumber, templateId, slug]);
+  }, [
+    activeKey,
+    activity,
+    brandName,
+    crNumber,
+    fawranMode,
+    fawranNumber,
+    importState.phase,
+    templateId,
+    slug,
+  ]);
 
   async function checkAvailability() {
     const candidate = slugify(slug);
@@ -708,6 +829,7 @@ export function SouqnaBeginExperience({
 
   function handleLogo(file: File | null) {
     if (logoPreview.startsWith('blob:')) URL.revokeObjectURL(logoPreview);
+    setLogoUrl('');
     if (!file) {
       setLogoName('');
       setLogoPreview('');
@@ -722,6 +844,7 @@ export function SouqnaBeginExperience({
       brandName,
       slug,
       logoName,
+      logoUrl,
       activity,
       templateId,
       fawranMode,
@@ -729,6 +852,47 @@ export function SouqnaBeginExperience({
       fawranCrType,
       crNumber,
     };
+  }
+
+  /**
+   * Best-effort post-launch import: insert the confirmed Instagram
+   * drafts and patch the handle/bio into settings. Never blocks or
+   * fails the launch — the storefront exists either way, and the splash
+   * screen covers the latency.
+   */
+  async function finalizeImport(createdSlug: string) {
+    const products = importState.drafts
+      .filter((draft) => draft.isProduct && (draft.titleEn || draft.titleAr))
+      .map((draft) => ({
+        postId: draft.postId,
+        titleEn: draft.titleEn,
+        titleAr: draft.titleAr,
+        description: draft.description,
+        priceQar: draft.priceQar,
+        category: draft.category,
+        sizeOptions: draft.sizeOptions,
+        variantOptions: draft.variantOptions,
+        imageUrl: draft.imageUrl,
+        sourceUrl: draft.sourceUrl,
+      }));
+    try {
+      if (importState.importId && products.length > 0) {
+        await importInstagramProducts({
+          slug: createdSlug,
+          importId: importState.importId,
+          locale,
+          products,
+        });
+      }
+      const patch: Record<string, unknown> = {};
+      if (importState.handle) patch.instagram = importState.handle;
+      if (importState.profile?.bio) patch.tagline = importState.profile.bio.slice(0, 280);
+      if (Object.keys(patch).length > 0) {
+        await saveStorefrontSettings({ slug: createdSlug, section: 'brand', patch });
+      }
+    } catch (err) {
+      console.error('[begin] instagram import finalize failed', err);
+    }
   }
 
   function goNext() {
@@ -742,7 +906,15 @@ export function SouqnaBeginExperience({
     window.localStorage.setItem('souqna-begin-draft', JSON.stringify(beginDraft()));
 
     if (!isSignedIn) {
-      window.location.href = '/sign-up?redirect_url=%2Faccount';
+      if (importState.phase === 'confirmed') {
+        // Come back to /begin after sign-up so the confirmed import can
+        // be restored and committed; without an import the old straight-
+        // to-account path is unchanged.
+        persistImportState(importState);
+        window.location.href = '/sign-up?redirect_url=%2Fbegin%3Fresume%3D1';
+      } else {
+        window.location.href = '/sign-up?redirect_url=%2Faccount';
+      }
       return;
     }
 
@@ -755,7 +927,7 @@ export function SouqnaBeginExperience({
       fawranMode,
       fawranCrType,
       fawranNumber: formatQatarMobileForPayload(fawranNumber),
-      logoUrl: '',
+      logoUrl,
       slug,
       website: '',
       locale,
@@ -770,9 +942,15 @@ export function SouqnaBeginExperience({
           JSON.stringify({ ...beginDraft(), createdSlug: result.slug }),
         );
         setLaunchSplash({ slug: result.slug, templateId });
-        launchTimeoutRef.current = setTimeout(() => {
+        const finalize =
+          importState.phase === 'confirmed' ? finalizeImport(result.slug) : Promise.resolve();
+        const splashDelay = new Promise<void>((resolve) => {
+          launchTimeoutRef.current = setTimeout(resolve, 2300);
+        });
+        void Promise.allSettled([finalize, splashDelay]).then(() => {
+          clearImportState();
           window.location.href = `/account/builder?store=${encodeURIComponent(result.slug)}`;
-        }, 2300);
+        });
       }
     });
   }
@@ -780,6 +958,65 @@ export function SouqnaBeginExperience({
   function goBack() {
     setDirection(-1);
     setStepIndex((current) => Math.max(0, current - 1));
+  }
+
+  /**
+   * Prefill the rest of the intake from the imported profile: name,
+   * slug, logo, suggested activity + template. Existing merchant input
+   * always wins over a suggestion.
+   */
+  function applyImportPrefill(source: {
+    profile: IgProfile | null;
+    suggestions: StoreSuggestions | null;
+  }) {
+    const profile = source.profile;
+    if (profile) {
+      const suggestedName = profile.fullName?.trim() || profile.handle;
+      if (suggestedName) setBrandName((prev) => (prev.trim() ? prev : suggestedName));
+      const suggestedSlug = slugify(profile.handle.replace(/[._]/gu, '-'));
+      if (suggestedSlug.length >= 3) {
+        setSlugTouched(true);
+        setSlug((prev) => (prev.length >= 3 ? prev : suggestedSlug));
+        setSlugStatus({ status: 'idle' });
+      }
+      if (profile.profilePicUrl) {
+        setLogoUrl(profile.profilePicUrl);
+        setLogoPreview(profile.profilePicUrl);
+        setLogoName(`@${profile.handle}`);
+      }
+    }
+    const suggestions = source.suggestions;
+    if (
+      suggestions?.businessType &&
+      ACTIVITIES.some((item) => item.id === suggestions.businessType)
+    ) {
+      setActivity(suggestions.businessType as BusinessType);
+    }
+    if (
+      suggestions?.templateId &&
+      TEMPLATE_PICKER_IDS.includes(suggestions.templateId as TemplateId)
+    ) {
+      setTemplateId(suggestions.templateId as TemplateId);
+    }
+  }
+
+  function leaveImportStep() {
+    setDirection(1);
+    setStepIndex((current) => (STEP_KEYS[current] === 'import' ? current + 1 : current));
+  }
+
+  function handleImportComplete() {
+    // Re-confirming after Back must not re-apply suggestions over edits
+    // the merchant made to later steps (template, activity, name).
+    if (importState.phase !== 'confirmed') {
+      applyImportPrefill({ profile: importState.profile, suggestions: importState.suggestions });
+    }
+    leaveImportStep();
+  }
+
+  function handleImportSkip() {
+    dispatchImport({ type: 'skip-import' });
+    leaveImportStep();
   }
 
   const FALLBACK_ACTIVITY: { id: BusinessType; en: string; ar: string } = {
@@ -817,6 +1054,30 @@ export function SouqnaBeginExperience({
   const slideX = (dir: number) => (isRtl ? -dir : dir) * 28;
 
   function renderStep() {
+    if (activeKey === 'import') {
+      return (
+        <InstagramImportStep
+          locale={locale}
+          isRtl={isRtl}
+          capabilities={igImport}
+          tokens={{
+            cardBg: fieldBg,
+            cardBorder,
+            mutedText,
+            fieldBg,
+            fieldBorder,
+            accent,
+            accentInk,
+            text: shellText,
+          }}
+          state={importState}
+          dispatch={dispatchImport}
+          onComplete={handleImportComplete}
+          onSkip={handleImportSkip}
+        />
+      );
+    }
+
     if (activeKey === 'identity') {
       const c = t.steps.identity;
       return (
@@ -1237,7 +1498,22 @@ export function SouqnaBeginExperience({
               >
                 {isRtl ? '→' : '←'} {t.back}
               </button>
-              <p>{t.stepCount(stepIndex + 1)}</p>
+              <p
+                style={
+                  isRtl
+                    ? {
+                        // Arabic in the mono/uppercase footer treatment reads
+                        // broken — plain Arabic sans, no tracking.
+                        fontFamily: 'var(--font-arabic), var(--font-sans), sans-serif',
+                        letterSpacing: 0,
+                        textTransform: 'none',
+                        fontSize: 11,
+                      }
+                    : undefined
+                }
+              >
+                {t.stepCount(stepIndex + 1)}
+              </p>
               {isFinalStep ? (
                 <MetalFrame strength={0.65} borderRadius={999}>
                   <button
@@ -1628,6 +1904,15 @@ export function SouqnaBeginExperience({
           text-transform: uppercase;
           color: var(--begin-muted);
         }
+        /* The mono/uppercase/tracked label treatment is Latin-only —
+           Arabic falls back to a glyphless font and letter-spacing
+           fights the connected script. */
+        .begin-shell[dir='rtl'] .begin-field > span {
+          font-family: var(--font-arabic), var(--font-sans), sans-serif;
+          font-size: 12px;
+          letter-spacing: 0;
+          text-transform: none;
+        }
 
         .begin-field input {
           width: 100%;
@@ -1734,8 +2019,11 @@ export function SouqnaBeginExperience({
           box-shadow: none;
         }
 
+        /* Domains are Latin: render the whole field as an LTR island so
+           the leading dot of '.souqna.qa' stays attached ('noura-skin
+           .souqna.qa'), instead of bidi pushing it to the far edge. */
         .begin-shell[dir='rtl'] .begin-subdomain {
-          flex-direction: row-reverse;
+          direction: ltr;
         }
 
         .begin-check {

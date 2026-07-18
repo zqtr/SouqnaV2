@@ -3,6 +3,12 @@ import { cookies, headers } from 'next/headers';
 import { auth } from '@clerk/nextjs/server';
 import { SouqnaBeginExperience } from '@/components/souqna/SouqnaBeginExperience';
 import { defaultLocale, isLocale } from '@/i18n/locales';
+import { igImportCapabilities } from '@/lib/instagram/capabilities';
+
+// Server actions invoked from this route (Instagram fetch/analyze)
+// inherit the segment config; the vision batches need more than the
+// default budget.
+export const maxDuration = 60;
 
 export const metadata: Metadata = {
   title: 'Begin · Souqna',
@@ -10,11 +16,11 @@ export const metadata: Metadata = {
 };
 
 type Props = {
-  searchParams?: Promise<{ locale?: string | string[] }>;
+  searchParams?: Promise<{ locale?: string | string[]; resume?: string | string[] }>;
 };
 
 export default async function BeginPage({ searchParams }: Props) {
-  const emptyParams: { locale?: string | string[] } = {};
+  const emptyParams: { locale?: string | string[]; resume?: string | string[] } = {};
   const [cookieStore, hdrs, params, session] = await Promise.all([
     cookies(),
     headers(),
@@ -29,6 +35,14 @@ export default async function BeginPage({ searchParams }: Props) {
     (headerLocale && isLocale(headerLocale) && headerLocale) ||
     (cookieLocale && isLocale(cookieLocale) && cookieLocale) ||
     defaultLocale;
+  const resume = (Array.isArray(params.resume) ? params.resume[0] : params.resume) === '1';
 
-  return <SouqnaBeginExperience locale={locale} isSignedIn={Boolean(session.userId)} />;
+  return (
+    <SouqnaBeginExperience
+      locale={locale}
+      isSignedIn={Boolean(session.userId)}
+      igImport={igImportCapabilities()}
+      resume={resume}
+    />
+  );
 }

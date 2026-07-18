@@ -79,6 +79,19 @@ const schema = z.object({
   OPENAI_API_KEY: z.string().min(1).optional(),
   IDEOGRAM_API_KEY: z.string().min(1).optional(),
   FAL_KEY: z.string().min(1).optional(),
+  // Instagram import at /begin. APIFY_TOKEN is also read directly by the
+  // souqnasource clients (apify-base.ts); declared here so the import
+  // feature's availability check goes through the validated env module.
+  APIFY_TOKEN: z.string().min(1).optional(),
+  APIFY_INSTAGRAM_ACTOR_ID: z.string().min(1).default('apify/instagram-scraper'),
+  // '1' swaps the scraper for a deterministic local fixture so the whole
+  // /begin import flow can be exercised without an Apify account.
+  IG_IMPORT_USE_MOCK: flag,
+  // Vision model for product-draft extraction, routed through the Vercel
+  // AI Gateway — any multimodal `provider/model` slug the gateway
+  // supports works here.
+  IG_VISION_MODEL: z.string().min(1).default('google/gemini-2.5-flash'),
+  IG_IMPORT_MAX_POSTS: z.coerce.number().int().min(1).max(20).default(20),
   // Apps marketplace.
   // APPS_ENCRYPTION_KEY is a 32-byte secret used by AES-256-GCM to
   // encrypt OAuth tokens + API keys at rest. Generate with
@@ -207,6 +220,11 @@ const parsed = schema.safeParse({
   OPENAI_API_KEY: clean(process.env.OPENAI_API_KEY),
   IDEOGRAM_API_KEY: clean(process.env.IDEOGRAM_API_KEY),
   FAL_KEY: clean(process.env.FAL_KEY),
+  APIFY_TOKEN: clean(process.env.APIFY_TOKEN),
+  APIFY_INSTAGRAM_ACTOR_ID: clean(process.env.APIFY_INSTAGRAM_ACTOR_ID),
+  IG_IMPORT_USE_MOCK: clean(process.env.IG_IMPORT_USE_MOCK),
+  IG_VISION_MODEL: clean(process.env.IG_VISION_MODEL),
+  IG_IMPORT_MAX_POSTS: clean(process.env.IG_IMPORT_MAX_POSTS),
   APPS_ENCRYPTION_KEY: clean(process.env.APPS_ENCRYPTION_KEY),
   MAILCHIMP_CLIENT_ID: clean(process.env.MAILCHIMP_CLIENT_ID),
   MAILCHIMP_CLIENT_SECRET: clean(process.env.MAILCHIMP_CLIENT_SECRET),
@@ -294,6 +312,11 @@ export const env = parsed.success
       OPENAI_API_KEY: undefined as string | undefined,
       IDEOGRAM_API_KEY: undefined as string | undefined,
       FAL_KEY: undefined as string | undefined,
+      APIFY_TOKEN: undefined as string | undefined,
+      APIFY_INSTAGRAM_ACTOR_ID: 'apify/instagram-scraper',
+      IG_IMPORT_USE_MOCK: false,
+      IG_VISION_MODEL: 'google/gemini-2.5-flash',
+      IG_IMPORT_MAX_POSTS: 20,
       APPS_ENCRYPTION_KEY: undefined as string | undefined,
       MAILCHIMP_CLIENT_ID: undefined as string | undefined,
       MAILCHIMP_CLIENT_SECRET: undefined as string | undefined,

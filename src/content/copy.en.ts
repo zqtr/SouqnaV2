@@ -485,6 +485,17 @@ export const copyEn = {
     },
     pledge: 'Your storefront lives at souqna.qa — yours to share, edit and grow.',
 
+    instagramImport: {
+      invalidHandle: 'That does not look like an Instagram handle — letters, numbers, dots and underscores only.',
+      rateLimited: 'Too many attempts — give it a minute and try again.',
+      providerUnavailable: 'Instagram fetching is not available right now — you can upload product photos instead.',
+      privateProfile: 'That profile is private, so we cannot read it. Upload product photos instead and the AI will take it from there.',
+      fetchFailed: 'We could not read that profile. Check the handle, or upload product photos instead.',
+      aiUnavailable: 'AI analysis is not available right now — you can still review and price your products manually.',
+      importFailed: 'We could not import your products. Your storefront is live — add products from the dashboard.',
+      uploadFailed: 'That image could not be uploaded. Use a PNG, JPG, or WebP under 5 MB.',
+    },
+
     step1: {
       eyebrow: 'welcome',
       title: 'Tell us where you are.',
