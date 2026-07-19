@@ -2,13 +2,19 @@ import 'server-only';
 
 import { db, hasDb } from '@/lib/db';
 import { env } from '@/lib/env';
+import { sendFcmMessages } from '@/lib/mobile/fcm';
 import { hasCapability, isRole, type Capability } from '@/lib/team/capabilities';
 import type { Order } from '@/lib/checkout-orders';
+
+export type MobilePushProvider = 'expo' | 'fcm';
 
 export type MobilePushTokenInput = {
   clerkUserId: string;
   deviceId: string;
-  expoPushToken: string;
+  /** Expo push token or raw FCM device token — see `provider`. */
+  pushToken: string;
+  provider?: MobilePushProvider;
+  appId?: string | null;
   platform?: string;
   appVersion?: string | null;
 };
@@ -16,6 +22,7 @@ export type MobilePushTokenInput = {
 type PushTokenRow = {
   clerk_user_id: string;
   expo_push_token: string;
+  provider: string;
 };
 
 export async function upsertMobilePushToken(
@@ -24,13 +31,16 @@ export async function upsertMobilePushToken(
   if (!hasDb()) return;
   await db()`
     insert into mobile_push_tokens (
-      clerk_user_id, device_id, expo_push_token, platform, app_version
+      clerk_user_id, device_id, expo_push_token, provider, app_id, platform, app_version
     ) values (
-      ${input.clerkUserId}, ${input.deviceId}, ${input.expoPushToken},
+      ${input.clerkUserId}, ${input.deviceId}, ${input.pushToken},
+      ${input.provider ?? 'expo'}, ${input.appId ?? null},
       ${input.platform ?? 'ios'}, ${input.appVersion ?? null}
     )
     on conflict (clerk_user_id, device_id) do update set
       expo_push_token = excluded.expo_push_token,
+      provider = excluded.provider,
+      app_id = excluded.app_id,
       platform = excluded.platform,
       app_version = excluded.app_version,
       last_seen_at = now(),
@@ -41,7 +51,7 @@ export async function upsertMobilePushToken(
 export async function deleteMobilePushToken(input: {
   clerkUserId: string;
   deviceId?: string | null;
-  expoPushToken?: string | null;
+  pushToken?: string | null;
 }): Promise<void> {
   if (!hasDb()) return;
   if (input.deviceId) {
@@ -51,11 +61,11 @@ export async function deleteMobilePushToken(input: {
     `;
     return;
   }
-  if (input.expoPushToken) {
+  if (input.pushToken) {
     await db()`
       delete from mobile_push_tokens
       where clerk_user_id = ${input.clerkUserId}
-        and expo_push_token = ${input.expoPushToken}
+        and expo_push_token = ${input.pushToken}
     `;
   }
 }
@@ -66,7 +76,7 @@ async function recipientRowsForStorefront(
 ): Promise<PushTokenRow[]> {
   if (!hasDb()) return [];
   const rows = (await db()`
-    select distinct t.clerk_user_id, t.expo_push_token,
+    select distinct t.clerk_user_id, t.expo_push_token, t.provider,
            case when b.clerk_user_id = t.clerk_user_id then 'owner' else m.role end as role,
            coalesce(m.capabilities, '{}'::jsonb) as capabilities
     from mobile_push_tokens t
@@ -103,22 +113,30 @@ export async function notifyMobileNewOrder(input: {
   );
   if (recipients.length === 0) return;
 
-  await sendExpoPush(
-    recipients.map((r) => r.expo_push_token),
-    {
+  const message = {
+    title: `New order · ${input.businessName}`,
+    body: `${input.order.currency} ${input.order.totalQar} · tap to review`,
+    data: {
+      kind: 'order.created',
+      store: input.storefrontSlug,
+      orderId: input.order.id,
       title: `New order · ${input.businessName}`,
-      body: `${input.order.currency} ${input.order.totalQar} · tap to review`,
-      data: {
-        kind: 'order.created',
-        store: input.storefrontSlug,
-        orderId: input.order.id,
-        title: `New order · ${input.businessName}`,
-        body: `${input.order.customerName} · ${input.order.currency} ${input.order.totalQar}`,
-      },
-      sound: 'default',
-      badge: 1,
+      body: `${input.order.customerName} · ${input.order.currency} ${input.order.totalQar}`,
     },
-  );
+  };
+
+  await Promise.all([
+    sendExpoPush(
+      recipients.filter((r) => r.provider !== 'fcm').map((r) => r.expo_push_token),
+      { ...message, sound: 'default', badge: 1 },
+    ),
+    // The Flutter merchant app registers FCM tokens. Order-created is the
+    // only event pushed through FCM for now (Shopify-style new-sale ping).
+    sendFcmPush(
+      recipients.filter((r) => r.provider === 'fcm').map((r) => r.expo_push_token),
+      { ...message, badge: 1 },
+    ),
+  ]);
 }
 
 /**
@@ -208,6 +226,29 @@ export async function notifyMobilePaymentRefunded(input: {
       sound: 'default',
     },
   );
+}
+
+async function sendFcmPush(
+  tokens: string[],
+  message: {
+    title: string;
+    body: string;
+    data?: Record<string, unknown>;
+    badge?: number;
+  },
+): Promise<void> {
+  if (tokens.length === 0) return;
+  try {
+    const { deadTokens } = await sendFcmMessages(tokens, message);
+    if (deadTokens.length > 0 && hasDb()) {
+      await db()`
+        delete from mobile_push_tokens
+        where expo_push_token = any(${deadTokens}::text[])
+      `;
+    }
+  } catch (err) {
+    console.error('[mobile.push] fcm send failed', err);
+  }
 }
 
 async function sendExpoPush(
