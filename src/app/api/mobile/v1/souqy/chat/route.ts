@@ -22,12 +22,21 @@ const QuerySchema = z.object({
   store: z.string().trim().min(1),
 });
 
+// The Flutter app sends topical work modes (audit/content/marketing/
+// operations/checkout); the chat engine only distinguishes ask vs agent,
+// so everything topical folds into 'ask'.
 const SendSchema = z.object({
   store: z.string().trim().min(1),
   conversationId: z.string().uuid().optional().nullable(),
   message: z.string().trim().min(1).max(1600),
-  mode: z.enum(['ask', 'agent']).optional(),
+  mode: z
+    .enum(['ask', 'agent', 'audit', 'content', 'marketing', 'operations', 'checkout'])
+    .optional(),
 });
+
+function chatMode(mode: string | undefined): 'ask' | 'agent' {
+  return mode === 'agent' ? 'agent' : 'ask';
+}
 
 export async function GET(req: Request): Promise<Response> {
   const parsed = QuerySchema.safeParse({ store: searchParam(req, 'store') });
@@ -63,7 +72,7 @@ export async function POST(req: Request): Promise<Response> {
     storefrontSlug: gate.access.storefront.slug,
     conversationId: parsed.data.conversationId,
     message: parsed.data.message,
-    mode: parsed.data.mode ?? 'ask',
+    mode: chatMode(parsed.data.mode),
   });
 
   if (result.status === 'error') {
