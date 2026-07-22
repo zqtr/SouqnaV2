@@ -114,11 +114,29 @@ export async function DropBlock({ block, ctx }: BlockRenderProps<DropProps>) {
 
       {phase === 'sold_out' ? (
         drop.waitlistEnabled ? (
-          <DropWaitlistButton
-            storefrontSlug={slug}
-            dropId={dropId}
-            label={ctx.isRtl ? 'أعلمني عند التوفر' : 'Notify me when it returns'}
-          />
+          ctx.isPreview ? (
+            <p
+              aria-disabled="true"
+              style={{
+                margin: 0,
+                alignSelf: 'flex-start',
+                borderRadius: 999,
+                padding: '12px 18px',
+                background: 'color-mix(in srgb, var(--sf-ink) 10%, transparent)',
+                color: 'color-mix(in srgb, var(--sf-ink) 64%, transparent)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+              }}
+            >
+              {ctx.isRtl ? 'قائمة الانتظار معطلة في المعاينة' : 'Waitlist disabled in preview'}
+            </p>
+          ) : (
+            <DropWaitlistButton
+              storefrontSlug={slug}
+              dropId={dropId}
+              label={ctx.isRtl ? 'أعلمني عند التوفر' : 'Notify me when it returns'}
+            />
+          )
         ) : (
           <p
             style={{

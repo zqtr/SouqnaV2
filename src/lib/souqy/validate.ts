@@ -2,6 +2,7 @@ import 'server-only';
 import { parse } from '@babel/parser';
 import type { File, Node } from '@babel/types';
 import { themeOverridesSchema } from '@/lib/blocks/schemas';
+import type { ThemeOverrides } from '@/lib/blocks/types';
 
 /**
  * AST-based safety pass for Souqy-generated TSX.
@@ -21,7 +22,7 @@ import { themeOverridesSchema } from '@/lib/blocks/schemas';
  * fail (parse error / repeated repair failures).
  */
 
-const ALLOWED_IMPORTS = new Set<string>(['react', '@souqna/sdk', './theme']);
+const ALLOWED_IMPORTS = new Set<string>(['react', '@souqna/sdk', './theme', './styles.css']);
 
 const FORBIDDEN_GLOBALS = new Set<string>([
   'process',
@@ -68,7 +69,59 @@ const FORBIDDEN_JSX_ATTRS = new Set<string>([
   'onError',
 ]);
 
-const ALLOWED_FILES = new Set<string>(['index.tsx', 'theme.ts']);
+const REQUIRED_FILES = new Set<string>(['index.tsx', 'theme.ts']);
+// `styles.css` is optional — present only when the storefront ships custom
+// CSS (the Open Design surface). It is validated as CSS, not parsed as TSX.
+const OPTIONAL_FILES = new Set<string>(['styles.css']);
+const ALLOWED_FILES = new Set<string>([...REQUIRED_FILES, ...OPTIONAL_FILES]);
+
+// --- Custom CSS safety (Open Design surface) --------------------------------
+// `styles.css` is authored by the model and injected into the live, public
+// storefront inside a <style> scoped to the Souqy render root (scoping is
+// applied at build time). This validator is the content-safety gate — the
+// defense-in-depth against the handful of ways a stylesheet can stop being
+// "just styling" and become markup injection, script execution, or data
+// exfiltration. Keep it conservative: a rejected sheet is repaired, never
+// shipped to a customer's storefront.
+const MAX_CSS_BYTES = 48_000;
+const FORBIDDEN_CSS_PATTERNS: { pattern: RegExp; reason: string }[] = [
+  { pattern: /<\s*\/|<!--/, reason: 'HTML close tag / comment — `</style>` breakout risk.' },
+  { pattern: /@import\b/i, reason: '`@import` — external stylesheet pulls are not allowed.' },
+  { pattern: /expression\s*\(/i, reason: 'legacy `expression(...)` — executes script.' },
+  { pattern: /-moz-binding\b/i, reason: '`-moz-binding` — binds script to an element.' },
+  { pattern: /\bbehavior\s*:/i, reason: 'IE `behavior:` — attaches an HTC script.' },
+  {
+    pattern: /url\s*\(\s*['"]?\s*(?:javascript|vbscript|data:text\/html)/i,
+    reason: 'unsafe `url(...)` scheme (only http/https/data:image are allowed).',
+  },
+];
+
+/**
+ * Content-safety validation for the model-authored `styles.css`. Scans for
+ * the known escape vectors; returns an issue per hit so the repair prompt can
+ * fix them all at once. NOT a CSS parser — scoping and normalization happen at
+ * build time; this is purely the security allowlist.
+ */
+export function validateCss(source: string): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (Buffer.byteLength(source, 'utf8') > MAX_CSS_BYTES) {
+    issues.push({
+      file: 'styles.css',
+      message: `styles.css exceeds the ${MAX_CSS_BYTES}-byte budget.`,
+    });
+  }
+  for (const { pattern, reason } of FORBIDDEN_CSS_PATTERNS) {
+    const match = pattern.exec(source);
+    if (match) {
+      issues.push({
+        file: 'styles.css',
+        line: source.slice(0, match.index).split('\n').length,
+        message: `Disallowed in CSS: ${reason}`,
+      });
+    }
+  }
+  return issues;
+}
 
 export type ValidationIssue = {
   file: string;
@@ -98,7 +151,7 @@ export function validateSouqyOutput(files: Record<string, string>): ValidationRe
     }
   }
 
-  for (const required of ALLOWED_FILES) {
+  for (const required of REQUIRED_FILES) {
     if (!files[required]) {
       issues.push({ file: required, message: `Missing required file: ${required}.` });
     }
@@ -106,6 +159,10 @@ export function validateSouqyOutput(files: Record<string, string>): ValidationRe
 
   for (const [name, source] of Object.entries(files)) {
     if (!ALLOWED_FILES.has(name)) continue;
+    if (name === 'styles.css') {
+      issues.push(...validateCss(source));
+      continue;
+    }
     issues.push(...validateFile(name, source));
   }
 
@@ -421,6 +478,34 @@ function validateThemeShape(source: string): ValidationIssue[] {
     }
   }
   return [];
+}
+
+/**
+ * Return a validated, literal-only Souqy theme for server rendering.
+ * Invalid or dynamic source fails closed to the storefront's persisted
+ * Easy theme; the build validator remains responsible for user-facing
+ * diagnostics.
+ */
+export function extractSouqyThemeOverrides(source: string): ThemeOverrides | null {
+  let ast: File;
+  try {
+    ast = parse(source, { sourceType: 'module', plugins: ['typescript'] });
+  } catch {
+    return null;
+  }
+  for (const node of ast.program.body) {
+    if (node.type !== 'ExportNamedDeclaration') continue;
+    if (node.declaration?.type !== 'VariableDeclaration') continue;
+    for (const decl of node.declaration.declarations) {
+      if (decl.id.type !== 'Identifier' || decl.id.name !== 'theme') continue;
+      if (decl.init?.type !== 'ObjectExpression') return null;
+      const literal = objectLiteralToValue(decl.init);
+      if (literal === SYM_NON_LITERAL) return null;
+      const parsed = themeOverridesSchema.safeParse(literal);
+      return parsed.success ? parsed.data : null;
+    }
+  }
+  return null;
 }
 
 const SYM_NON_LITERAL = Symbol('non-literal');

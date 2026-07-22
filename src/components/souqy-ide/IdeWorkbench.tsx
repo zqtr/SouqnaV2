@@ -22,7 +22,7 @@ import type { AgentEvent } from '@/components/sections/begin/souqy-studio/Contex
 import { CodeEditor } from './CodeEditor';
 import { ComponentTree } from './ComponentTree';
 import { ProposalDiff } from './ProposalDiff';
-import { SouqyPulse } from './SouqyPulse';
+import { Loader } from '@/components/motion/loader';
 
 type Props = {
   copy: StudioCopy;
@@ -53,6 +53,17 @@ function buildDoc(text: string): DocState {
     ranges: parsed.ok ? computeBlockRanges(text) : [],
     parseError: parsed.ok ? null : parsed.detail,
   };
+}
+
+// Format a real elapsed duration (ms of wall-clock) as a compact label, e.g.
+// "1.1s" or "1m 04s". Sub-100ms rounds up to "0.1s" so a finished step never
+// reads a misleading "0.0s".
+function formatElapsed(ms: number): string {
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${Math.max(0.1, seconds).toFixed(1)}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}m ${s.toString().padStart(2, '0')}s`;
 }
 
 // Calm, Codex-style activity lines shown while Souqy works — one short
@@ -99,11 +110,19 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug, onAgentEvents }: Pro
   // panel. Session rows are seeded on load; run steps stream in below.
   const [transcript, setTranscript] = useState<AgentEvent[]>([]);
   const runRequestRef = useRef('');
+  // Wall-clock start of the active run, stamped when the prompt is submitted.
+  // The terminal outcome row reports the real elapsed against this — the true
+  // Souqy round-trip, never a simulated number.
+  const runStartedAtRef = useRef(0);
+  const runElapsed = useCallback(
+    () => (runStartedAtRef.current ? formatElapsed(performance.now() - runStartedAtRef.current) : undefined),
+    [],
+  );
   const pushLine = useCallback(
-    (text: string, state: AgentEvent['state'] = 'done') =>
+    (text: string, state: AgentEvent['state'] = 'done', time?: string) =>
       setTranscript((prev) => [
         ...prev,
-        { id: `line-${Date.now()}-${prev.length}`, kind: 'tool', text, state },
+        { id: `line-${Date.now()}-${prev.length}`, kind: 'tool', text, state, ...(time ? { time } : {}) },
       ]),
     [],
   );
@@ -132,37 +151,49 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug, onAgentEvents }: Pro
   }, [isGenerating, isTransforming, locale]);
 
   // Stream the run into the agent panel: a user turn, then each tool step
-  // flipping from running to done. Timing is simulated (the actions don't
-  // stream real steps yet) but the transcript reflects the real run's start,
-  // end, and outcome.
+  // flipping from running to done. Step order is simulated (the actions don't
+  // stream real steps yet), but every row's time is the real wall-clock
+  // elapsed it spent in the running state — never a fabricated number.
+  const stepStartRef = useRef<Map<string, number>>(new Map());
   useEffect(() => {
     if (!isGenerating) return;
     const steps = (isTransforming ? IDE_ACTIVITY.build : IDE_ACTIVITY.think)[locale];
-    const dur = () => `${(0.2 + Math.random() * 0.7).toFixed(1)}s`;
+    const starts = stepStartRef.current;
+    // Flip a running row to done, stamping the real elapsed since it started.
+    const markDone = (e: AgentEvent): AgentEvent => {
+      if (e.state !== 'run') return e;
+      const startedAt = starts.get(e.id);
+      starts.delete(e.id);
+      return {
+        ...e,
+        state: 'done',
+        time: startedAt != null ? formatElapsed(performance.now() - startedAt) : e.time,
+      };
+    };
     const turnId = `turn-${Date.now()}`;
+    const firstStepId = `${turnId}-0`;
+    starts.set(firstStepId, performance.now());
     setTranscript((prev) => [
       ...prev,
       { id: `${turnId}-req`, kind: 'turn', text: runRequestRef.current || steps[0]!, state: 'done' },
-      { id: `${turnId}-0`, kind: 'tool', text: steps[0]!, state: 'run' },
+      { id: firstStepId, kind: 'tool', text: steps[0]!, state: 'run' },
     ]);
     let i = 0;
     const id = window.setInterval(() => {
       i += 1;
       setTranscript((prev) => {
-        const next = prev.map((e) =>
-          e.state === 'run' ? { ...e, state: 'done' as const, time: dur() } : e,
-        );
+        const next = prev.map(markDone);
         if (i < steps.length) {
-          next.push({ id: `${turnId}-${i}`, kind: 'tool', text: steps[i]!, state: 'run' });
+          const stepId = `${turnId}-${i}`;
+          starts.set(stepId, performance.now());
+          next.push({ id: stepId, kind: 'tool', text: steps[i]!, state: 'run' });
         }
         return next;
       });
     }, 1100);
     return () => {
       window.clearInterval(id);
-      setTranscript((prev) =>
-        prev.map((e) => (e.state === 'run' ? { ...e, state: 'done' as const, time: dur() } : e)),
-      );
+      setTranscript((prev) => prev.map(markDone));
     };
   }, [isGenerating, isTransforming, locale]);
 
@@ -329,7 +360,7 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug, onAgentEvents }: Pro
           const message =
             'message' in result && result.message ? result.message : copy.ideAskFailed;
           setBanner({ tone: 'error', message });
-          pushLine(message, 'error');
+          pushLine(message, 'error', runElapsed());
           return;
         }
         setProposal({
@@ -339,16 +370,20 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug, onAgentEvents }: Pro
           proposedBlock: result.block as unknown as Record<string, unknown>,
         });
         setPromptText('');
-        pushLine(locale === 'ar' ? 'المسودة جاهزة — راجع الفرق' : 'Draft ready — review the diff');
+        pushLine(
+          locale === 'ar' ? 'المسودة جاهزة — راجع الفرق' : 'Draft ready — review the diff',
+          'done',
+          runElapsed(),
+        );
       } catch (error) {
         const message = souqyIdeErrorMessage(error, locale);
         setBanner({ tone: 'error', message });
-        pushLine(message, 'error');
+        pushLine(message, 'error', runElapsed());
       } finally {
         setIsAsking(false);
       }
     },
-    [parsedBlocks, selectedIndex, storefrontSlug, pageId, copy, locale, pushLine],
+    [parsedBlocks, selectedIndex, storefrontSlug, pageId, copy, locale, pushLine, runElapsed],
   );
 
   const handleTransform = useCallback(
@@ -364,13 +399,15 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug, onAgentEvents }: Pro
         const result = await souqyDesignStorefront({ slug: storefrontSlug, request });
         if (result.status === 'error') {
           setBanner({ tone: 'error', message: result.message });
-          pushLine(result.message, 'error');
+          pushLine(result.message, 'error', runElapsed());
           return;
         }
         setPromptText('');
         setBanner({ tone: 'done', message: copy.ideTransformed });
         pushLine(
           locale === 'ar' ? 'أُعيد بناء المتجر — حُدّثت المعاينة' : 'Rebuilt storefront — preview updated',
+          'done',
+          runElapsed(),
         );
         // The transformed site lives on the public storefront, not the
         // block-draft preview — switch there and hard-remount.
@@ -379,18 +416,19 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug, onAgentEvents }: Pro
       } catch (error) {
         const message = souqyIdeErrorMessage(error, locale);
         setBanner({ tone: 'error', message });
-        pushLine(message, 'error');
+        pushLine(message, 'error', runElapsed());
       } finally {
         setIsTransforming(false);
       }
     },
-    [storefrontSlug, copy, locale, pushLine],
+    [storefrontSlug, copy, locale, pushLine, runElapsed],
   );
 
   const submitPrompt = useCallback(() => {
     const request = promptText.trim();
     if (!request || isGenerating || proposal) return;
     runRequestRef.current = request;
+    runStartedAtRef.current = performance.now();
     if (selectedIndex >= 0) void handleAskSouqy(request);
     else void handleTransform(request);
   }, [promptText, isGenerating, proposal, selectedIndex, handleAskSouqy, handleTransform]);
@@ -498,7 +536,13 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug, onAgentEvents }: Pro
                       }`}
                     >
                       <span className="ic" aria-hidden>
-                        {ev.state === 'run' ? '•' : ev.state === 'error' ? '✕' : '✓'}
+                        {ev.state === 'run' ? (
+                          <Loader variant="ascii-braille" size={12} speed={0.8} className="text-inherit" />
+                        ) : ev.state === 'error' ? (
+                          '✕'
+                        ) : (
+                          '✓'
+                        )}
                       </span>
                       <span className="tx">{ev.text}</span>
                       {ev.detail ? <span className="dt">{ev.detail}</span> : null}
@@ -553,7 +597,12 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug, onAgentEvents }: Pro
                   {isGenerating ? (
                     <div className="sqs-ide-prompt is-busy">
                       <div className="sqs-ide-prompt-row">
-                        <SouqyPulse size={18} />
+                        <Loader
+                          variant="dither"
+                          size={18}
+                          className="text-inherit"
+                          label={locale === 'ar' ? 'سوقي يعمل' : 'Souqy is working'}
+                        />
                         <span className="sqs-ide-prompt-busy">
                           {isTransforming ? copy.ideBusyBuilding : copy.ideBusyThinking}
                           {activity ? <span className="dim">{` · ${activity}`}</span> : null}
@@ -710,7 +759,7 @@ export function IdeWorkbench({ copy, isRtl, storefrontSlug, onAgentEvents }: Pro
               ) : null}
               {isLoading || isSaving ? (
                 <div className="sqs-ide-preview-chip">
-                  <SouqyPulse size={18} />
+                  <Loader variant="dot-matrix" size={18} className="text-inherit" />
                   <span>{isSaving ? copy.ideBusyManaging : copy.ideBusyLoading}</span>
                 </div>
               ) : null}

@@ -27,7 +27,7 @@ export const metadata: Metadata = {
  * sample catalogue (`buildTemplateDemo`). No auth, no DB.
  *
  * This URL is both the `src` of the embedded iframe on `/templates/[id]`
- * and the target of the "See live" button. `showcaseOnly` suppresses the
+ * and the target of the "See live" button. The showcase surface suppresses the
  * cart trigger + floating inquire so an errant click in the embed can't
  * pollute a visitor's real cart or fire a phantom inquiry.
  */
@@ -53,7 +53,7 @@ export default async function TemplateLivePage({ params, searchParams }: Props) 
       navPages={[]}
       legalPolicies={[]}
       policyLocale={locale}
-      showcaseOnly
+      surface={{ kind: 'showcase' }}
     />
   );
 }

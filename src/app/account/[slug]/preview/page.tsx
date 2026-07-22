@@ -7,14 +7,8 @@ import { Storefront } from '@/components/storefront/Storefront';
 import { DashboardDocument } from '@/components/dashboard/DashboardDocument';
 import { PreviewBridge } from '@/components/builder/PreviewBridge';
 import { isLocale } from '@/i18n/locales';
+import { normalizePageSlug } from '@/lib/storefrontPages';
 import {
-  getPageBySlug,
-  listPages,
-  normalizePageSlug,
-  type StorefrontPage,
-} from '@/lib/storefrontPages';
-import {
-  getStorefrontPolicies,
   POLICY_KEYS,
 } from '@/lib/storefrontSettings';
 import { resolvePolicyBody } from '@/lib/storefrontPolicies';
@@ -23,6 +17,7 @@ import type {
   ChromeLegalPolicy,
   ChromeNavPage,
 } from '@/components/storefront/StorefrontChrome';
+import { ensureEasyDraftManifest } from '@/lib/easySnapshots';
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -65,18 +60,37 @@ export default async function StorefrontPreviewPage({
   const cookieLocale = cookieStore.get('NEXT_LOCALE')?.value;
   const previewPolicyLocale =
     cookieLocale && isLocale(cookieLocale) ? cookieLocale : storefront.locale;
-  const [products, categoriesBySlug, allPages, policies] = await Promise.all([
+  const [products, categoriesBySlug, manifest] = await Promise.all([
     getAllProducts(slug),
     getStorefrontCategoryProductMap(slug).catch(() => new Map<string, Set<string>>()),
-    listPages(slug).catch(() => [] as StorefrontPage[]),
-    getStorefrontPolicies(slug),
+    ensureEasyDraftManifest(slug, auth.userId),
   ]);
+  const presentation = manifest.presentation;
+  const policies = presentation.policies;
+  const previewStorefront = {
+    ...storefront,
+    templateId: presentation.templateId,
+    design: presentation.design,
+    palette: presentation.palette,
+    themeOverrides: presentation.themeOverrides,
+    policies,
+    productIndex: presentation.productIndex,
+    checkout: {
+      ...storefront.checkout,
+      addressDesign: presentation.checkoutPresentation.addressDesign,
+      experience: presentation.checkoutPresentation.experience,
+      thankYou: presentation.checkoutPresentation.thankYou,
+    },
+    souqyRevision: null,
+    souqyBlobUrl: null,
+    souqySource: null,
+  };
 
   // Builder previews mirror the public chrome so the founder sees
   // their nav + legal footer exactly as a buyer would. Both are
   // derived locally; the chrome itself never queries the DB.
-  const navPages: ChromeNavPage[] = allPages
-    .filter((p) => p.showInNav && !p.isHome && p.status === 'published')
+  const navPages: ChromeNavPage[] = presentation.pages
+    .filter((p) => p.showInNav && !p.isHome)
     .map((p) => ({ slug: p.slug, title: p.title }));
   const legalPolicies: ChromeLegalPolicy[] = POLICY_KEYS.filter((key) => {
     const body = resolvePolicyBody({
@@ -95,12 +109,13 @@ export default async function StorefrontPreviewPage({
   // the legacy single-page behaviour and is kept for compatibility
   // with anything that still hits `/account/{slug}/preview` without a
   // `?page=` parameter.
-  let overrideBlocks = storefront.draftBlocks;
+  let overrideBlocks =
+    presentation.pages.find((page) => page.isHome)?.blocks ?? storefront.draftBlocks;
   if (requestedPageSlug) {
     const wanted = normalizePageSlug(requestedPageSlug);
     if (wanted && wanted !== 'home') {
-      const page = await getPageBySlug(slug, wanted);
-      if (page) overrideBlocks = page.draftBlocks;
+      const page = presentation.pages.find((candidate) => candidate.slug === wanted);
+      if (page) overrideBlocks = page.blocks;
     }
   }
 
@@ -108,7 +123,7 @@ export default async function StorefrontPreviewPage({
     <DashboardDocument bare lang={storefront.locale}>
       <PreviewBridge />
       <Storefront
-        data={storefront}
+        data={previewStorefront}
         products={products}
         overrideBlocks={overrideBlocks}
         selectable

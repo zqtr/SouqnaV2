@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useRef } from 'react';
+import { Loader } from '@/components/motion/loader';
 import {
   Activity,
   Cpu,
@@ -183,13 +184,20 @@ export function ContextInspector({
                     }`}
                   >
                     <span className="ic">
-                      {ev.kind === 'turn'
-                        ? '›'
-                        : ev.state === 'run'
-                          ? '•'
-                          : ev.state === 'error'
-                            ? '✕'
-                            : '✓'}
+                      {ev.kind === 'turn' ? (
+                        '›'
+                      ) : ev.state === 'run' ? (
+                        <Loader
+                          variant="ascii-braille"
+                          size={12}
+                          speed={0.8}
+                          className="text-inherit"
+                        />
+                      ) : ev.state === 'error' ? (
+                        '✕'
+                      ) : (
+                        '✓'
+                      )}
                     </span>
                     <span className="tx">
                       {ev.text}

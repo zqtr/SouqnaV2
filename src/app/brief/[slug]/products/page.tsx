@@ -26,6 +26,7 @@ import {
   buildProductIndexCategories,
   buildProductIndexProducts,
 } from '@/lib/productIndexCatalog';
+import { storefrontBaseUrl } from '@/lib/storefrontUrl';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -135,7 +136,7 @@ export default async function ProductsPage({ params }: Props) {
         legalPolicies={deriveLegalPolicies(policies, storefront.locale, storefront.businessName)}
         overrideMain={
           <AllProductsPage
-            storefrontSlug={slug}
+            storefrontBaseHref={storefrontBaseUrl(slug)}
             businessName={storefront.businessName}
             logoUrl={storefront.logoUrl}
             locale={storefront.locale}

@@ -202,6 +202,33 @@ export function Quote({ children, cite }: QuoteProps) {
   );
 }
 
+export type CustomProps = {
+  /** Wrapper element for the freeform region. Defaults to `div`. */
+  as?: 'div' | 'section' | 'main' | 'article' | 'aside' | 'header' | 'footer';
+  /** Class hooks defined in the storefront's `styles.css`. */
+  className?: string;
+  /** Static inline styles — no event handlers, no expressions. */
+  style?: CSSProperties;
+  id?: string;
+  children?: ReactNode;
+};
+
+/**
+ * Freeform design zone — Souqy's escape hatch from the fixed component
+ * vocabulary. The model authors real HTML/JSX here, styled via `className`
+ * hooks in `styles.css` (or inline `style`), and SDK components nest freely
+ * inside. Marked with `data-souqy-custom` so custom regions are reviewable
+ * and CSS can target them. The entire Souqy render is scoped at mount, so a
+ * class name here can never leak into the surrounding storefront chrome.
+ */
+export function Custom({ as: Tag = 'div', className, style, id, children }: CustomProps) {
+  return (
+    <Tag data-souqy-custom="" id={id} className={className} style={style}>
+      {children}
+    </Tag>
+  );
+}
+
 export type MarqueeProps = {
   /** Items to scroll across. Strings get rendered with mono separators. */
   items: string[];

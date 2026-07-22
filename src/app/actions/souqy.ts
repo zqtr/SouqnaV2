@@ -20,6 +20,7 @@ import {
   type GenerateResult,
 } from '@/lib/souqy/generate';
 import { buildSouqyArtifact, type BuildOk, type BuildResult } from '@/lib/souqy/build';
+import { parseSouqySource, serializeSouqySource } from '@/lib/souqy/source';
 import {
   getSouqyAuditById,
   logSouqyAudit,
@@ -839,7 +840,7 @@ export async function souqyRollback(
   if (!audit.source) {
     return { status: 'error', message: 'Revision has no source to restore from.' };
   }
-  const files = parseSerializedSource(audit.source);
+  const files = parseSouqySource(audit.source);
   if (!files) {
     return { status: 'error', message: 'Revision source is corrupt; cannot restore.' };
   }
@@ -1002,6 +1003,7 @@ async function buildSouqyOutputWithRepair(args: {
       files: {
         'index.tsx': output.files['index.tsx']!,
         'theme.ts': output.files['theme.ts']!,
+        ...(output.files['styles.css'] ? { 'styles.css': output.files['styles.css'] } : {}),
       },
     });
 
@@ -1053,34 +1055,13 @@ async function buildSouqyOutputWithRepair(args: {
 }
 
 /**
- * The two source files are persisted as a single string with a stable
- * delimiter — the revision history just needs to round-trip them. JSON
- * would also work but keeps the stored text harder to read in DB
- * inspection tools.
+ * Source files (including the optional `styles.css`) round-trip through
+ * the shared delimiter format in `@/lib/souqy/source` — one string in the
+ * DB, splittable back into files for rollback and render-time CSS
+ * extraction.
  */
-const SOURCE_DELIM = '\n//=== ';
-
 function serializeSource(out: SouqyOutput): string {
-  return Object.entries(out.files)
-    .map(([name, body]) => `${SOURCE_DELIM}${name} ===\n${body}`)
-    .join('\n');
-}
-
-function parseSerializedSource(
-  serialized: string,
-): { 'index.tsx': string; 'theme.ts': string } | null {
-  const files: Record<string, string> = {};
-  const re = /\n\/\/=== ([\w./-]+) ===\n([\s\S]*?)(?=\n\/\/=== |\s*$)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(serialized))) {
-    const name = m[1];
-    const body = m[2];
-    if (name && body !== undefined) {
-      files[name] = body;
-    }
-  }
-  if (!files['index.tsx'] || !files['theme.ts']) return null;
-  return { 'index.tsx': files['index.tsx'], 'theme.ts': files['theme.ts'] };
+  return serializeSouqySource(out.files);
 }
 
 /**

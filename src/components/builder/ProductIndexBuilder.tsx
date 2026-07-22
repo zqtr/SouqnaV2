@@ -183,7 +183,7 @@ export function ProductIndexBuilderPreview({
         }}
       >
         <AllProductsPage
-          storefrontSlug="preview"
+          storefrontBaseHref="/account/builder"
           businessName={businessName}
           logoUrl={logoUrl}
           locale={locale}

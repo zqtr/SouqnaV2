@@ -37,6 +37,7 @@
       "headers": {
         "Authorization": "Bearer ${SHADCNBLOCKS_API_KEY}"
       }
-    }
+    },
+    "@ncdai": "https://chanhdai.com/r/{name}.json"
   }
 }

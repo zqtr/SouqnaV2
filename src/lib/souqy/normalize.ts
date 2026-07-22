@@ -66,7 +66,9 @@ export function normalizeSouqyOutput(output: SouqyOutput): SouqyOutput {
   const themeSource = output.files['theme.ts'];
   const indexSource = output.files['index.tsx'];
   const normalizedTheme = themeSource ? normalizeThemeSource(themeSource) : themeSource;
-  const normalizedIndex = indexSource ? normalizeIndexSource(indexSource) : indexSource;
+  const normalizedIndex = indexSource
+    ? normalizeIndexSource(stripStylesCssImport(indexSource))
+    : indexSource;
   if (normalizedTheme === themeSource && normalizedIndex === indexSource) return output;
   return {
     ...output,
@@ -230,6 +232,19 @@ function isCssColor(value: string): boolean {
     /^(?:rgb|rgba|hsl|hsla|color)\(/iu.test(trimmed) ||
     /^var\(--[-_a-z0-9]+\)$/iu.test(trimmed) ||
     NAMED_COLORS.has(trimmed.toLowerCase())
+  );
+}
+
+/**
+ * `styles.css` is attached by the platform at render time (validated +
+ * scoped in `SouqyMount`), never bundled — so an `import './styles.css'`
+ * in the model output is at best a no-op and at worst a build variable.
+ * The validator tolerates it; we simply remove it here.
+ */
+export function stripStylesCssImport(source: string): string {
+  return source.replace(
+    /^\s*import\s+(?:[\w$]+\s+from\s+|\*\s+as\s+[\w$]+\s+from\s+)?['"]\.\/styles\.css['"];?[^\S\n]*\n?/gmu,
+    '',
   );
 }
 

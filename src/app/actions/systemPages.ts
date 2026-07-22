@@ -5,8 +5,8 @@ import { auth } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
 import { assertStorefrontOwner } from '@/lib/products';
-import { writeStorefrontProductIndexSettings } from '@/lib/productIndexStore';
 import { normalizeProductIndexSettings } from '@/lib/productIndexSettings';
+import { ensureEasyDraftManifest, updateEasyManifestProductIndex } from '@/lib/easySnapshots';
 const SystemPageEnabledInputSchema = z.object({
   slug: z.string().trim().min(1).max(64),
   page: z.enum(['products']),
@@ -39,13 +39,16 @@ export async function updateSystemPageEnabled(
   if (!owner) return { status: 'error', message: 'Forbidden' };
 
   try {
-    await writeStorefrontProductIndexSettings(
-      parsed.data.slug,
-      normalizeProductIndexSettings({
-        ...owner.productIndex,
+    const manifest = await ensureEasyDraftManifest(parsed.data.slug, userId);
+    const updated = await updateEasyManifestProductIndex({
+      storefrontSlug: parsed.data.slug,
+      clerkUserId: userId,
+      settings: normalizeProductIndexSettings({
+        ...manifest.presentation.productIndex,
         enabled: parsed.data.enabled,
       }),
-    );
+    });
+    if (!updated.ok) throw new Error('Easy manifest conflict');
     revalidatePath(`/${parsed.data.slug}/products`);
     revalidatePath(`/brief/${parsed.data.slug}/products`);
 

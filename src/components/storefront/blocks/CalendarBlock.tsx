@@ -81,7 +81,13 @@ export function CalendarBlock({ block, ctx }: BlockRenderProps<CalendarProps>) {
                 price={formatPrice(p.priceQar, isRtl)}
                 fontFamily={fontFamily}
                 isRtl={isRtl}
-                cta={<InquireButton storefront={storefront} product={p} />}
+                cta={
+                  <InquireButton
+                    storefront={storefront}
+                    product={p}
+                    disabled={ctx.isPreview}
+                  />
+                }
               />
             ))}
           </Section>
@@ -101,7 +107,13 @@ export function CalendarBlock({ block, ctx }: BlockRenderProps<CalendarProps>) {
                 price={formatPrice(p.priceQar, isRtl)}
                 fontFamily={fontFamily}
                 isRtl={isRtl}
-                cta={<InquireButton storefront={storefront} product={p} />}
+                cta={
+                  <InquireButton
+                    storefront={storefront}
+                    product={p}
+                    disabled={ctx.isPreview}
+                  />
+                }
               />
             ))}
           </Section>

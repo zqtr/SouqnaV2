@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { useLocale } from 'next-intl';
 import {
   uninstallAppAction,
   type AppActionState,
@@ -17,13 +18,24 @@ export function UninstallButton({
   appName: string;
 }) {
   const router = useRouter();
+  const locale = useLocale();
+  const isArabic = locale === 'ar';
   const [pending, start] = useTransition();
   const [state, setState] = useState<AppActionState>({ status: 'idle' });
+  const buttonLabel = pending
+    ? isArabic
+      ? 'جارٍ إلغاء التثبيت…'
+      : 'Uninstalling…'
+    : isArabic
+      ? 'إلغاء التثبيت'
+      : 'Uninstall';
 
   function handleClick() {
     if (
       !confirm(
-        `Uninstall ${appName}? Storefront integrations turn off immediately. Settings are deleted; OAuth tokens are revoked.`,
+        isArabic
+          ? `هل تريد إلغاء تثبيت ${appName}؟ سيتوقف الربط فوراً وستُحذف الإعدادات وبيانات الاتصال المحفوظة.`
+          : `Uninstall ${appName}? Storefront integrations turn off immediately. Settings are deleted; OAuth tokens are revoked.`,
       )
     )
       return;
@@ -56,14 +68,18 @@ export function UninstallButton({
           cursor: pending ? 'progress' : 'pointer',
         }}
       >
-        {pending ? 'Uninstalling…' : 'Uninstall'}
+        {buttonLabel}
       </button>
       {state.status === 'error' ? (
         <span
           role="alert"
-          style={{ fontSize: 12, color: 'var(--color-maroon, #8b3a3a)', marginLeft: 10 }}
+          style={{
+            fontSize: 12,
+            color: 'var(--color-maroon, #8b3a3a)',
+            marginInlineStart: 10,
+          }}
         >
-          {state.message}
+          {isArabic ? 'تعذر إلغاء تثبيت التطبيق. حاول مرة أخرى.' : state.message}
         </span>
       ) : null}
     </>

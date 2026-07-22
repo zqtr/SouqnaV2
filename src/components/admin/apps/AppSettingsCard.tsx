@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { type ReactNode, useState, useTransition } from 'react';
+import { useLocale } from 'next-intl';
 import { Surface } from '../primitives';
 
 /**
@@ -46,6 +47,8 @@ export function AppSettingsCard({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const locale = useLocale();
+  const isArabic = locale === 'ar';
   const [pending, start] = useTransition();
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +61,10 @@ export function AppSettingsCard({
         setSavedAt(Date.now());
         setTimeout(() => setSavedAt((v) => (v && Date.now() - v >= 1500 ? null : v)), 1700);
       } else {
-        setError(result.message ?? 'Could not save. Try again?');
+        setError(
+          result.message ??
+            (isArabic ? 'تعذر الحفظ. حاول مرة أخرى.' : 'Could not save. Try again?'),
+        );
       }
     });
   }
@@ -77,10 +83,10 @@ export function AppSettingsCard({
         <div>
           <div
             style={{
-              fontFamily: 'var(--font-mono)',
+              fontFamily: isArabic ? 'var(--font-sans)' : 'var(--font-mono)',
               fontSize: 11,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
+              letterSpacing: isArabic ? 'normal' : '0.18em',
+              textTransform: isArabic ? 'none' : 'uppercase',
               color: 'var(--admin-accent)',
             }}
           >
@@ -110,7 +116,7 @@ export function AppSettingsCard({
               background: 'color-mix(in srgb, var(--admin-accent) 15%, transparent)',
             }}
           >
-            ✓ Saved
+            ✓ {isArabic ? 'تم الحفظ' : 'Saved'}
           </span>
         ) : null}
       </header>
@@ -165,7 +171,7 @@ export function AppSettingsCard({
             cursor: pending ? 'default' : 'pointer',
           }}
         >
-          {pending ? 'Saving…' : saveLabel}
+          {pending ? (isArabic ? 'جارٍ الحفظ…' : 'Saving…') : saveLabel}
         </button>
         {footer}
       </div>
@@ -182,14 +188,17 @@ export function AppField({
   hint?: string;
   children: ReactNode;
 }) {
+  const locale = useLocale();
+  const isArabic = locale === 'ar';
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <span
         style={{
-          fontFamily: 'var(--font-mono)',
+          fontFamily: isArabic ? 'var(--font-sans)' : 'var(--font-mono)',
           fontSize: 11,
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
+          fontWeight: isArabic ? 600 : 400,
+          letterSpacing: isArabic ? 'normal' : '0.12em',
+          textTransform: isArabic ? 'none' : 'uppercase',
           color: 'var(--ink-muted)',
         }}
       >

@@ -3,8 +3,8 @@ import { ACTIVITY_PRICE_QAR } from './activities/types';
 
 /**
  * Single source of truth for the plugin Souqna lists in Souqna
- * Marketplace. Keep this tight while the marketplace focuses on the
- * built-in reviews experience.
+ * Marketplace. Keep descriptors aligned with their real installation
+ * and configuration paths so an available tile is never a dead end.
  */
 export const APP_REGISTRY: AppDescriptor[] = [
   {
@@ -107,6 +107,37 @@ export const APP_REGISTRY: AppDescriptor[] = [
       body:
         'Add the measurement panel in Builder, choose which measurements to collect, and save each buyer’s profile locally or online — in Arabic or English.',
       ctaLabel: 'Enable Tailoring',
+    },
+  },
+  {
+    id: 'aramex',
+    name: 'Aramex Shipping',
+    nameAr: 'الشحن مع أرامكس',
+    vendor: 'Aramex',
+    tagline: 'Prepare domestic and GCC deliveries from your Aramex account',
+    taglineAr: 'جهّز الشحنات المحلية والخليجية من حسابك في أرامكس',
+    description:
+      'Connect your Aramex business account, configure your pickup address, and choose separate parcel services for domestic and cross-border orders. Credentials stay encrypted and private to this storefront.',
+    descriptionAr:
+      'اربط حساب أرامكس التجاري، وحدد عنوان الاستلام، واختر خدمات منفصلة للشحنات المحلية والعابرة للحدود. تبقى بيانات الدخول مشفّرة وخاصة بهذا المتجر.',
+    category: 'logistics',
+    authKind: 'none',
+    available: true,
+    customizable: true,
+    glyph: 'A',
+    markSrc: '/apps/aramex/mark.svg',
+    accentVar: '--color-gold-deep',
+    docs: [
+      {
+        label: 'Aramex developer solutions',
+        href: 'https://www.aramex.com/qa/en/developers-solution-center',
+      },
+    ],
+    connectCopy: {
+      headline: 'Set up Aramex Shipping',
+      body:
+        'Start the private setup, then add the credentials supplied with your Aramex business account and your pickup details.',
+      ctaLabel: 'Set up Aramex',
     },
   },
 ];

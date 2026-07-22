@@ -35,8 +35,12 @@ import {
 
 export type BuildInput = {
   slug: string;
-  /** Source files from the validated Souqy output. */
-  files: { 'index.tsx': string; 'theme.ts': string };
+  /** Source files from the validated Souqy output. `styles.css` never
+   * enters the JS bundle — it's persisted with the source and injected
+   * (validated + scoped) by `SouqyMount` at render time — but we still
+   * materialize it in the sandbox so a stray `import './styles.css'`
+   * resolves instead of failing the build. */
+  files: { 'index.tsx': string; 'theme.ts': string; 'styles.css'?: string };
 };
 
 export type BuildOk = {
@@ -178,7 +182,9 @@ export async function buildSouqyArtifact(input: BuildInput): Promise<BuildResult
     } catch (err) {
       // Sandbox cleanup is best-effort; an orphaned VM idles out within
       // its own timeout and Vercel reaps it.
-      console.warn('[souqy/build] sandbox stop failed', err);
+      console.warn('[souqy/build] sandbox stop failed', {
+        code: err instanceof Error ? err.name : 'sandbox_stop_error',
+      });
     }
   }
 }
@@ -244,6 +250,12 @@ async function materialize(
   await sandbox.runCommand('mkdir', ['-p', `${PROJECT_ROOT}/node_modules/react`]);
   await writeFile(sandbox, `${PROJECT_ROOT}/index.tsx`, files['index.tsx']);
   await writeFile(sandbox, `${PROJECT_ROOT}/theme.ts`, files['theme.ts']);
+  if (files['styles.css']) {
+    await writeFile(sandbox, `${PROJECT_ROOT}/styles.css`, files['styles.css']);
+  }
+  // Normalize strips `import './styles.css'` before we get here, but tsc
+  // should not be the thing that dies if one slips through.
+  await writeFile(sandbox, `${PROJECT_ROOT}/globals.d.ts`, `declare module '*.css';\n`);
   await writeFile(sandbox, `${PROJECT_ROOT}/tsconfig.json`, tsconfigJson());
   await writeFile(
     sandbox,
@@ -306,7 +318,7 @@ function tsconfigJson(): string {
         isolatedModules: true,
         types: ['react'],
       },
-      include: ['index.tsx', 'theme.ts'],
+      include: ['index.tsx', 'theme.ts', 'globals.d.ts'],
     },
     null,
     2,

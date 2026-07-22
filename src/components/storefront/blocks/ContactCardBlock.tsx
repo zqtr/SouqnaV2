@@ -82,7 +82,13 @@ export function ContactCardBlock({ block, ctx }: BlockRenderProps<ContactCardPro
           ) : null}
         </header>
       ) : null}
-      {hasContact ? <StorefrontPractical data={filtered} vocabulary={vocabulary} /> : null}
+      {hasContact ? (
+        <StorefrontPractical
+          data={filtered}
+          vocabulary={vocabulary}
+          interactive={!ctx.isPreview}
+        />
+      ) : null}
     </div>
   );
 }

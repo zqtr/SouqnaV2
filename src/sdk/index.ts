@@ -65,11 +65,13 @@ export {
   Grid,
   Quote,
   Marquee,
+  Custom,
   type SectionProps,
   type StackProps,
   type GridProps,
   type QuoteProps,
   type MarqueeProps,
+  type CustomProps,
 } from './primitives';
 
 // Re-export the prop types Claude needs to type its component calls.

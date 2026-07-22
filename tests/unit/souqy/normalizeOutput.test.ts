@@ -67,4 +67,31 @@ export const theme: ThemeOverrides = {};
     expect(normalized.files['index.tsx']).toContain("status: 'active'");
     expect(validateSouqyOutput(normalized.files)).toEqual({ ok: true });
   });
+
+  it('strips styles.css imports from index.tsx (platform attaches the sheet itself)', () => {
+    const normalized = normalizeSouqyOutput({
+      files: {
+        'index.tsx': `import { Section, Text } from '@souqna/sdk';
+import './styles.css';
+
+export default function Storefront() {
+  return (
+    <Section>
+      <Text body="Hello" />
+    </Section>
+  );
+}
+`,
+        'theme.ts': `import type { ThemeOverrides } from '@souqna/sdk';
+
+export const theme: ThemeOverrides = {};
+`,
+        'styles.css': '.hero { color: red; }\n',
+      },
+    });
+
+    expect(normalized.files['index.tsx']).not.toContain('styles.css');
+    expect(normalized.files['styles.css']).toContain('.hero');
+    expect(validateSouqyOutput(normalized.files)).toEqual({ ok: true });
+  });
 });

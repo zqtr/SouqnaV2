@@ -1001,17 +1001,17 @@ const AramexSaveSchema = z.object({
   accountNumber: z.string().trim().min(1).max(40),
   accountEntity: z.string().trim().min(2).max(8),
   accountCountry: z.string().trim().length(2),
-  productGroup: z.enum(['DOM', 'EXP']),
-  defaultProductType: z.string().trim().min(1).max(8),
+  domesticProductType: z.string().trim().min(1).max(8),
+  internationalProductType: z.string().trim().min(1).max(8),
   pickupAddress: z.object({
-    line1: z.string().trim().max(200),
+    line1: z.string().trim().min(1).max(200),
     line2: z.string().trim().max(200),
     city: z.string().trim().min(1).max(120),
     countryCode: z.string().trim().length(2),
     postCode: z.string().trim().max(40),
-    contactName: z.string().trim().max(120),
-    contactPhone: z.string().trim().max(40),
-    contactEmail: z.string().trim().max(200),
+    contactName: z.string().trim().min(1).max(120),
+    contactPhone: z.string().trim().min(4).max(40),
+    contactEmail: z.string().trim().email().max(200),
   }),
   defaultWeightKg: z.number().positive().max(10_000),
   defaultDimensionsCm: z.object({
@@ -1037,40 +1037,44 @@ export async function saveAramexAction(
   if ('status' in gate) return gate;
 
   // The settings blob never holds the password / PIN — they live in
-  // the credential vault. We only re-encrypt when the founder ticked
-  // the "Update password / PIN" box.
-  if (parsed.data.password || parsed.data.accountPin) {
-    const installed = await getInstalledApp(parsed.data.storefrontSlug, 'aramex');
-    let currentPassword = '';
-    let currentPin = '';
-    if (installed) {
-      const existingJson = decryptToken(installed.oauthAccessTokenCt);
-      try {
-        const existing = existingJson ? JSON.parse(existingJson) : {};
-        currentPassword = typeof existing.password === 'string' ? existing.password : '';
-        currentPin = typeof existing.accountPin === 'string' ? existing.accountPin : '';
-      } catch {
-        /* ignore */
-      }
-    }
-    const password = parsed.data.password ?? currentPassword;
-    const accountPin = parsed.data.accountPin ?? currentPin;
+  // the credential vault. Existing secrets can be retained, but a new
+  // connection must provide both values before it can become usable.
+  const installed = await getInstalledApp(parsed.data.storefrontSlug, 'aramex');
+  let currentPassword = '';
+  let currentPin = '';
+  if (installed) {
+    const existingJson = decryptToken(installed.oauthAccessTokenCt);
     try {
-      const ct = encryptToken(packAramexSecrets(password, accountPin));
-      await installApp(parsed.data.storefrontSlug, {
-        appId: 'aramex',
-        installedBy: gate.userId,
-        accessTokenCt: ct,
-      });
-    } catch (err) {
-      if (err instanceof Error && /encryption is not configured/.test(err.message)) {
-        return {
-          status: 'error',
-          message: 'Set APPS_ENCRYPTION_KEY in your environment first.',
-        };
-      }
-      return { status: 'error', message: 'Could not save credentials.' };
+      const existing = existingJson ? JSON.parse(existingJson) : {};
+      currentPassword = typeof existing.password === 'string' ? existing.password : '';
+      currentPin = typeof existing.accountPin === 'string' ? existing.accountPin : '';
+    } catch {
+      /* require the founder to replace unreadable credentials */
     }
+  }
+  const password = parsed.data.password ?? currentPassword;
+  const accountPin = parsed.data.accountPin ?? currentPin;
+  if (!password || !accountPin) {
+    return {
+      status: 'error',
+      message: 'Enter both the Aramex password and account PIN to finish setup.',
+    };
+  }
+  try {
+    const ct = encryptToken(packAramexSecrets(password, accountPin));
+    await installApp(parsed.data.storefrontSlug, {
+      appId: 'aramex',
+      installedBy: gate.userId,
+      accessTokenCt: ct,
+    });
+  } catch (err) {
+    if (err instanceof Error && /encryption is not configured/.test(err.message)) {
+      return {
+        status: 'error',
+        message: 'Set APPS_ENCRYPTION_KEY in your environment first.',
+      };
+    }
+    return { status: 'error', message: 'Could not save credentials.' };
   }
 
   await updateAppSettings(parsed.data.storefrontSlug, 'aramex', {
@@ -1078,8 +1082,8 @@ export async function saveAramexAction(
     accountNumber: parsed.data.accountNumber,
     accountEntity: parsed.data.accountEntity,
     accountCountry: parsed.data.accountCountry,
-    productGroup: parsed.data.productGroup,
-    defaultProductType: parsed.data.defaultProductType,
+    domesticProductType: parsed.data.domesticProductType,
+    internationalProductType: parsed.data.internationalProductType,
     pickupAddress: parsed.data.pickupAddress,
     defaultWeightKg: parsed.data.defaultWeightKg,
     defaultDimensionsCm: parsed.data.defaultDimensionsCm,

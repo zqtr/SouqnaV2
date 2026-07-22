@@ -14,14 +14,18 @@ import type { MarketSignalsResult } from '@/lib/xapi/marketSignals';
  *
  *   {
  *     "files": {
- *       "index.tsx": "...source...",
- *       "theme.ts":  "...source..."
+ *       "index.tsx":  "...source...",
+ *       "theme.ts":   "...source...",
+ *       "styles.css": "...optional custom CSS (Open Design surface)..."
  *     },
  *     "notes": "<= 280 char summary of the design choices made"
  *   }
  *
- * The build pipeline strips any prose, parses the JSON, writes the two
- * files to a temp directory, and runs validate → tsc → bundle.
+ * The build pipeline strips any prose, parses the JSON, writes the files
+ * to a temp directory, and runs validate → tsc → bundle. `styles.css` is
+ * validated (`validateCss`), scoped to the storefront root at render
+ * (`scopeSouqyCss`), and injected by `SouqyMount` — it never enters the
+ * JS bundle.
  */
 
 export type SouqyBrief = {
@@ -59,6 +63,9 @@ Primitives:
   <Grid columns={1|2|3|4|6} gap collapseAt>
   <Quote cite>...</Quote>
   <Marquee items={["…","…"]} speed="slow|medium|fast" />
+  <Custom as="div|section|main|article|aside|header|footer" className style id>
+    …freeform HTML + nested SDK components (see "Custom markup & CSS")…
+  </Custom>
 
 Hooks (server-component-safe):
   useStorefront() : Storefront     // businessName, slug, locale, palette, …
@@ -84,16 +91,57 @@ Never invent theme keys. Do not use toneOverrides, colors, tokens, styles,
 surfaces, light, dark, cssVars, or custom palette objects.
 `.trim();
 
+const CSS_CONTRACT = `
+Custom markup & CSS — the Open Design surface:
+
+You are not limited to the stock components. When the design calls for a
+layout the SDK cannot express, write real HTML through <Custom> and style it
+with a third output file, \`styles.css\`:
+
+  - <Custom as="section" className="atelier-hero"> renders a plain element;
+    any HTML tags (h1, p, span, figure, ol, …) and SDK components nest freely
+    inside it. Use it for bespoke section layouts, editorial compositions,
+    decorative structure.
+  - \`styles.css\` is plain CSS. The platform attaches and scopes it to the
+    storefront automatically — do NOT import it from index.tsx and never
+    emit <style> tags in JSX.
+  - Every selector is scoped to the storefront root at render time, so your
+    classes cannot clash with the host page. Still use descriptive,
+    brand-flavoured class names (.atelier-hero, .majlis-grid) — the founder
+    reads this CSS in the studio.
+  - The active palette is exposed as CSS variables — build on them so custom
+    sections track theme changes instead of fighting them:
+      var(--sf-ink)     text / foreground
+      var(--sf-ground)  page background
+      var(--sf-accent)  brand accent
+  - RTL: Arabic storefronts flip direction. Use logical properties
+    (margin-inline-start, padding-inline, inset-inline, text-align: start)
+    instead of left/right so one stylesheet serves both locales.
+  - Keep it lean: under 48KB, mobile-first with @media queries, no CSS
+    resets (the page already has one), no position: fixed (it escapes the
+    visual frame).
+  - Rejected by the validator, so never write them: @import,
+    url(javascript:…), url(data:text/html…), expression(), -moz-binding,
+    behavior:, or any HTML/"</style>" inside the CSS.
+  - Custom is for design, not commerce: products, menus, calendars, and
+    inquiries must come from SDK components so they stay wired to live data.
+    Wrapping an SDK component in a styled Custom region is encouraged:
+    <Custom className="shelf"><ProductGrid columns={3} /></Custom>.
+`.trim();
+
 const RULES = `
 Hard constraints — your output WILL be rejected if you break any of them:
 
-  1. Exactly two files: \`index.tsx\` and \`theme.ts\`.
+  1. Files: \`index.tsx\` and \`theme.ts\` are required; \`styles.css\` is
+     optional and only present when the design uses <Custom> or custom
+     classes. No other file names.
   2. \`index.tsx\` must default-export a React component called \`Storefront\`
      that takes no props.
   3. The ONLY allowed imports in \`index.tsx\`:
         import * as React from 'react';        // optional
         import { … } from '@souqna/sdk';       // required for components
         import { theme } from './theme';       // required if you reference theme
+     Do NOT import './styles.css' — the platform attaches it automatically.
   4. The ONLY allowed import in \`theme.ts\`:
         import type { ThemeOverrides } from '@souqna/sdk';
      Theme must be exported as: \`export const theme: ThemeOverrides = { … }\`.
@@ -142,6 +190,10 @@ belong to anyone else:
     storefronts.
   - Use theme.ts aggressively — palette, type scale, spacing, radii are
     yours to set per brand, not defaults to inherit.
+  - When the stock components flatten your design intent, reach for the
+    Custom + styles.css surface — bespoke markup on signature sections is
+    expected craft, not a last resort. Stock components for commerce,
+    custom code for identity.
   - Spend your output budget on craft: considered copy in both languages,
     section-level art direction, purposeful component props — not on more
     sections. Depth over count.
@@ -254,7 +306,7 @@ Brief:
   businessName: Layl Lines
   slug: layl-lines
   businessType: graphic_design
-  vibe: Indie graphic designer in Doha; portfolio-forward, bilingual, confident type. One flagship poster mock and one aurora ribbon for services — no invented client logos or awards.
+  vibe: Indie graphic designer in Doha; portfolio-forward, bilingual, confident type. One flagship poster mock, one aurora ribbon for services, and a bespoke numbered process strip — no invented client logos or awards.
   locale: en
 `.trim();
 
@@ -265,6 +317,7 @@ const FEW_SHOT_ASSISTANT_RIBBON = JSON.stringify({
   DepthShowcase,
   AuroraRibbon,
   ContactCard,
+  Custom,
   Section,
   Stack,
   InquireCta,
@@ -303,6 +356,23 @@ export default function Storefront() {
         imageAlt={isAr ? 'ملصق تجريبي' : 'Poster mock'}
         width="wide"
       />
+      <Custom as="section" className="ll-process">
+        <h2 className="ll-process-title">{isAr ? 'كيف نعمل' : 'How we work'}</h2>
+        <ol className="ll-process-steps">
+          <li>
+            <span>01</span>
+            {isAr ? 'جلسة موجز قصيرة' : 'A short brief session'}
+          </li>
+          <li>
+            <span>02</span>
+            {isAr ? 'اتجاهان للتصميم' : 'Two design directions'}
+          </li>
+          <li>
+            <span>03</span>
+            {isAr ? 'تسليم الملفات النهائية' : 'Final files, handed off'}
+          </li>
+        </ol>
+      </Custom>
       <Section size="comfortable" align="center">
         <Stack gap={16} align="center">
           <InquireCta
@@ -334,9 +404,46 @@ export const theme: ThemeOverrides = {
   },
 };
 `,
+    'styles.css': `.ll-process {
+  padding: 4.5rem 1.5rem;
+  text-align: center;
+}
+.ll-process-title {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 500;
+  color: var(--sf-ink);
+  margin-block-end: 2.5rem;
+}
+.ll-process-steps {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: 60rem;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+.ll-process-steps li {
+  border: 1px solid color-mix(in srgb, var(--sf-ink) 14%, transparent);
+  padding: 1.75rem 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+  line-height: 1.5;
+}
+.ll-process-steps span {
+  color: var(--sf-accent);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.12em;
+}
+@media (max-width: 720px) {
+  .ll-process-steps {
+    grid-template-columns: 1fr;
+  }
+}
+`,
   },
   notes:
-    'Designer portfolio: bilingual banner → one aurora ribbon (services) → one depth showcase focal piece → inquire → contact.',
+    'Designer portfolio: bilingual banner → aurora ribbon (services) → depth showcase focal piece → custom numbered process strip (Custom + styles.css, palette vars) → inquire → contact. Tweak handles: process density, ribbon brightness, palette.',
 });
 
 export function buildSystemPrompt(): string {
@@ -357,6 +464,8 @@ export function buildSystemPrompt(): string {
     SDK_API,
     '',
     THEME_CONTRACT,
+    '',
+    CSS_CONTRACT,
     '',
     RULES,
     '',
@@ -426,6 +535,8 @@ export function buildRepairPrompt(args: {
     '',
     THEME_CONTRACT,
     '',
+    CSS_CONTRACT,
+    '',
     'Previous files:',
     filesBlock,
   ].join('\n');
@@ -439,7 +550,7 @@ export function buildRepromptUserPrompt(args: {
   return [
     `Storefront: ${args.storefront.businessName} (${args.storefront.slug}). Locale = ${args.storefront.locale}.`,
     '',
-    'The founder asked you to revise the storefront. Apply the change minimally — keep everything else identical unless the request implies otherwise. Return the full revised JSON object.',
+    'The founder asked you to revise the storefront. First read the current source below and understand its design system — sections, custom classes, palette — then apply the change minimally, keeping everything else identical unless the request implies otherwise. If the source includes a styles.css section, keep index.tsx class names and styles.css selectors in sync and return styles.css in the files object. Return the full revised JSON object.',
     '',
     'Request:',
     args.request,

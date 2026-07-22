@@ -83,6 +83,7 @@ import type {
   ProductIndexCategoryOption,
   ProductIndexListProduct,
 } from '@/lib/productIndexCatalog';
+import { ProModeSwitch } from '@/components/account/pro/ProModeSwitch';
 
 type BlockType = (typeof BLOCK_TYPES)[number];
 
@@ -148,6 +149,10 @@ type Props = {
   /** One-time hint after homepage Souqy kickoff: live site shows the
    *  AI artifact while the builder canvas edits JSON draft blocks. */
   souqyLivePublishHint?: boolean;
+  /** Production Pro workspace switch. Easy and Pro persist independently. */
+  proEnabled?: boolean;
+  proEligible?: boolean;
+  proHasWorkspace?: boolean;
 };
 
 type Device = 'desktop' | 'tablet' | 'mobile';
@@ -3162,6 +3167,9 @@ function BuilderShellInner({
   effectiveTheme,
   installedAppIds = [],
   souqyLivePublishHint = false,
+  proEnabled = false,
+  proEligible = false,
+  proHasWorkspace = false,
 }: Props) {
   const { builder: copy } = useBuilderCopy();
   const blockLabels = copy.blockLabels as Record<BlockType, string>;
@@ -4285,6 +4293,9 @@ function BuilderShellInner({
           onToggleLeftPanel={toggleLeftDrawer}
           onToggleRightPanel={toggleRightDrawer}
           onOpenNavMenu={openNavMenu}
+          proEnabled={proEnabled}
+          proEligible={proEligible}
+          proHasWorkspace={proHasWorkspace}
         />
 
         <BuilderNavSheet
@@ -5127,6 +5138,9 @@ const BuilderTopBar = memo(function BuilderTopBar({
   onToggleLeftPanel,
   onToggleRightPanel,
   onOpenNavMenu,
+  proEnabled,
+  proEligible,
+  proHasWorkspace,
 }: {
   locale: Locale;
   slug: string;
@@ -5147,6 +5161,9 @@ const BuilderTopBar = memo(function BuilderTopBar({
   onToggleLeftPanel: () => void;
   onToggleRightPanel: () => void;
   onOpenNavMenu: () => void;
+  proEnabled: boolean;
+  proEligible: boolean;
+  proHasWorkspace: boolean;
 }) {
   const { builder: copy } = useBuilderCopy();
   const widthReadout =
@@ -5347,6 +5364,16 @@ const BuilderTopBar = memo(function BuilderTopBar({
         >
           <LocaleToggle locale={locale} onChange={onLocaleChange} />
         </span>
+        {proEnabled ? (
+          <ProModeSwitch
+            locale={locale}
+            slug={slug}
+            activeMode="easy"
+            eligible={proEligible}
+            hasWorkspace={proHasWorkspace}
+            onBeforeSwitch={onBeforeLocaleChange}
+          />
+        ) : null}
         <span
           className="souqna-bar-device-toggle"
           data-tour="device-toggle"

@@ -39,11 +39,10 @@ export type AramexSettings = {
   accountEntity: string;
   /** ISO country code, e.g. 'QA'. */
   accountCountry: string;
-  /** 'DOM' (domestic) or 'EXP' (express international). Used for
-   *  default rate quotes. */
-  productGroup: 'DOM' | 'EXP';
-  /** e.g. 'PDX' priority document express, 'OND' onward delivery. */
-  defaultProductType: string;
+  /** Service used when the destination is in the account country. */
+  domesticProductType: string;
+  /** Service used when the destination is outside the account country. */
+  internationalProductType: string;
   pickupAddress: {
     line1: string;
     line2: string;
@@ -65,8 +64,8 @@ export const DEFAULT_ARAMEX_SETTINGS: AramexSettings = {
   accountPin: '',
   accountEntity: 'DOH',
   accountCountry: 'QA',
-  productGroup: 'DOM',
-  defaultProductType: 'OND',
+  domesticProductType: 'OND',
+  internationalProductType: 'PPX',
   pickupAddress: {
     line1: '',
     line2: '',
@@ -82,7 +81,13 @@ export const DEFAULT_ARAMEX_SETTINGS: AramexSettings = {
 };
 
 export function normaliseSettings(
-  raw: Partial<AramexSettings> | null | undefined,
+  raw:
+    | (Partial<AramexSettings> & {
+        productGroup?: 'DOM' | 'EXP';
+        defaultProductType?: string;
+      })
+    | null
+    | undefined,
 ): AramexSettings {
   if (!raw) return DEFAULT_ARAMEX_SETTINGS;
   const pa = (raw.pickupAddress ?? {}) as Partial<AramexSettings['pickupAddress']>;
@@ -99,11 +104,16 @@ export function normaliseSettings(
       typeof raw.accountEntity === 'string' ? raw.accountEntity.trim().toUpperCase() : 'DOH',
     accountCountry:
       typeof raw.accountCountry === 'string' ? raw.accountCountry.trim().toUpperCase() : 'QA',
-    productGroup: raw.productGroup === 'EXP' ? 'EXP' : 'DOM',
-    defaultProductType:
-      typeof raw.defaultProductType === 'string'
-        ? raw.defaultProductType.trim().toUpperCase()
-        : 'OND',
+    domesticProductType: normaliseProductType(
+      raw.domesticProductType ??
+        (raw.productGroup === 'DOM' ? raw.defaultProductType : undefined),
+      'OND',
+    ),
+    internationalProductType: normaliseProductType(
+      raw.internationalProductType ??
+        (raw.productGroup === 'EXP' ? raw.defaultProductType : undefined),
+      'PPX',
+    ),
     pickupAddress: {
       line1: typeof pa.line1 === 'string' ? pa.line1 : '',
       line2: typeof pa.line2 === 'string' ? pa.line2 : '',
@@ -124,6 +134,37 @@ export function normaliseSettings(
       width: typeof dim.width === 'number' && dim.width > 0 ? dim.width : 20,
       height: typeof dim.height === 'number' && dim.height > 0 ? dim.height : 10,
     },
+  };
+}
+
+function normaliseProductType(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim()
+    ? value.trim().toUpperCase()
+    : fallback;
+}
+
+export type AramexService = {
+  productGroup: 'DOM' | 'EXP';
+  productType: string;
+};
+
+export function resolveAramexService(
+  settings: Pick<
+    AramexSettings,
+    'accountCountry' | 'domesticProductType' | 'internationalProductType'
+  >,
+  destinationCountryCode: string,
+  overrideProductType?: string,
+): AramexService {
+  const domestic =
+    destinationCountryCode.trim().toUpperCase() ===
+    settings.accountCountry.trim().toUpperCase();
+  return {
+    productGroup: domestic ? 'DOM' : 'EXP',
+    productType: normaliseProductType(
+      overrideProductType,
+      domestic ? settings.domesticProductType : settings.internationalProductType,
+    ),
   };
 }
 
@@ -202,6 +243,35 @@ const CREATE_URL =
   'https://ws.aramex.net/ShippingAPI.V2/Shipping/Service_1_0.svc/json/CreateShipments';
 const TRACK_URL =
   'https://ws.aramex.net/ShippingAPI.V2/Tracking/Service_1_0.svc/json/TrackShipments';
+const LOCATION_URL =
+  'https://ws.aramex.net/ShippingAPI.V2/Location/Service_1_0.svc/json/FetchCountries';
+const ARAMEX_TIMEOUT_MS = 15_000;
+
+export async function testAramexConnection(slug: string): Promise<void> {
+  const client = await resolveClient(slug);
+  if (!client) throw new Error('Complete and save the Aramex account credentials first.');
+
+  const res = await fetch(LOCATION_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ClientInfo: clientInfo(client),
+      Transaction: { Reference1: slug },
+    }),
+    signal: AbortSignal.timeout(ARAMEX_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`Aramex connection check failed (${res.status}).`);
+  const json = (await res.json()) as {
+    HasErrors?: boolean;
+    Notifications?: Array<{ Message?: string }>;
+    Countries?: unknown;
+  };
+  if (json.HasErrors || !json.Countries) {
+    throw new Error(
+      `Aramex: ${json.Notifications?.[0]?.Message ?? 'the account credentials were not accepted'}`,
+    );
+  }
+}
 
 // ---------------------------------------------------------------
 // Live rate quote
@@ -232,7 +302,11 @@ export async function quoteRate(
   if (!client) return null;
   const w = input.weightKg ?? client.settings.defaultWeightKg;
   const d = input.dimensionsCm ?? client.settings.defaultDimensionsCm;
-  const productType = input.productType ?? client.settings.defaultProductType;
+  const service = resolveAramexService(
+    client.settings,
+    input.destinationCountryCode,
+    input.productType,
+  );
 
   const body = {
     ClientInfo: clientInfo(client),
@@ -256,8 +330,8 @@ export async function quoteRate(
     },
     ShipmentDetails: {
       PaymentType: 'P',
-      ProductGroup: client.settings.productGroup,
-      ProductType: productType,
+      ProductGroup: service.productGroup,
+      ProductType: service.productType,
       ActualWeight: { Unit: 'KG', Value: w },
       ChargeableWeight: { Unit: 'KG', Value: w },
       NumberOfPieces: 1,
@@ -278,6 +352,7 @@ export async function quoteRate(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(ARAMEX_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`Aramex rate ${res.status}`);
@@ -295,7 +370,7 @@ export async function quoteRate(
   return {
     amount: json.TotalAmount.Value,
     currency: json.TotalAmount.CurrencyCode || 'QAR',
-    productType,
+    productType: service.productType,
     raw: json as unknown as Record<string, unknown>,
   };
 }
@@ -331,7 +406,11 @@ export async function createAramexShipment(
   }
   const w = input.weightKg ?? client.settings.defaultWeightKg;
   const d = input.dimensionsCm ?? client.settings.defaultDimensionsCm;
-  const productType = input.productType ?? client.settings.defaultProductType;
+  const service = resolveAramexService(
+    client.settings,
+    input.destination.countryCode,
+    input.productType,
+  );
 
   const shipper = {
     Reference1: slug,
@@ -394,8 +473,8 @@ export async function createAramexShipment(
           },
           ActualWeight: { Unit: 'KG', Value: w },
           ChargeableWeight: { Unit: 'KG', Value: w },
-          ProductGroup: client.settings.productGroup,
-          ProductType: productType,
+          ProductGroup: service.productGroup,
+          ProductType: service.productType,
           PaymentType: 'P',
           NumberOfPieces: 1,
           DescriptionOfGoods: input.order.items
@@ -422,6 +501,7 @@ export async function createAramexShipment(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(ARAMEX_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`Aramex create ${res.status}`);
@@ -466,7 +546,7 @@ export async function createAramexShipment(
   const shipment = await createShipment(slug, {
     orderId: input.order.id,
     carrier: 'aramex',
-    service: productType,
+    service: service.productType,
     awb,
     trackingUrl,
     labelUrl,
@@ -507,6 +587,7 @@ export async function trackShipment(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(ARAMEX_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`Aramex track ${res.status}`);

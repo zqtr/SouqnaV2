@@ -16,12 +16,14 @@ import { normalizeSouqyOutput } from './normalize';
 import { getMarketSignals } from '@/lib/xapi/marketSignals';
 import type { Storefront } from '@/lib/brief';
 import { env } from '@/lib/env';
+import { toProAiProviderOptions } from '@/lib/pro/aiConfig';
+import { getProAiModel, type ProAiConfiguration } from '@/lib/pro/modelCatalog';
 
 /**
  * Souqy generation pipeline (model call + parse + validate + auto-repair).
  *
  * Flows through the Vercel AI Gateway via the `ai` package — passing a
- * plain `'anthropic/claude-sonnet-4.6'` provider/model string is enough
+ * plain `'alibaba/qwen3.7-plus'` provider/model string is enough
  * to route via the gateway when `VERCEL_OIDC_TOKEN` (or
  * `AI_GATEWAY_API_KEY`) is present in the environment.
  *
@@ -51,6 +53,8 @@ export type GenerateInput = {
   /** Per-user routing key for AI Gateway rate limiting + cost attribution. */
   clerkUserId: string;
   storefront?: Storefront;
+  /** Immutable, server-approved model selection for a Souqna Pro job. */
+  proConfiguration?: ProAiConfiguration;
 };
 
 export type GenerateOk = {
@@ -62,7 +66,13 @@ export type GenerateOk = {
 };
 
 export type GenerateErr = {
-  status: 'parse_failed' | 'validation_failed' | 'budget_exceeded' | 'rate_limited' | 'error';
+  status:
+    | 'parse_failed'
+    | 'validation_failed'
+    | 'budget_exceeded'
+    | 'rate_limited'
+    | 'model_unavailable'
+    | 'error';
   message: string;
   /** Last set of validation issues, when applicable. */
   issues?: ValidationIssue[];
@@ -106,12 +116,13 @@ export async function generateSouqyStorefront(input: GenerateInput): Promise<Gen
         maxOutputTokens: env.SOUQY_GENERATE_MAX_TOKENS,
         user: input.clerkUserId,
         tags: SOUQY_TAGS,
+        proConfiguration: input.proConfiguration,
       });
       raw = result.text;
       inputTokens = result.usage.inputTokens;
       outputTokens = result.usage.outputTokens;
     } catch (err) {
-      return mapGatewayError(err);
+      return mapGatewayError(err, Boolean(input.proConfiguration));
     }
     totalIn += inputTokens;
     totalOut += outputTokens;
@@ -178,6 +189,7 @@ export async function repromptSouqyStorefront(args: {
   previousSource: string;
   storefront: Storefront;
   clerkUserId: string;
+  proConfiguration?: ProAiConfiguration;
 }): Promise<GenerateResult> {
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
     ...SOUQY_FEW_SHOTS,
@@ -208,12 +220,13 @@ export async function repromptSouqyStorefront(args: {
         maxOutputTokens: env.SOUQY_GENERATE_MAX_TOKENS,
         user: args.clerkUserId,
         tags: [...SOUQY_TAGS, 'op:reprompt'],
+        proConfiguration: args.proConfiguration,
       });
       raw = result.text;
       totalIn += result.usage.inputTokens;
       totalOut += result.usage.outputTokens;
     } catch (err) {
-      return mapGatewayError(err);
+      return mapGatewayError(err, Boolean(args.proConfiguration));
     }
 
     let parsed: SouqyOutput;
@@ -269,6 +282,7 @@ export async function repairSouqyStorefrontBuild(args: {
   output: SouqyOutput;
   errorSummary: string;
   clerkUserId: string;
+  proConfiguration?: ProAiConfiguration;
 }): Promise<GenerateResult> {
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
     {
@@ -297,12 +311,13 @@ export async function repairSouqyStorefrontBuild(args: {
         maxOutputTokens: env.SOUQY_GENERATE_MAX_TOKENS,
         user: args.clerkUserId,
         tags: [...SOUQY_TAGS, 'op:build-repair'],
+        proConfiguration: args.proConfiguration,
       });
       raw = result.text;
       totalIn += result.usage.inputTokens;
       totalOut += result.usage.outputTokens;
     } catch (err) {
-      return mapGatewayError(err);
+      return mapGatewayError(err, Boolean(args.proConfiguration));
     }
 
     let parsed: SouqyOutput;
@@ -380,8 +395,9 @@ async function generateSouqyText(args: {
   maxOutputTokens: number;
   user: string;
   tags: string[];
+  proConfiguration?: ProAiConfiguration;
 }): Promise<{ text: string; usage: { inputTokens: number; outputTokens: number } }> {
-  // Gateway first: SOUQY_GENERATE_MODEL (e.g. anthropic/claude-sonnet-5) is
+  // Gateway first: SOUQY_GENERATE_MODEL (e.g. alibaba/qwen3.7-plus) is
   // the quality path for website transforms. Replicate's Qwen text model is
   // only a fallback when no gateway credential exists — previously it won
   // whenever REPLICATE_API_TOKEN was set (it always is, for Flux images),
@@ -389,22 +405,31 @@ async function generateSouqyText(args: {
   const hasGatewayCredentials = Boolean(
     process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN,
   );
-  if (env.REPLICATE_API_TOKEN && !hasGatewayCredentials) {
+  if (!args.proConfiguration && env.REPLICATE_API_TOKEN && !hasGatewayCredentials) {
     return generateSouqyTextWithReplicate(args);
   }
 
   const result = await generateText({
-    model: SOUQY_MODEL,
+    model: args.proConfiguration?.modelId ?? SOUQY_MODEL,
     system: args.system,
     messages: args.messages,
-    temperature: args.temperature,
+    temperature:
+      args.proConfiguration && !getProAiModel(args.proConfiguration.modelId).supportsTemperature
+        ? undefined
+        : args.temperature,
     maxOutputTokens: args.maxOutputTokens,
-    providerOptions: {
-      gateway: {
-        user: args.user,
-        tags: args.tags,
-      },
-    },
+    providerOptions: args.proConfiguration
+      ? toProAiProviderOptions({
+          configuration: args.proConfiguration,
+          clerkUserId: args.user,
+          tags: args.tags,
+        })
+      : {
+          gateway: {
+            user: args.user,
+            tags: args.tags,
+          },
+        },
   });
   return {
     text: result.text,
@@ -583,8 +608,14 @@ function summarizeReplicateError(value: string): string {
  * the dashboard can surface a tailored message ("you've used your
  * monthly Souqy quota") instead of a generic failure.
  */
-function mapGatewayError(err: unknown): GenerateErr {
+function mapGatewayError(err: unknown, selectedModel = false): GenerateErr {
   if (APICallError.isInstance(err)) {
+    if (selectedModel && isGatewayModelUnavailableError(err)) {
+      return {
+        status: 'model_unavailable',
+        message: 'The selected model is temporarily unavailable. Choose another model or retry.',
+      };
+    }
     if (err.statusCode === 401 || err.statusCode === 403 || isGatewayAuthError(err)) {
       if (isGatewayModelRestrictionError(err)) {
         return {
@@ -617,6 +648,12 @@ function mapGatewayError(err: unknown): GenerateErr {
     };
   }
   if (isGatewayModelRestrictionError(err)) {
+    if (selectedModel) {
+      return {
+        status: 'model_unavailable',
+        message: 'The selected model is unavailable for this Gateway account.',
+      };
+    }
     return {
       status: 'error',
       message: AI_GATEWAY_MODEL_RESTRICTED_MESSAGE,
@@ -629,11 +666,30 @@ function mapGatewayError(err: unknown): GenerateErr {
         'Replicate blocked the selected Souqy text model because its input or output was flagged as sensitive. Souqy now defaults Replicate text generation to Qwen; restart the dev server and retry.',
     };
   }
+  if (selectedModel) {
+    console.error('[souqy/generate] Pro model generation failed', {
+      code: err instanceof Error ? err.name : 'unexpected_error',
+    });
+    return {
+      status: 'error',
+      message: 'The selected model could not complete this request. Retry or choose another model.',
+    };
+  }
   console.error('[souqy/generate] generation error', err);
   return {
     status: 'error',
     message: err instanceof Error ? stripAnsi(err.message) : 'Souqy generation failed.',
   };
+}
+
+function isGatewayModelUnavailableError(err: unknown): boolean {
+  if (APICallError.isInstance(err) && (err.statusCode === 404 || err.statusCode === 410)) {
+    return true;
+  }
+  const message = stripAnsi(err instanceof Error ? err.message : String(err));
+  return /model.{0,40}(unavailable|not found|does not exist|not supported)|RestrictedModelsError/iu.test(
+    message,
+  );
 }
 
 function isGatewayModelRestrictionError(err: unknown): boolean {

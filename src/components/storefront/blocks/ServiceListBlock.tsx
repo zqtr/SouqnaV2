@@ -142,7 +142,11 @@ export function ServiceListBlock({ block, ctx }: BlockRenderProps<ServiceListPro
                   </span>
                 ) : null}
                 {showInquire && p.backing ? (
-                  <InquireButton storefront={storefront} product={p.backing} />
+                  <InquireButton
+                    storefront={storefront}
+                    product={p.backing}
+                    disabled={ctx.isPreview}
+                  />
                 ) : null}
               </div>
             </div>

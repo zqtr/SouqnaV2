@@ -84,6 +84,10 @@ FANAR_TIMEOUT_MS=180000
 ## Souqy
 
 - `SOUQY_ADMIN_TOKEN`
+- `SOUQNA_PRO_ENABLED`
+- `SOUQNA_PRO_IDE_V2_ENABLED`
+- `SOUQNA_PRO_CODE_RUNTIME_ENABLED`
+- `SOUQNA_PRO_MODEL_ALLOWLIST`
 - `SOUQY_BLOCK_EDIT_MODEL`
 - `SOUQY_GENERATE_MODEL`
 - `SOUQY_CHAT_MODEL`
@@ -91,6 +95,56 @@ FANAR_TIMEOUT_MS=180000
 - `SOUQY_BUILD_SNAPSHOT_ID`
 - `SOUQY_MONTHLY_CAP`
 - `SOUQY_SCREENSHOT_ENABLED`
+
+### Souqna Pro rollout
+
+`SOUQNA_PRO_ENABLED` defaults to `false` in production. Apply migration
+`076_pro_workspaces.sql`, `077_easy_snapshots_and_drafts.sql`,
+`078_pro_ai_model_jobs.sql`, and `079_pro_integrity_hardening.sql` before
+enabling it, then set the flag only for the deployment environments
+participating in the rollout. Local development keeps the surface available so
+the owner-only workflow can be verified without changing production flags.
+
+`SOUQNA_PRO_IDE_V2_ENABLED` controls the AI-first Pro shell while the original
+workbench remains available as a fallback. Apply `081_pro_sessions.sql` before
+enabling V2. Development enables the V2 shell automatically; production keeps
+it off until authenticated English, Arabic, mobile, preview, and publish checks
+are complete.
+
+`SOUQNA_PRO_CODE_RUNTIME_ENABLED` controls Souqna Code's browser-only instant
+draft canvas. Development enables it with the V2 shell. Production keeps it
+off until the route-scoped CSP, sandboxed iframe, Chrome, Safari, and verified
+build/publish checks pass. Disabling it falls back to the verified private
+preview and does not change session or storefront data.
+
+`SOUQNA_PRO_MODEL_ALLOWLIST` is a comma-separated, server-only subset of the
+versioned Pro catalog. Unknown IDs are ignored and model selection is
+validated again before credit reservation. The rollout default contains:
+
+```text
+alibaba/qwen3.7-plus,deepseek/deepseek-v4-pro,moonshotai/kimi-k2.5,moonshotai/kimi-k2.7-code,openai/gpt-5.4-mini,google/gemini-3.5-flash,anthropic/claude-sonnet-4.6,openai/gpt-5.4,moonshotai/kimi-k3
+```
+
+The catalog is ordered into five lower-cost daily builders followed by four
+AI Legend models for demanding storefront transformations. Model IDs, context
+windows, and token prices were verified against the public AI Gateway model
+endpoint when the catalog version was published.
+
+Use a smaller subset for internal rollout. Never place this setting in a
+`NEXT_PUBLIC_` variable; the server allowlist is the enforcement boundary.
+
+Pro reuses the Souqy captive build runtime. A production deployment therefore
+needs `SOUQY_BUILD_SNAPSHOT_ID` for the reviewed Vercel Sandbox snapshot and
+`BLOB_READ_WRITE_TOKEN` for immutable build artifacts. AI generation uses the
+existing AI Gateway/OIDC configuration (or the documented local gateway key).
+The feature should remain off when either the snapshot or Blob configuration is
+missing; saved drafts remain intact and published Pro storefronts continue to
+use their existing immutable artifact.
+
+Enable the flag first for internal Pro+ (`pro`) and Max+ (`atelier`) accounts.
+Monitor safe aggregate build success/failure counts, retry rate, build duration,
+artifact size, and publish failures; never attach source, prompts, build logs,
+or storefront metadata to PostHog or Sentry events.
 
 ## Mobile API compatibility
 

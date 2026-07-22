@@ -12,7 +12,15 @@ export type SouqyAuditRow = {
   occurredAt: Date;
   clerkUserId: string;
   storefront: string | null;
-  kind: 'generate' | 'reprompt' | 'rollback' | 'paywall_hit' | 'edit_block';
+  kind:
+    | 'generate'
+    | 'reprompt'
+    | 'rollback'
+    | 'paywall_hit'
+    | 'edit_block'
+    | 'pro_build'
+    | 'pro_snapshot'
+    | 'pro_publish';
   status:
     | 'pending'
     | 'success'
@@ -21,9 +29,11 @@ export type SouqyAuditRow = {
     | 'build_failed'
     | 'budget_exceeded'
     | 'rate_limited'
+    | 'model_unavailable'
     | 'error';
   prompt: string | null;
   source: string | null;
+  creditCost: number;
   meta: Record<string, unknown>;
 };
 
@@ -36,6 +46,7 @@ type DbAuditRow = {
   status: SouqyAuditRow['status'];
   prompt: string | null;
   source: string | null;
+  credit_cost: number;
   meta: unknown;
 };
 
@@ -66,6 +77,7 @@ function fromAuditRow(row: DbAuditRow): SouqyAuditRow {
     status: row.status,
     prompt: row.prompt,
     source: row.source,
+    creditCost: row.credit_cost ?? 0,
     meta: parseMeta(row.meta),
   };
 }
@@ -125,13 +137,19 @@ export async function logSouqyAudit(args: {
   status: SouqyAuditRow['status'];
   prompt?: string | null;
   source?: string | null;
+  creditCost?: number;
   meta?: Record<string, unknown>;
 }): Promise<number | null> {
   if (!hasDb()) return null;
+  const creditCost =
+    args.creditCost ?? (args.kind === 'generate' || args.kind === 'reprompt' ? 1 : 0);
+  if (!Number.isInteger(creditCost) || creditCost < 0 || creditCost > 3) {
+    throw new Error('Invalid Souqy credit cost');
+  }
   try {
     const rows = (await db()`
       insert into souqy_audit (
-        clerk_user_id, storefront, kind, status, prompt, source, meta
+        clerk_user_id, storefront, kind, status, prompt, source, meta, credit_cost
       ) values (
         ${args.clerkUserId},
         ${args.storefront},
@@ -139,7 +157,8 @@ export async function logSouqyAudit(args: {
         ${args.status},
         ${args.prompt ?? null},
         ${args.source ?? null},
-        ${JSON.stringify(args.meta ?? {})}::jsonb
+        ${JSON.stringify(args.meta ?? {})}::jsonb,
+        ${creditCost}
       )
       returning id
     `) as unknown as { id: string }[];
@@ -220,7 +239,7 @@ export async function getSouqyAuditById(id: number): Promise<SouqyAuditRow | nul
 export async function getSouqyMonthlyCount(clerkUserId: string): Promise<number> {
   if (!hasDb()) return 0;
   const rows = (await db()`
-    select count(*)::int as n from souqy_audit
+    select coalesce(sum(credit_cost), 0)::int as n from souqy_audit
     where clerk_user_id = ${clerkUserId}
       and kind in ('generate', 'reprompt')
       and status in ('success', 'pending')

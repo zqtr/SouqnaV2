@@ -8,6 +8,7 @@ import { getVocabulary } from '@/lib/storefront-vocabulary';
 import type { Block } from '@/lib/blocks/types';
 import type { Locale } from '@/i18n/locales';
 import { bootBlocksFromStorefront } from '@/lib/blocks/boot';
+import { resolveStorefrontSurface, type StorefrontSurface } from '@/lib/storefrontSurface';
 import { SouqyMount as RawSouqyMount } from './SouqyMount';
 
 // React 18 ambient types still flag async server components as
@@ -18,6 +19,8 @@ type SouqyMountProps = {
   data: StorefrontData;
   products: Product[];
   fallback: ReactNode;
+  storefrontBaseHref: string;
+  isPreview?: boolean;
   categoriesBySlug?: Map<string, Set<string>>;
   navPages?: ChromeNavPage[];
   legalPolicies?: ChromeLegalPolicy[];
@@ -31,11 +34,12 @@ import { CurrencyToggle } from './CurrencyToggle';
 import { AppScripts as RawAppScripts } from './AppScripts';
 import { MawidBanner as RawMawidBanner } from './MawidBanner';
 import { StorefrontChrome, type ChromeLegalPolicy, type ChromeNavPage } from './StorefrontChrome';
-import { storefrontBaseUrl } from '@/lib/storefrontUrl';
 import type { BlockContext } from './blocks/BlockContext';
 import { BlockBackgroundFrame } from './blocks/BlockBackgroundFrame';
 import { PremiumCursor } from './PremiumCursor';
 import { StorefrontPoliciesPanel } from './StorefrontPoliciesPanel';
+import { parseSouqySource } from '@/lib/souqy/source';
+import { extractSouqyThemeOverrides } from '@/lib/souqy/validate';
 
 type AppScriptsProps = { storefrontSlug: string; installedAppIds: string[] };
 const AppScripts = RawAppScripts as unknown as (props: AppScriptsProps) => JSX.Element;
@@ -86,15 +90,8 @@ type Props = {
   overrideMain?: ReactNode;
   /** Optional preview-only override for policy fallback copy/titles. */
   policyLocale?: Locale;
-  /**
-   * When true, the storefront is being rendered as a non-interactive
-   * showcase (the dashboard's "Browse all templates" iframe). Suppress
-   * cart trigger/drawer + floating inquire so a click can't pollute the
-   * buyer's real localStorage cart or dispatch a phantom inquiry, and
-   * so the visual showcase isn't cluttered with chrome the founder
-   * already understands. Page nav + legal footer still render.
-   */
-  showcaseOnly?: boolean;
+  /** Resolves navigation and side-effect policy for public and private renders. */
+  surface?: StorefrontSurface;
   showSouqnaSignature?: boolean;
 };
 
@@ -130,47 +127,64 @@ export function Storefront({
   legalPolicies = [],
   overrideMain,
   policyLocale,
-  showcaseOnly = false,
+  surface = { kind: 'public' },
   showSouqnaSignature = true,
 }: Props) {
   const categories = categoriesBySlug ?? new Map<string, Set<string>>();
-  const hasCurrency = !showcaseOnly && installedApps.includes('currency-converter');
-  const cartEnabled = !showcaseOnly && data.checkout.paymentMethods.length > 0;
+  const resolvedSurface = resolveStorefrontSurface(data.slug, surface);
+  const customerEffectsEnabled = resolvedSurface.allowsCustomerEffects;
+  const effectiveInstalledApps = customerEffectsEnabled ? installedApps : [];
+  const hasCurrency = customerEffectsEnabled && installedApps.includes('currency-converter');
+  const cartEnabled = customerEffectsEnabled && data.checkout.paymentMethods.length > 0;
   const cartCurrency = data.checkout.currency;
-  const chromeProps = {
-    storefront: data,
-    storefrontSlug: data.slug,
-    storefrontBaseHref: storefrontBaseUrl(data.slug),
-    enabled: cartEnabled,
-    currency: cartCurrency,
-    navPages,
-    legalPolicies,
-    chrome: data.themeOverrides.commerceChrome,
-  };
-  // Theme overrides win over the founder's palette pick (the Theme page
-  // is the more recent, more granular surface).
-  const paletteId = (data.themeOverrides.palette ?? data.palette) as PaletteId;
-  const palette = palettes[paletteId] ?? palettes.sand_gold;
-  const copy = getCopy(data.locale);
-  const vocabulary = getVocabulary(data.locale, data.businessType);
-
-  // Owner theme-lock wins over visitor preference. Default = follow visitor.
-  const behaviour = data.themeOverrides.themeBehaviour ?? 'auto';
-  const effectiveTheme: Theme =
-    behaviour === 'light' ? 'light' : behaviour === 'dark' ? 'dark' : visitorTheme;
-
   const savedBlocks = overrideBlocks ?? data.publishedBlocks;
   const blocks = savedBlocks.length > 0 ? savedBlocks : bootBlocksFromStorefront(data);
   // Souqy wins over the block pipeline whenever a revision is published
   // AND the caller didn't explicitly pass `overrideBlocks` (preview
   // routes still want to see the JSON draft, not the AI artifact).
-  const useSouqy = data.souqyRevision != null && !overrideBlocks;
+  const useSouqy =
+    resolvedSurface.kind !== 'owner-snapshot-preview' &&
+    data.souqyRevision != null &&
+    !overrideBlocks;
+  const shouldApplySouqyTheme = useSouqy || resolvedSurface.kind === 'owner-pro-preview';
+  const souqyFiles =
+    shouldApplySouqyTheme && data.souqySource ? parseSouqySource(data.souqySource) : null;
+  const souqyTheme = souqyFiles ? extractSouqyThemeOverrides(souqyFiles['theme.ts']) : null;
+  // Pro theme.ts is applied at render time only. It never overwrites the
+  // Easy theme row, so switching modes and building remain non-destructive.
+  const themeOverrides = souqyTheme ?? data.themeOverrides;
+  const renderData = souqyTheme ? { ...data, themeOverrides } : data;
+  const chromeStorefront = customerEffectsEnabled
+    ? renderData
+    : { ...renderData, phone: null, instagram: null };
+  const chromeProps = {
+    storefront: chromeStorefront,
+    storefrontSlug: data.slug,
+    storefrontBaseHref: resolvedSurface.baseHref,
+    enabled: cartEnabled,
+    currency: cartCurrency,
+    navPages,
+    legalPolicies,
+    chrome: themeOverrides.commerceChrome,
+  };
+  // Theme overrides win over the founder's palette pick (the Theme page
+  // is the more recent, more granular surface).
+  const paletteId = (themeOverrides.palette ??
+    (shouldApplySouqyTheme ? 'sand_gold' : data.palette)) as PaletteId;
+  const palette = palettes[paletteId] ?? palettes.sand_gold;
+  const copy = getCopy(data.locale);
+  const vocabulary = getVocabulary(data.locale, data.businessType);
 
-  const headingWeight = data.themeOverrides.headingWeight;
+  // Owner theme-lock wins over visitor preference. Default = follow visitor.
+  const behaviour = themeOverrides.themeBehaviour ?? 'auto';
+  const effectiveTheme: Theme =
+    behaviour === 'light' ? 'light' : behaviour === 'dark' ? 'dark' : visitorTheme;
+
+  const headingWeight = themeOverrides.headingWeight;
   const sectionSpacing =
-    data.themeOverrides.sectionSpacing === 'tight'
+    themeOverrides.sectionSpacing === 'tight'
       ? 'clamp(20px, 3vw, 36px)'
-      : data.themeOverrides.sectionSpacing === 'spacious'
+      : themeOverrides.sectionSpacing === 'spacious'
         ? 'clamp(56px, 8vw, 112px)'
         : 'clamp(36px, 5vw, 64px)';
 
@@ -178,7 +192,7 @@ export function Storefront({
     ...paletteCssVars(palette, effectiveTheme),
     ['--sf-section-y' as string]: sectionSpacing,
     ...(headingWeight ? { ['--sf-heading-weight' as string]: String(headingWeight) } : {}),
-    background: data.themeOverrides.pageBg ?? 'var(--sf-ground)',
+    background: themeOverrides.pageBg ?? 'var(--sf-ground)',
     color: 'var(--sf-ink)',
     minHeight: '100dvh',
     colorScheme: effectiveTheme,
@@ -187,21 +201,25 @@ export function Storefront({
   if (overrideMain != null) {
     return (
       <div style={wrapperStyle} dir={data.locale === 'ar' ? 'rtl' : 'ltr'}>
-        <PremiumCursor effect={data.themeOverrides.cursorEffect} />
-        <BlockBackgroundFrame effect={data.themeOverrides.backgroundEffect}>
+        <PremiumCursor effect={themeOverrides.cursorEffect} />
+        <BlockBackgroundFrame effect={themeOverrides.backgroundEffect}>
           <StorefrontChrome {...chromeProps}>
             {overrideMain}
             {showSouqnaSignature ? (
               <SouqnaSignature locale={data.locale} verified={Boolean(data.crNumber)} />
             ) : null}
-            <CustomerTools data={data} showcaseOnly={showcaseOnly} />
+            <CustomerTools data={data} enabled={customerEffectsEnabled} />
             {hasCurrency ? <CurrencyToggle storefrontSlug={data.slug} /> : null}
-            <AppScripts storefrontSlug={data.slug} installedAppIds={installedApps} />
-            <MawidBanner
-              storefrontSlug={data.slug}
-              installedAppIds={installedApps}
-              locale={data.locale}
-            />
+            {customerEffectsEnabled ? (
+              <>
+                <AppScripts storefrontSlug={data.slug} installedAppIds={effectiveInstalledApps} />
+                <MawidBanner
+                  storefrontSlug={data.slug}
+                  installedAppIds={effectiveInstalledApps}
+                  locale={data.locale}
+                />
+              </>
+            ) : null}
           </StorefrontChrome>
         </BlockBackgroundFrame>
       </div>
@@ -211,42 +229,54 @@ export function Storefront({
   if (useSouqy) {
     return (
       <div style={wrapperStyle} dir={data.locale === 'ar' ? 'rtl' : 'ltr'}>
-        <PremiumCursor effect={data.themeOverrides.cursorEffect} />
-        <BlockBackgroundFrame effect={data.themeOverrides.backgroundEffect}>
+        <PremiumCursor effect={themeOverrides.cursorEffect} />
+        <BlockBackgroundFrame effect={themeOverrides.backgroundEffect}>
           <StorefrontChrome {...chromeProps}>
             <SouqyMount
-              data={data}
-            products={products}
-            categoriesBySlug={categories}
-            navPages={navPages}
-            legalPolicies={legalPolicies}
-            fallback={
-              <FallbackToBlockPipeline
-                  data={data}
-                  products={products}
-                  copy={copy}
-                  vocabulary={vocabulary}
-                  blocks={blocks}
-                  selectable={selectable}
-                  categoriesBySlug={categories}
-                  navPages={navPages}
-                  legalPolicies={legalPolicies}
-                  installedApps={installedApps}
-                />
+              data={renderData}
+              products={products}
+              storefrontBaseHref={resolvedSurface.baseHref}
+              isPreview={!customerEffectsEnabled}
+              categoriesBySlug={categories}
+              navPages={navPages}
+              legalPolicies={legalPolicies}
+              fallback={
+                resolvedSurface.fallsBackToEasy ? (
+                  <FallbackToBlockPipeline
+                    data={data}
+                    products={products}
+                    copy={copy}
+                    vocabulary={vocabulary}
+                    blocks={blocks}
+                    selectable={selectable}
+                    categoriesBySlug={categories}
+                    navPages={navPages}
+                    legalPolicies={legalPolicies}
+                    installedApps={effectiveInstalledApps}
+                    storefrontBaseHref={resolvedSurface.baseHref}
+                    isPreview={!customerEffectsEnabled || selectable}
+                  />
+                ) : (
+                  <PreviewUnavailable locale={data.locale} />
+                )
               }
             />
-            <StorefrontPoliciesPanel storefront={data} locale={policyLocale} />
+            <StorefrontPoliciesPanel storefront={renderData} locale={policyLocale} />
             {showSouqnaSignature ? (
               <SouqnaSignature locale={data.locale} verified={Boolean(data.crNumber)} />
             ) : null}
-            <CustomerTools data={data} showcaseOnly={showcaseOnly} />
+            <CustomerTools data={data} enabled={customerEffectsEnabled} />
             {hasCurrency ? <CurrencyToggle storefrontSlug={data.slug} /> : null}
-            <AppScripts storefrontSlug={data.slug} installedAppIds={installedApps} />
-            <MawidBanner
-              storefrontSlug={data.slug}
-              installedAppIds={installedApps}
-              locale={data.locale}
-            />
+            {customerEffectsEnabled ? (
+              <>
+                <AppScripts storefrontSlug={data.slug} installedAppIds={effectiveInstalledApps} />
+                <MawidBanner
+                  storefrontSlug={data.slug}
+                  installedAppIds={effectiveInstalledApps}
+                  locale={data.locale}
+                />
+              </>
+            ) : null}
           </StorefrontChrome>
         </BlockBackgroundFrame>
       </div>
@@ -262,11 +292,11 @@ export function Storefront({
       copy,
       vocabulary,
       isRtl: data.locale === 'ar',
-      isPreview: selectable,
+      isPreview: selectable || !customerEffectsEnabled,
       categoriesBySlug: categories,
       navPages,
       legalPolicies,
-      installedAppIds: installedApps,
+      installedAppIds: effectiveInstalledApps,
     };
     return (
       <div style={wrapperStyle} dir={data.locale === 'ar' ? 'rtl' : 'ltr'}>
@@ -289,14 +319,18 @@ export function Storefront({
             {showSouqnaSignature ? (
               <SouqnaSignature locale={data.locale} verified={Boolean(data.crNumber)} />
             ) : null}
-            <CustomerTools data={data} showcaseOnly={showcaseOnly} />
+            <CustomerTools data={data} enabled={customerEffectsEnabled} />
             {hasCurrency ? <CurrencyToggle storefrontSlug={data.slug} /> : null}
-            <AppScripts storefrontSlug={data.slug} installedAppIds={installedApps} />
-            <MawidBanner
-              storefrontSlug={data.slug}
-              installedAppIds={installedApps}
-              locale={data.locale}
-            />
+            {customerEffectsEnabled ? (
+              <>
+                <AppScripts storefrontSlug={data.slug} installedAppIds={effectiveInstalledApps} />
+                <MawidBanner
+                  storefrontSlug={data.slug}
+                  installedAppIds={effectiveInstalledApps}
+                  locale={data.locale}
+                />
+              </>
+            ) : null}
           </StorefrontChrome>
         </BlockBackgroundFrame>
       </div>
@@ -304,14 +338,8 @@ export function Storefront({
   }
 }
 
-function CustomerTools({
-  data,
-  showcaseOnly,
-}: {
-  data: StorefrontData;
-  showcaseOnly: boolean;
-}): ReactNode {
-  if (showcaseOnly) return null;
+function CustomerTools({ data, enabled }: { data: StorefrontData; enabled: boolean }): ReactNode {
+  if (!enabled) return null;
   return (
     <>
       <SouqyCustomerChat
@@ -347,6 +375,8 @@ function FallbackToBlockPipeline({
   navPages,
   legalPolicies,
   installedApps,
+  storefrontBaseHref,
+  isPreview,
 }: {
   data: StorefrontData;
   products: Product[];
@@ -358,16 +388,18 @@ function FallbackToBlockPipeline({
   navPages: ChromeNavPage[];
   legalPolicies: ChromeLegalPolicy[];
   installedApps: string[];
+  storefrontBaseHref: string;
+  isPreview: boolean;
 }): ReactNode {
   const ctx: BlockContext = {
     storefront: data,
-    storefrontBaseHref: storefrontBaseUrl(data.slug),
+    storefrontBaseHref,
     products,
     theme: data.themeOverrides,
     copy,
     vocabulary,
     isRtl: data.locale === 'ar',
-    isPreview: selectable,
+    isPreview,
     categoriesBySlug,
     navPages,
     legalPolicies,
@@ -388,6 +420,53 @@ function FallbackToBlockPipeline({
       }}
     >
       <BlockRenderer blocks={blocks} ctx={ctx} selectable={selectable} />
+    </main>
+  );
+}
+
+function PreviewUnavailable({ locale }: { locale: StorefrontData['locale'] }): JSX.Element {
+  const isRtl = locale === 'ar';
+  return (
+    <main
+      dir={isRtl ? 'rtl' : 'ltr'}
+      role="status"
+      style={{
+        minHeight: '70dvh',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 32,
+        textAlign: 'center',
+      }}
+    >
+      <div style={{ maxWidth: 520 }}>
+        <p
+          style={{
+            margin: 0,
+            color: 'var(--sf-accent)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {isRtl ? 'معاينة سوقنا برو' : 'Souqna Pro preview'}
+        </p>
+        <h1
+          style={{
+            margin: '14px 0 0',
+            fontFamily: 'var(--font-serif), serif',
+            fontSize: 'clamp(30px, 5vw, 52px)',
+            lineHeight: 1.05,
+          }}
+        >
+          {isRtl ? 'المعاينة غير متاحة — أعد البناء' : 'Preview unavailable — rebuild'}
+        </h1>
+        <p style={{ margin: '14px 0 0', opacity: 0.68, lineHeight: 1.65 }}>
+          {isRtl
+            ? 'تعذر تحميل آخر نسخة مبنية. ارجع إلى منشئ برو وأعد بناء المعاينة.'
+            : 'The latest build could not be loaded. Return to Pro Builder and rebuild the preview.'}
+        </p>
+      </div>
     </main>
   );
 }

@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Fable-aM</title>
+<style>
+  :root {
+    --sand:#E8DCC4; --sand-pale:#F1E9D7; --ink:#1F1B16; --charcoal:#2A2A2A;
+    --maroon:#8B3A3A; --quiet:rgba(31,27,22,.18);
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--charcoal); color:var(--sand-pale);
+    font:12px/1.5 -apple-system, "Segoe UI", sans-serif;
+    display:flex; flex-direction:column; height:100vh; padding:12px; gap:10px;
+  }
+  header { display:flex; justify-content:space-between; align-items:baseline; }
+  header h1 { font-size:13px; font-weight:600; letter-spacing:.06em; color:var(--sand); }
+  #status { display:flex; align-items:center; gap:5px; }
+  .dot {
+    width:8px; height:8px; border-radius:50%;
+    background:rgba(241,233,215,.25); transition:background .3s;
+  }
+  .dot.online { background:#B9C9A6; box-shadow:0 0 6px rgba(185,201,166,.5); }
+  .dot.offline { background:var(--maroon); }
+  #dotText { font-size:10px; opacity:.55; }
+  header button {
+    background:none; border:none; color:rgba(241,233,215,.5);
+    font-size:11px; cursor:pointer;
+  }
+  #log {
+    flex:1; overflow-y:auto; border:1px solid rgba(232,220,196,.14);
+    border-radius:6px; padding:10px; display:flex; flex-direction:column; gap:8px;
+  }
+  .msg { padding:7px 9px; border-radius:5px; white-space:pre-wrap; word-break:break-word; }
+  .user { background:rgba(232,220,196,.10); }
+  .agent { background:rgba(232,220,196,.04); border:1px solid rgba(232,220,196,.08); }
+  .err { background:rgba(139,58,58,.18); border:1px solid rgba(139,58,58,.4); }
+  .ok { color:#B9C9A6; }
+  .meta { font-size:10px; opacity:.55; }
+  #settings { display:none; flex-direction:column; gap:6px; }
+  #settings.open { display:flex; }
+  input, textarea {
+    background:rgba(0,0,0,.25); color:var(--sand-pale);
+    border:1px solid rgba(232,220,196,.18); border-radius:5px;
+    padding:8px; font:inherit; width:100%;
+  }
+  textarea { resize:none; height:64px; }
+  #send {
+    background:var(--sand); color:var(--ink); border:none; border-radius:5px;
+    padding:9px; font-weight:600; cursor:pointer; letter-spacing:.03em;
+  }
+  #send:disabled { opacity:.5; cursor:default; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>FABLE-aM</h1>
+    <div id="status">
+      <span id="dot" class="dot"></span>
+      <span id="dotText">checking…</span>
+      <button id="gear">settings</button>
+    </div>
+  </header>
+
+  <div id="settings">
+    <input id="agentUrl" placeholder="local agent URL (default: http://127.0.0.1:3845)"/>
+    <input id="apiKey" type="password" placeholder="fallback AI Gateway key (optional)"/>
+    <input id="model" placeholder="fallback gateway model (default: anthropic/claude-sonnet-4)"/>
+  </div>
+
+  <div id="log"></div>
+
+  <textarea id="prompt" placeholder="Describe an animation — or ask what to add… (⌘↩ to run)"></textarea>
+  <button id="send">Generate &amp; Run</button>
+
+  <script src="./js/CSInterface.js"></script>
+  <script src="./js/main.js"></script>
+</body>
+</html>

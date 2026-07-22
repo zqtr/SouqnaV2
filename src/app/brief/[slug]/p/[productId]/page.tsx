@@ -25,6 +25,7 @@ import { PriceText, formatMonthlyPrice, formatPrice } from '@/components/storefr
 import { normaliseSettings as normaliseWhatsApp, whatsappDigits } from '@/lib/apps/whatsapp';
 import { getPlan, planUnlocksBrandingRemoval } from '@/lib/billing';
 import { isImageMediaUrl, isVideoMediaUrl } from '@/lib/media';
+import { storefrontBaseUrl } from '@/lib/storefrontUrl';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -137,7 +138,13 @@ export default async function ProductPage({ params }: Props) {
         categoriesBySlug={categoriesBySlug}
         navPages={deriveNavPages(allPages)}
         legalPolicies={deriveLegalPolicies(policies, storefront.locale)}
-        overrideMain={<ProductDetail storefront={storefrontData} product={product} />}
+        overrideMain={
+          <ProductDetail
+            storefront={storefrontData}
+            product={product}
+            storefrontBaseHref={storefrontBaseUrl(slug)}
+          />
+        }
         showSouqnaSignature={!planUnlocksBrandingRemoval(ownerPlan)}
       />
     </>
@@ -147,9 +154,11 @@ export default async function ProductPage({ params }: Props) {
 function ProductDetail({
   storefront,
   product,
+  storefrontBaseHref,
 }: {
   storefront: StorefrontData;
   product: Product;
+  storefrontBaseHref: string;
 }) {
   const isRtl = storefront.locale === 'ar';
   const isSoldOut = product.status === 'sold_out';
@@ -179,7 +188,7 @@ function ProductDetail({
       }}
     >
       <a
-        href="/"
+        href={storefrontBaseHref}
         style={{
           display: 'inline-flex',
           marginBottom: 28,

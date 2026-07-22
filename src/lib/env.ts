@@ -55,21 +55,37 @@ const schema = z.object({
   // SOUQY_ADMIN_TOKEN gates the manual `grantAtelierPro` server action
   // for operator-only billing overrides.
   SOUQY_ADMIN_TOKEN: z.string().min(16).optional(),
+  // Souqna Pro authoring rollout. Development keeps the surface available
+  // for local verification; production requires an explicit opt-in.
+  SOUQNA_PRO_ENABLED: flag,
+  // V2 presentation rollout. The legacy ProBuilder remains available while
+  // authenticated browser parity is verified.
+  SOUQNA_PRO_IDE_V2_ENABLED: flag,
+  // Browser-only instant draft renderer. It never replaces the verified
+  // server build used by the private preview and publishing gates.
+  SOUQNA_PRO_CODE_RUNTIME_ENABLED: flag,
+  // Comma-separated server allowlist. Values are intersected with the
+  // versioned catalog before quota is reserved or a Gateway call is made.
+  SOUQNA_PRO_MODEL_ALLOWLIST: z
+    .string()
+    .default(
+      'alibaba/qwen3.7-plus,deepseek/deepseek-v4-pro,moonshotai/kimi-k2.5,moonshotai/kimi-k2.7-code,openai/gpt-5.4-mini,google/gemini-3.5-flash,anthropic/claude-sonnet-4.6,openai/gpt-5.4,moonshotai/kimi-k3',
+    ),
   // Pre-baked Vercel Sandbox snapshot ID with tsup + the SDK type defs
   // already installed. Without it every Souqy build pays a ~30s cold
   // start. Created once via `scripts/create-souqy-snapshot.ts`.
   SOUQY_BUILD_SNAPSHOT_ID: z.string().min(1).optional(),
-  // Cheap tool-only model used by the in-builder Souqy block editor
-  // (`src/lib/souqy/editBlock.ts`). Routed through the Vercel AI
-  // Gateway like the rest of the Souqy stack — see SDK docs at
+  // Value model used for whole-storefront Souqy generation. Routed through
+  // Vercel AI Gateway like the rest of the Souqy stack — see SDK docs at
   // https://sdk.vercel.ai/providers/ai-sdk-providers — so any
   // `provider/model` slug the gateway supports works here.
-  SOUQY_GENERATE_MODEL: z.string().min(1).default('google/gemini-2.5-flash-lite'),
+  SOUQY_GENERATE_MODEL: z.string().min(1).default('alibaba/qwen3.7-plus'),
   // Output budget for whole-storefront code generation. 4096 was the old
   // hardcoded ceiling — far too small for a distinctive site; 16000 stays
   // under non-streaming HTTP timeout territory.
   SOUQY_GENERATE_MAX_TOKENS: z.coerce.number().int().min(1_024).max(64_000).default(16_000),
   SOUQY_REPLICATE_TEXT_MODEL: z.string().min(1).default('qwen/qwen3-235b-a22b-instruct-2507'),
+  // Cheap tool-only model used by the in-builder selected-block editor.
   SOUQY_BLOCK_EDIT_MODEL: z.string().min(1).default('google/gemini-2.5-flash-lite'),
   SOUQY_CHAT_MODEL: z.string().min(1).default('google/gemini-2.5-flash-lite'),
   // Souqy Studio — creative asset generation. These are optional at
@@ -210,6 +226,10 @@ const parsed = schema.safeParse({
   PULSE_ADMIN_TOKEN: clean(process.env.PULSE_ADMIN_TOKEN),
   PULSE_IP_SALT: clean(process.env.PULSE_IP_SALT),
   SOUQY_ADMIN_TOKEN: clean(process.env.SOUQY_ADMIN_TOKEN),
+  SOUQNA_PRO_ENABLED: clean(process.env.SOUQNA_PRO_ENABLED),
+  SOUQNA_PRO_IDE_V2_ENABLED: clean(process.env.SOUQNA_PRO_IDE_V2_ENABLED),
+  SOUQNA_PRO_CODE_RUNTIME_ENABLED: clean(process.env.SOUQNA_PRO_CODE_RUNTIME_ENABLED),
+  SOUQNA_PRO_MODEL_ALLOWLIST: clean(process.env.SOUQNA_PRO_MODEL_ALLOWLIST),
   SOUQY_BUILD_SNAPSHOT_ID: clean(process.env.SOUQY_BUILD_SNAPSHOT_ID),
   SOUQY_GENERATE_MODEL: clean(process.env.SOUQY_GENERATE_MODEL),
   SOUQY_GENERATE_MAX_TOKENS: clean(process.env.SOUQY_GENERATE_MAX_TOKENS),
@@ -302,8 +322,13 @@ export const env = parsed.success
       PULSE_ADMIN_TOKEN: undefined as string | undefined,
       PULSE_IP_SALT: undefined as string | undefined,
       SOUQY_ADMIN_TOKEN: undefined as string | undefined,
+      SOUQNA_PRO_ENABLED: false,
+      SOUQNA_PRO_IDE_V2_ENABLED: false,
+      SOUQNA_PRO_CODE_RUNTIME_ENABLED: false,
+      SOUQNA_PRO_MODEL_ALLOWLIST:
+        'alibaba/qwen3.7-plus,deepseek/deepseek-v4-pro,moonshotai/kimi-k2.5,moonshotai/kimi-k2.7-code,openai/gpt-5.4-mini,google/gemini-3.5-flash,anthropic/claude-sonnet-4.6,openai/gpt-5.4,moonshotai/kimi-k3',
       SOUQY_BUILD_SNAPSHOT_ID: undefined as string | undefined,
-      SOUQY_GENERATE_MODEL: 'google/gemini-2.5-flash-lite',
+      SOUQY_GENERATE_MODEL: 'alibaba/qwen3.7-plus',
       SOUQY_GENERATE_MAX_TOKENS: 16_000,
       SOUQY_REPLICATE_TEXT_MODEL: 'qwen/qwen3-235b-a22b-instruct-2507',
       SOUQY_BLOCK_EDIT_MODEL: 'google/gemini-2.5-flash-lite',

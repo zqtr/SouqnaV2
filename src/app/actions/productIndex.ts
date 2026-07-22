@@ -15,7 +15,7 @@ import {
   type ProductIndexSettings,
   type ProductIndexSort,
 } from '@/lib/productIndexSettings';
-import { writeStorefrontProductIndexSettings } from '@/lib/productIndexStore';
+import { ensureEasyDraftManifest, updateEasyManifestProductIndex } from '@/lib/easySnapshots';
 
 const nullableText = (max: number) =>
   z
@@ -31,14 +31,18 @@ const ProductIndexInputSchema = z.object({
     enabled: z.boolean(),
     title: nullableText(120),
     subtitle: nullableText(260),
-    layout: z.enum(PRODUCT_INDEX_LAYOUTS as unknown as [ProductIndexLayout, ...ProductIndexLayout[]]),
+    layout: z.enum(
+      PRODUCT_INDEX_LAYOUTS as unknown as [ProductIndexLayout, ...ProductIndexLayout[]],
+    ),
     showSearch: z.boolean(),
     showCategoryFilters: z.boolean(),
     showPriceFilter: z.boolean(),
     showAvailabilityFilter: z.boolean(),
     visibleCategorySlugs: z.array(z.string().trim().min(1).max(120)).max(80),
     hiddenProductIds: z.array(z.string().trim().min(1).max(80)).max(600),
-    defaultSort: z.enum(PRODUCT_INDEX_SORTS as unknown as [ProductIndexSort, ...ProductIndexSort[]]),
+    defaultSort: z.enum(
+      PRODUCT_INDEX_SORTS as unknown as [ProductIndexSort, ...ProductIndexSort[]],
+    ),
     defaultAvailability: z.enum(
       PRODUCT_INDEX_AVAILABILITY as unknown as [
         ProductIndexAvailability,
@@ -77,7 +81,13 @@ export async function updateProductIndexSettings(
   const settings = normalizeProductIndexSettings(parsed.data.settings);
 
   try {
-    await writeStorefrontProductIndexSettings(parsed.data.slug, settings);
+    await ensureEasyDraftManifest(parsed.data.slug, userId);
+    const manifest = await updateEasyManifestProductIndex({
+      storefrontSlug: parsed.data.slug,
+      clerkUserId: userId,
+      settings,
+    });
+    if (!manifest.ok) throw new Error('Easy manifest conflict');
     await recordAudit({
       storefrontSlug: parsed.data.slug,
       clerkUserId: userId,

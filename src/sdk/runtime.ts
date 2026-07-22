@@ -27,6 +27,8 @@ export type SouqyContext = {
   copy: ReturnType<typeof getCopy>;
   vocabulary: ReturnType<typeof getVocabulary>;
   isRtl: boolean;
+  /** Owner/showcase render: commerce and inquiry side effects must remain inert. */
+  isPreview?: boolean;
   /**
    * First-class category slug → product-id set (mirrors `BlockContext`
    * — see `src/components/storefront/blocks/BlockContext.ts`). Empty

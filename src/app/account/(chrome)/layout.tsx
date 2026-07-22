@@ -21,6 +21,7 @@ import { listInstalledApps } from '@/lib/apps/installed';
 import { getAppDescriptor } from '@/lib/apps/registry';
 import type { InstalledAppNavItem } from '@/components/admin/AdminSidebar';
 import { getPlan, getPlanMeta } from '@/lib/billing';
+import { proModeEnabled } from '@/lib/pro/entitlement';
 import { getAdminUserId } from '@/lib/adminAuth';
 import { getSouqnaOperator } from '@/lib/souqna-operator';
 import {
@@ -224,6 +225,7 @@ export default async function ChromeLayout({
                     <AdminTopBar
                       initialSouqyOpen={souqyParam === '1'}
                       accountUpdates={accountUpdates}
+                      showProPortal={proModeEnabled()}
                     />
                     <AdminCommandDock />
                     <main

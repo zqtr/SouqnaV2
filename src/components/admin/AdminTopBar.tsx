@@ -23,6 +23,7 @@ import { NotificationsBell } from './NotificationsBell';
 import { PLAN_LIMITS, planUnlocksSouqy } from '@/lib/plans';
 import { SouqyChatDrawer } from './SouqyChatDrawer';
 import { SouqyLogo } from './SouqyLogo';
+import { ProPortalButton } from '@/components/account/ProPortalButton';
 import { adminText } from './adminLocale';
 import { AccountUpdatesModal } from '@/components/account/updates/AccountUpdatesModal';
 import type { AccountUpdateView } from '@/components/account/updates/types';
@@ -51,9 +52,15 @@ const EMPTY_RESULTS: SearchResponse = {
 type AdminTopBarProps = {
   initialSouqyOpen?: boolean;
   accountUpdates?: AccountUpdateView[];
+  /** Server-gated (proModeEnabled) — the env flag isn't public. */
+  showProPortal?: boolean;
 };
 
-export function AdminTopBar({ initialSouqyOpen = false, accountUpdates = [] }: AdminTopBarProps) {
+export function AdminTopBar({
+  initialSouqyOpen = false,
+  accountUpdates = [],
+  showProPortal = false,
+}: AdminTopBarProps) {
   const { active, plan, planPeriodEnd } = useStorefronts();
   const locale = useLocale() as Locale;
   const t = adminText(locale);
@@ -222,6 +229,8 @@ export function AdminTopBar({ initialSouqyOpen = false, accountUpdates = [] }: A
               </span>
             </Link>
           ) : null}
+
+          {showProPortal ? <ProPortalButton locale={locale} /> : null}
 
           <NotificationsBell />
           <PlanBadge plan={plan} periodEnd={planPeriodEnd} />

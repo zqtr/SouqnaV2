@@ -5,6 +5,7 @@ import type { getVocabulary } from '@/lib/storefront-vocabulary';
 type Props = {
   data: Storefront;
   vocabulary: ReturnType<typeof getVocabulary>;
+  interactive?: boolean;
 };
 
 type Detail = {
@@ -18,10 +19,10 @@ type Detail = {
  * archetype. Skips itself if the founder hasn't filled any of the four
  * practical fields, so we never show an empty container.
  */
-export function StorefrontPractical({ data, vocabulary }: Props) {
+export function StorefrontPractical({ data, vocabulary, interactive = true }: Props) {
   const isRtl = data.locale === 'ar';
   const fontFamily = isRtl ? 'var(--font-arabic), var(--font-sans)' : 'var(--font-sans)';
-  const details = practicalDetails(data);
+  const details = practicalDetails(data, interactive);
   if (details.length === 0) return null;
 
   return (
@@ -75,16 +76,18 @@ export function StorefrontPractical({ data, vocabulary }: Props) {
   );
 }
 
-function practicalDetails(data: Storefront): Detail[] {
+function practicalDetails(data: Storefront, interactive: boolean): Detail[] {
   const out: Detail[] = [];
   if (data.phone) {
     out.push({
       key: 'phone',
       label: { en: 'Call', ar: 'اتصال' },
-      value: (
+      value: interactive ? (
         <a href={`tel:${data.phone}`} style={{ color: 'inherit', textDecoration: 'none' }}>
           {data.phone}
         </a>
+      ) : (
+        data.phone
       ),
     });
   }
@@ -107,7 +110,7 @@ function practicalDetails(data: Storefront): Detail[] {
     out.push({
       key: 'instagram',
       label: { en: 'Instagram', ar: 'إنستقرام' },
-      value: (
+      value: interactive ? (
         <a
           href={`https://instagram.com/${handle}`}
           target="_blank"
@@ -116,6 +119,8 @@ function practicalDetails(data: Storefront): Detail[] {
         >
           @{handle}
         </a>
+      ) : (
+        `@${handle}`
       ),
     });
   }

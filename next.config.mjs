@@ -10,6 +10,9 @@ const nextConfig = {
   compress: true,
   experimental: {
     typedRoutes: false,
+    outputFileTracingIncludes: {
+      '/api/pro/compiler/[version]/esbuild.wasm': ['./node_modules/esbuild-wasm/esbuild.wasm'],
+    },
   },
   // Image optimization: founders upload originals up to 50 MB to Vercel
   // Blob and they were served raw to shoppers. Routing them through the
@@ -57,6 +60,27 @@ const nextConfig = {
         headers: [
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
+        ],
+      },
+      // The Souqy IDE's "live" preview frames the real storefront route
+      // (`/brief/<slug>`) so founders review the site exactly as customers
+      // see it — including navigating into product pages inside the frame.
+      // SAMEORIGIN keeps third-party clickjacking blocked; only the studio
+      // (same origin) may embed it. Without this the global DENY leaves the
+      // preview pane blank white.
+      {
+        source: '/brief/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
+        ],
+      },
+      {
+        source: '/account/:slug/pro-live-preview',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
         ],
       },
       {

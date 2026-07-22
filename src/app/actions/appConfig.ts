@@ -89,6 +89,7 @@ export type AppConfigContext = {
   seoSettings?: unknown;
   seoReport?: unknown;
   aramexSettings?: unknown;
+  aramexHasCredentials?: boolean;
   drops?: unknown;
   kits?: unknown;
   mawidSettings?: unknown;
@@ -201,6 +202,7 @@ export async function loadAppConfigContext(
     case 'aramex':
       context.aramexSettings =
         normaliseAramex(pluginSettings) ?? DEFAULT_ARAMEX_SETTINGS;
+      context.aramexHasCredentials = Boolean(installed.oauthAccessTokenCt);
       break;
     case 'drop-manager':
       context.drops = await listDrops(storefrontSlug);

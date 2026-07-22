@@ -124,7 +124,7 @@ export default async function TemplatePreviewPage({ params }: Props) {
         navPages={navPages}
         legalPolicies={legalPolicies}
         policyLocale={previewPolicyLocale}
-        showcaseOnly
+        surface={{ kind: 'showcase' }}
       />
     </DashboardDocument>
   );

@@ -2,6 +2,7 @@ import { NextResponse, type NextFetchEvent, type NextRequest } from 'next/server
 import createMiddleware from 'next-intl/middleware';
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { routing } from '@/i18n/routing';
+import { clerkSessionCookieNames, hasClerkSessionCookie } from '@/lib/clerkSessionCookies';
 import { getSlugForCustomDomain } from '@/lib/customDomainLookup';
 import { ownedRootDomains, storefrontSubdomainForHost } from '@/lib/domainRouting';
 
@@ -21,10 +22,7 @@ const MOBILE_CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
   'Access-Control-Max-Age': '86400',
 };
-const PREVIEW_EMBED_ORIGINS = new Set([
-  'http://localhost:8081',
-  'http://127.0.0.1:8081',
-]);
+const PREVIEW_EMBED_ORIGINS = new Set(['http://localhost:8081', 'http://127.0.0.1:8081']);
 
 function isLocalhostHost(host: string): boolean {
   const lower = host.toLowerCase();
@@ -95,6 +93,7 @@ const isNonLocalizedRoute = createRouteMatcher([
   '/account(.*)',
   '/brief(.*)',
   '/api/(.*)',
+  '/dev(.*)', // TEMP: no-auth studio preview for headless screenshots — remove before ship
 ]);
 
 /**
@@ -209,6 +208,7 @@ function redirectLegacyAccountSlug(req: NextRequest): NextResponse | null {
     'builder',
     'phone-required',
     'pos',
+    'pro',
     'souqna',
   ]);
   if (SLUG_RESERVED.has(slug)) return null;
@@ -240,6 +240,24 @@ function redirectLegacyAccountSlug(req: NextRequest): NextResponse | null {
 
 function isPreviewEmbedRoute(req: NextRequest): boolean {
   return /^\/account\/[^/]+\/preview(?:\/.*)?$/.test(req.nextUrl.pathname);
+}
+
+function isProLivePreviewRoute(req: NextRequest): boolean {
+  return /^\/account\/[^/]+\/pro-live-preview$/.test(req.nextUrl.pathname);
+}
+
+function proLivePreviewSecurityHeaders(req: NextRequest): Record<string, string> {
+  const appOrigin = req.nextUrl.origin;
+  const connectSource =
+    process.env.NODE_ENV === 'development'
+      ? `${appOrigin} ${req.nextUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${req.nextUrl.host}`
+      : "'none'";
+  return {
+    // The iframe intentionally has an opaque origin because it omits
+    // allow-same-origin. Name the application origin explicitly so only
+    // Souqna's own Next chunks can boot the controlled evaluator.
+    'Content-Security-Policy': `default-src 'none'; script-src ${appOrigin} 'unsafe-inline' 'unsafe-eval'; style-src ${appOrigin} 'unsafe-inline'; img-src ${appOrigin} data: blob: https:; font-src ${appOrigin} data:; connect-src ${connectSource}; media-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'`,
+  };
 }
 
 function hasBearerToken(req: NextRequest): boolean {
@@ -321,9 +339,7 @@ async function rewriteForCustomDomain(req: NextRequest): Promise<NextResponse | 
   if (!cleanHost) return null;
   if (req.nextUrl.pathname.startsWith('/api/')) return null;
   // Skip apex / wildcard / dev hosts — only run for hosts we don't own.
-  if (
-    OWNED_ROOT_DOMAINS.some((root) => cleanHost === root || cleanHost.endsWith(`.${root}`))
-  ) {
+  if (OWNED_ROOT_DOMAINS.some((root) => cleanHost === root || cleanHost.endsWith(`.${root}`))) {
     return null;
   }
   if (cleanHost === 'localhost' || cleanHost.endsWith('.localhost')) return null;
@@ -355,15 +371,12 @@ function rewriteForSubdomain(req: NextRequest): NextResponse | null {
     // should land on the apex builder. Apex `/account/{slug}/...` is the
     // source of truth so the Clerk session cookie can follow the visitor.
     const subPath = req.nextUrl.pathname;
-    const isLegacyDashboard =
-      subPath === '/dashboard' || subPath.startsWith('/dashboard/');
+    const isLegacyDashboard = subPath === '/dashboard' || subPath.startsWith('/dashboard/');
     const isAccount = subPath === '/account' || subPath.startsWith('/account/');
     if (isLegacyDashboard || isAccount) {
       const prefix = isLegacyDashboard ? '/dashboard' : '/account';
       const tail = subPath === prefix ? '' : subPath.slice(prefix.length);
-      const target = new URL(
-        `https://${ROOT_DOMAIN}/account/${sub}${tail}${req.nextUrl.search}`,
-      );
+      const target = new URL(`https://${ROOT_DOMAIN}/account/${sub}${tail}${req.nextUrl.search}`);
       return NextResponse.redirect(target, 308);
     }
 
@@ -418,16 +431,12 @@ function rewriteForSubdomain(req: NextRequest): NextResponse | null {
   return null;
 }
 
-function hasClerkSessionCookie(req: NextRequest): boolean {
-  return Boolean(req.cookies.get('__session') || req.cookies.get('__client_uat'));
-}
-
 function hasClerkHandshakeParam(req: NextRequest): boolean {
   return req.nextUrl.searchParams.has('__clerk_handshake');
 }
 
 function isRecoverableClerkSessionError(error: unknown, req: NextRequest): boolean {
-  if (!hasClerkSessionCookie(req) && !hasClerkHandshakeParam(req)) return false;
+  if (!hasClerkSessionCookie(req.cookies.getAll()) && !hasClerkHandshakeParam(req)) return false;
 
   const message = error instanceof Error ? error.message : String(error);
   return (
@@ -435,6 +444,32 @@ function isRecoverableClerkSessionError(error: unknown, req: NextRequest): boole
     message.includes('reason=jwk-kid-mismatch') ||
     message.includes('Unexpected end of data')
   );
+}
+
+function clearClerkSessionCookies(response: NextResponse, req: NextRequest): void {
+  const cookieHost = req.nextUrl.hostname.toLowerCase();
+  const cookieDomains = new Set<string>();
+
+  if (!isLocalhostHost(cookieHost)) {
+    cookieDomains.add(`.${cookieHost}`);
+    for (const rootDomain of OWNED_ROOT_DOMAINS) {
+      if (cookieHost === rootDomain || cookieHost.endsWith(`.${rootDomain}`)) {
+        cookieDomains.add(`.${rootDomain}`);
+      }
+    }
+  }
+
+  for (const name of clerkSessionCookieNames(req.cookies.getAll())) {
+    response.cookies.set(name, '', { expires: new Date(0), maxAge: 0, path: '/' });
+    for (const domain of cookieDomains) {
+      response.cookies.set(name, '', {
+        domain,
+        expires: new Date(0),
+        maxAge: 0,
+        path: '/',
+      });
+    }
+  }
 }
 
 function staleClerkSessionRedirect(req: NextRequest): NextResponse {
@@ -450,18 +485,7 @@ function staleClerkSessionRedirect(req: NextRequest): NextResponse {
   }
 
   const response = NextResponse.redirect(url);
-  const cookieHost = req.nextUrl.hostname.toLowerCase();
-  const rootCookieDomain =
-    cookieHost.split('.').length > 2 ? `.${cookieHost.split('.').slice(-2).join('.')}` : null;
-
-  for (const name of ['__session', '__client_uat', '__clerk_db_jwt']) {
-    response.cookies.delete(name);
-    response.cookies.set(name, '', { maxAge: 0, path: '/' });
-    response.cookies.set(name, '', { domain: `.${cookieHost}`, maxAge: 0, path: '/' });
-    if (rootCookieDomain && rootCookieDomain !== `.${cookieHost}`) {
-      response.cookies.set(name, '', { domain: rootCookieDomain, maxAge: 0, path: '/' });
-    }
-  }
+  clearClerkSessionCookies(response, req);
 
   return response;
 }
@@ -478,6 +502,7 @@ const handleMiddleware = clerkMiddleware(async (auth, req) => {
     });
   }
   const isPreviewEmbed = isPreviewEmbedRoute(req);
+  const isProLivePreview = isProLivePreviewRoute(req);
   if (isPreviewEmbed && req.method === 'OPTIONS') {
     return new NextResponse(null, {
       status: 204,
@@ -554,6 +579,11 @@ const handleMiddleware = clerkMiddleware(async (auth, req) => {
     }
     if (isPreviewEmbed) {
       for (const [key, value] of Object.entries(previewCorsHeaders(req))) {
+        response.headers.set(key, value);
+      }
+    }
+    if (isProLivePreview) {
+      for (const [key, value] of Object.entries(proLivePreviewSecurityHeaders(req))) {
         response.headers.set(key, value);
       }
     }

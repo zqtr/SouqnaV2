@@ -313,6 +313,13 @@ export type GridProps = {
 };
 export type QuoteProps = { children?: React.ReactNode; cite?: string };
 export type MarqueeProps = { items: string[]; speed?: 'slow' | 'medium' | 'fast' };
+export type CustomProps = {
+  as?: 'div' | 'section' | 'main' | 'article' | 'aside' | 'header' | 'footer';
+  className?: string;
+  style?: React.CSSProperties;
+  id?: string;
+  children?: React.ReactNode;
+};
 `.trim();
 
 const COMPONENT_DECLS = [
@@ -338,7 +345,7 @@ const COMPONENT_DECLS = [
   .map((name) => `export declare function ${name}(props: ${name}Props): JSX.Element;`)
   .join('\n');
 
-const PRIMITIVES = ['Section', 'Stack', 'Grid', 'Quote', 'Marquee']
+const PRIMITIVES = ['Section', 'Stack', 'Grid', 'Quote', 'Marquee', 'Custom']
   .map((name) => `export declare function ${name}(props: ${name}Props): JSX.Element;`)
   .join('\n');
 

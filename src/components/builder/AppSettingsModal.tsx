@@ -393,6 +393,7 @@ function FormFor({ ctx, emptyMessage }: { ctx: AppConfigContext; emptyMessage: s
           storefrontSlug={slug}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           initial={ctx.aramexSettings as any}
+          hasCredentials={Boolean(ctx.aramexHasCredentials)}
         />
       );
     case 'reviews':

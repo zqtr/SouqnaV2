@@ -7,8 +7,10 @@ import { assertStorefrontOwner } from '@/lib/products';
 import { getOrder } from '@/lib/orders';
 import {
   createAramexShipment,
+  testAramexConnection,
   trackShipment as trackAramex,
 } from '@/lib/apps/aramex';
+import { setAppLastError, setAppLastSuccess } from '@/lib/apps/installed';
 import { recordAudit } from '@/lib/audit';
 import type { Shipment } from '@/lib/shipments';
 
@@ -23,6 +25,31 @@ export type AramexActionState =
   | { status: 'idle' }
   | { status: 'success'; shipment?: Shipment; statusText?: string }
   | { status: 'error'; message: string };
+
+const TestConnectionSchema = z.object({
+  storefrontSlug: z.string().trim().min(1).max(64),
+});
+
+export async function testConnectionAction(
+  input: z.input<typeof TestConnectionSchema>,
+): Promise<AramexActionState> {
+  const parsed = TestConnectionSchema.safeParse(input);
+  if (!parsed.success) return { status: 'error', message: 'Invalid request' };
+  const { userId } = await auth();
+  if (!userId) return { status: 'error', message: 'Sign in.' };
+  const owner = await assertStorefrontOwner(parsed.data.storefrontSlug, userId);
+  if (!owner) return { status: 'error', message: 'Forbidden' };
+
+  try {
+    await testAramexConnection(parsed.data.storefrontSlug);
+    await setAppLastSuccess(parsed.data.storefrontSlug, 'aramex');
+    return { status: 'success', statusText: 'Aramex account connected.' };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Could not reach Aramex.';
+    await setAppLastError(parsed.data.storefrontSlug, 'aramex', message).catch(() => {});
+    return { status: 'error', message };
+  }
+}
 
 const CreateSchema = z.object({
   storefrontSlug: z.string().trim().min(1).max(64),

@@ -8,12 +8,9 @@ import { rateLimit } from '@/lib/rate-limit';
 import { hasDb } from '@/lib/db';
 import {
   deleteStorefront,
-  discardDraft,
   getStorefront,
-  publishDraft,
   saveDraft,
   saveTheme,
-  setStorefrontTemplate,
   unpublishStorefront,
   updateSubdomainStatus,
   TEMPLATE_IDS,
@@ -40,6 +37,7 @@ import {
 } from '@/lib/billing';
 import { logEvent } from '@/lib/events';
 import { recordPulseActivity } from '@/lib/pulseActivity';
+import { recordAudit } from '@/lib/audit';
 import { ensureStorefrontDomain } from '@/lib/vercelDomains';
 import * as Sentry from '@sentry/nextjs';
 import { env as appEnv } from '@/lib/env';
@@ -47,12 +45,19 @@ import { disableSouqyRouting } from '@/lib/souqy/db';
 import {
   ensureHomePage,
   getPageById,
-  publishPage as publishPageRow,
   saveDraftBlocks as savePageDraftBlocks,
   type StorefrontPage,
 } from '@/lib/storefrontPages';
 import type { Block, ThemeOverrides } from '@/lib/blocks/types';
 import { optionMinPlan } from '@/lib/storefrontChrome';
+import {
+  discardEasyDraftManifest,
+  ensureEasyDraftManifest,
+  publishEasyDraftManifest,
+  updateEasyManifestPage,
+  updateEasyManifestTemplate,
+  updateEasyManifestTheme,
+} from '@/lib/easySnapshots';
 
 const SlugSchema = z.string().trim().min(3).max(40);
 const PageIdSchema = z.string().uuid();
@@ -202,21 +207,30 @@ export async function saveDraftBlocks(
     const resolved = await resolvePageForSlug(data.slug, data.pageId);
     if (!resolved.ok) return { status: 'error', message: resolved.message };
 
-    const savedPage = await savePageDraftBlocks(resolved.page.id, cleanedBlocks);
-
-    // Theme is still per-storefront (one record on `briefs`) — only
-    // persist when explicitly passed in this save. Block-only saves
-    // never touch theme.
-    let themeForReturn: ThemeOverrides | undefined;
-    if (data.theme !== undefined) {
-      const updated = await saveDraft(
-        data.slug,
-        savedPage.draftBlocks,
-        (data.theme ?? null) as ThemeOverrides | null,
-      );
-      if (!updated) return { status: 'error', message: 'Save failed' };
-      themeForReturn = updated.themeOverrides;
+    await ensureEasyDraftManifest(data.slug, owner.userId);
+    const manifestResult = await updateEasyManifestPage({
+      storefrontSlug: data.slug,
+      clerkUserId: owner.userId,
+      pageId: resolved.page.id,
+      blocks: cleanedBlocks,
+      ...(data.theme ? { theme: data.theme as ThemeOverrides } : {}),
+    });
+    if (!manifestResult.ok) {
+      return {
+        status: 'error',
+        message:
+          manifestResult.reason === 'conflict'
+            ? 'This Easy draft changed in another tab. Reload and try again.'
+            : 'Save failed',
+      };
     }
+
+    // Keep the legacy draft block mirror during rollout. Theme and other
+    // presentation settings remain manifest-only until explicit publish.
+    const savedPage = await savePageDraftBlocks(resolved.page.id, cleanedBlocks);
+    const themeForReturn = data.theme
+      ? manifestResult.manifest.presentation.themeOverrides
+      : undefined;
 
     revalidatePath('/account');
     revalidatePath(`/account/${data.slug}/preview`);
@@ -242,7 +256,7 @@ export async function publishStorefront(
 ): Promise<BuilderActionState> {
   const parsed = PublishSchema.safeParse(input);
   if (!parsed.success) return { status: 'error', message: 'Invalid request' };
-  const { slug, pageId } = parsed.data;
+  const { slug } = parsed.data;
   if (!(await rateGate('builder-publish', 30))) {
     return { status: 'error', message: 'Too many publishes — try again in a moment.' };
   }
@@ -250,21 +264,36 @@ export async function publishStorefront(
   if (!owner.ok) return { status: 'error', message: owner.message };
 
   try {
-    // Page-level publish — when this is the home page the data layer
-    // mirrors `published_blocks` + `is_published` + `published_at` onto
-    // the briefs row so the public renderer's legacy pipeline keeps
-    // serving the latest tree.
-    const resolved = await resolvePageForSlug(slug, pageId);
-    if (!resolved.ok) return { status: 'error', message: resolved.message };
-    await publishPageRow(resolved.page.id);
+    await ensureEasyDraftManifest(slug, owner.userId);
+    const materialized = await publishEasyDraftManifest({
+      storefrontSlug: slug,
+      clerkUserId: owner.userId,
+    });
+    if (!materialized.ok) {
+      return {
+        status: 'error',
+        message:
+          materialized.reason === 'conflict'
+            ? 'The Easy draft changed while publishing. Review it and publish again.'
+            : 'Publish failed',
+      };
+    }
 
-    // Re-read the storefront so the Souqy-routing override and the
-    // returned `publishedAt` reflect the post-publish state. For a
-    // home-page publish the data layer already mirrored to `briefs`
-    // (incl. `published_at`); for a non-home publish we still want
-    // a fresh storefront for the Souqy short-circuit and revalidation.
     const updated = await getStorefront(slug);
     if (!updated) return { status: 'error', message: 'Publish failed' };
+
+    await recordAudit({
+      storefrontSlug: slug,
+      clerkUserId: owner.userId,
+      action: 'easy.publish',
+      targetId: slug,
+      summary: 'Published the versioned Easy presentation',
+      meta: {
+        manifestVersion: materialized.version,
+        sourceHash: materialized.stateHash,
+        proWorkspacePreserved: true,
+      },
+    });
 
     // If this storefront was previously rendered by a Souqy AI bundle
     // (`souqy_revision` non-null), the public renderer prefers it over
@@ -376,17 +405,14 @@ export async function discardBuilderDraft(
   if (!owner.ok) return { status: 'error', message: owner.message };
 
   try {
-    const updated = await discardDraft(slug);
-    if (!updated) return { status: 'error', message: 'Discard failed' };
-    // Mirror onto the home page row so the new page-aware loaders see
-    // the discarded state too. Other pages aren't touched — discard
-    // is a home-only "revert to live" affordance pre-PageSwitcher.
-    try {
-      const home = await ensureHomePage(slug, updated.draftBlocks);
-      await savePageDraftBlocks(home.id, updated.draftBlocks);
-    } catch (mirrorErr) {
-      console.warn('[discardBuilderDraft] home-page mirror failed', mirrorErr);
-    }
+    const discarded = await discardEasyDraftManifest({
+      storefrontSlug: slug,
+      clerkUserId: owner.userId,
+    });
+    if (!discarded.ok) return { status: 'error', message: 'Discard failed' };
+    const presentation = discarded.manifest.presentation;
+    const home = presentation.pages.find((page) => page.isHome) ?? presentation.pages[0];
+    if (!home) return { status: 'error', message: 'Discard failed' };
     revalidatePath('/account');
     revalidatePath(`/account/${slug}/preview`);
     // The builder treats Discard as the strongest "I'm abandoning this
@@ -399,7 +425,11 @@ export async function discardBuilderDraft(
       storefront: slug,
       props: { reason: 'discard_draft' },
     });
-    return { status: 'success', blocks: updated.draftBlocks, theme: updated.themeOverrides };
+    return {
+      status: 'success',
+      blocks: home.blocks,
+      theme: presentation.themeOverrides,
+    };
   } catch (err) {
     console.error('[discardBuilderDraft] failed', err);
     return { status: 'error', message: 'Discard failed' };
@@ -547,12 +577,19 @@ export async function saveThemeOverrides(
   }
 
   try {
-    const updated = await saveTheme(slug, theme as ThemeOverrides);
-    if (!updated) return { status: 'error', message: 'Save failed' };
-    revalidatePath(`/brief/${slug}`);
+    await ensureEasyDraftManifest(slug, owner.userId);
+    const updated = await updateEasyManifestTheme({
+      storefrontSlug: slug,
+      clerkUserId: owner.userId,
+      theme: theme as ThemeOverrides,
+    });
+    if (!updated.ok) return { status: 'error', message: 'Save failed' };
     revalidatePath('/account');
     revalidatePath(`/account/${slug}/preview`);
-    return { status: 'success', theme: updated.themeOverrides };
+    return {
+      status: 'success',
+      theme: updated.manifest.presentation.themeOverrides,
+    };
   } catch (err) {
     console.error('[saveThemeOverrides] failed', err);
     return { status: 'error', message: 'Save failed' };
@@ -596,35 +633,32 @@ export async function switchBuilderTemplate(
   }
 
   try {
-    // Template switch is storefront-wide (it changes `briefs.template_id`
-    // and the storefront-level theme preset). The block tree it seeds,
-    // however, is per-page — only the resolved page (defaults to home)
-    // gets reset to the new template's composition. Other pages keep
-    // whatever the founder built on them.
-    const updated = await setStorefrontTemplate(slug, templateId);
-    if (!updated) return { status: 'error', message: 'Template switch failed' };
-
-    const blocks = bootBlocksFromStorefront(updated);
+    const storefront = await getStorefront(slug);
+    if (!storefront) return { status: 'error', message: 'Template switch failed' };
     const seedTheme = templatePresets[templateId].theme;
-    const saved = await saveDraft(slug, blocks, seedTheme);
-    if (!saved) return { status: 'error', message: 'Template switch failed' };
+    const blocks = bootBlocksFromStorefront({
+      ...storefront,
+      templateId,
+      themeOverrides: seedTheme,
+    });
 
     const resolved = await resolvePageForSlug(slug, pageId);
     if (!resolved.ok) return { status: 'error', message: resolved.message };
+    await ensureEasyDraftManifest(slug, owner.userId);
+    const manifest = await updateEasyManifestTemplate({
+      storefrontSlug: slug,
+      clerkUserId: owner.userId,
+      pageId: resolved.page.id,
+      templateId,
+      blocks,
+      theme: seedTheme,
+    });
+    if (!manifest.ok) return { status: 'error', message: 'Template switch failed' };
+
+    // Legacy compatibility mirror: draft blocks only. Template/theme stay
+    // private in the manifest until Easy Publish.
     await savePageDraftBlocks(resolved.page.id, blocks);
-    await publishPageRow(resolved.page.id);
 
-    // Seed themed demo products so the template-themed product blocks
-    // render with content out of the box. No-ops when the founder has
-    // already added their own products — `seedTemplateDemoProducts`
-    // bails out on a non-empty `products` table for this slug.
-    try {
-      await seedTemplateDemoProducts(slug, templateId, updated.businessType, updated.locale);
-    } catch (err) {
-      console.warn('[switchBuilderTemplate] demo product seed failed', err);
-    }
-
-    revalidatePath(`/brief/${slug}`, 'layout');
     revalidatePath('/account');
     revalidatePath(`/account/${slug}/preview`);
     revalidatePath('/account/builder');
@@ -639,8 +673,8 @@ export async function switchBuilderTemplate(
 
     return {
       status: 'success',
-      blocks: saved.draftBlocks,
-      theme: saved.themeOverrides,
+      blocks,
+      theme: manifest.manifest.presentation.themeOverrides,
     };
   } catch (err) {
     console.error('[switchBuilderTemplate] failed', err);
@@ -663,47 +697,43 @@ export async function resetBuilderToTemplate(
 ): Promise<BuilderActionState> {
   const parsed = SeedSchema.safeParse(input);
   if (!parsed.success) return { status: 'error', message: 'Invalid request' };
-  const { slug } = parsed.data;
+  const { slug, pageId } = parsed.data;
   const owner = await gate(slug);
   if (!owner.ok) return { status: 'error', message: owner.message };
 
   try {
     const sf = await getStorefront(slug);
     if (!sf) return { status: 'error', message: 'Storefront not found' };
+    const existingManifest = await ensureEasyDraftManifest(slug, owner.userId);
+    const templateId = existingManifest.presentation.templateId;
 
     const isComponentShowcase = isComponentShowcaseSlug(slug);
     const blocks = isComponentShowcase
       ? buildComponentShowcaseBlocks()
-      : bootBlocksFromStorefront(sf);
+      : bootBlocksFromStorefront({
+          ...sf,
+          templateId,
+          themeOverrides: existingManifest.presentation.themeOverrides,
+        });
     const seedTheme = isComponentShowcase
       ? COMPONENT_SHOWCASE_THEME
-      : (templatePresets[sf.templateId]?.theme ?? null);
-    const saved = await saveDraft(slug, blocks, seedTheme);
-    if (!saved) return { status: 'error', message: 'Reset failed' };
-    await publishDraft(slug);
+      : templatePresets[templateId].theme;
+    const resolved = await resolvePageForSlug(slug, pageId);
+    if (!resolved.ok) return { status: 'error', message: resolved.message };
+    const manifest = await updateEasyManifestTemplate({
+      storefrontSlug: slug,
+      clerkUserId: owner.userId,
+      pageId: resolved.page.id,
+      templateId,
+      blocks,
+      theme: seedTheme,
+    });
+    if (!manifest.ok) return { status: 'error', message: 'Reset failed' };
+    await savePageDraftBlocks(resolved.page.id, blocks);
 
-    // Mirror onto the home page row so the new page-aware loaders see
-    // the freshly-seeded composition. Reset is home-only for now.
-    try {
-      const home = await ensureHomePage(slug, blocks);
-      await savePageDraftBlocks(home.id, blocks);
-      await publishPageRow(home.id);
-    } catch (mirrorErr) {
-      console.warn('[resetBuilderToTemplate] home-page mirror failed', mirrorErr);
-    }
-
-    if (isComponentShowcase) {
-      try {
-        await seedTemplateDemoProducts(slug, 'atrium', sf.businessType, sf.locale);
-      } catch (err) {
-        console.warn('[resetBuilderToTemplate] component demo product seed failed', err);
-      }
-    }
-
-    revalidatePath(`/brief/${slug}`, 'layout');
     revalidatePath('/account');
     revalidatePath(`/account/${slug}/preview`);
-    return { status: 'success', blocks: saved.draftBlocks, theme: saved.themeOverrides };
+    return { status: 'success', blocks, theme: seedTheme };
   } catch (err) {
     console.error('[resetBuilderToTemplate] failed', err);
     return { status: 'error', message: 'Reset failed' };

@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server';
+import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { getStorefrontsForUser } from '@/lib/brief';
 import { getAppDescriptor } from '@/lib/apps/registry';
@@ -97,6 +98,12 @@ export default async function AppConfigurePage({
   const { id } = await params;
   const desc = getAppDescriptor(id);
   if (!desc) notFound();
+  const locale = (await cookies()).get('NEXT_LOCALE')?.value;
+  const isArabic = locale === 'ar';
+  const appName = isArabic ? (desc.nameAr ?? desc.name) : desc.name;
+  const appTagline = isArabic ? (desc.taglineAr ?? desc.tagline) : desc.tagline;
+  const appDescription = isArabic ? (desc.descriptionAr ?? desc.description) : desc.description;
+  const dateLocale = isArabic ? 'ar-QA' : 'en-GB';
 
   const sp = (await searchParams) ?? {};
   const requested = Array.isArray(sp.store) ? sp.store[0] : sp.store;
@@ -111,6 +118,13 @@ export default async function AppConfigurePage({
   if (!installed) {
     redirect(`/account/apps/${desc.id}?store=${slug}`);
   }
+  const installedStatusLabel = installed.enabled
+    ? isArabic
+      ? 'مفعّل'
+      : 'on'
+    : isArabic
+      ? 'متوقف'
+      : 'off';
 
   const ccSettings =
     desc.id === 'currency-converter'
@@ -181,10 +195,15 @@ export default async function AppConfigurePage({
     <>
       {embed ? null : (
         <PageHeader
-          eyebrow={`Apps · ${desc.name}`}
-          title="Configure"
-          subtitle={desc.tagline}
-          secondaryActions={[{ label: '← Marketplace', href: `/account/apps?store=${slug}` }]}
+          eyebrow={`${isArabic ? 'التطبيقات' : 'Apps'} · ${appName}`}
+          title={isArabic ? 'الإعداد' : 'Configure'}
+          subtitle={appTagline}
+          secondaryActions={[
+            {
+              label: isArabic ? 'العودة إلى التطبيقات' : '← Marketplace',
+              href: `/account/apps?store=${slug}`,
+            },
+          ]}
         />
       )}
 
@@ -218,7 +237,7 @@ export default async function AppConfigurePage({
                     color: 'var(--ink-strong)',
                   }}
                 >
-                  {desc.name}
+                  {appName}
                 </h2>
                 <p
                   style={{
@@ -227,7 +246,9 @@ export default async function AppConfigurePage({
                     color: 'var(--ink-muted)',
                   }}
                 >
-                  {desc.vendor} · running on this store
+                  {isArabic
+                    ? `${desc.vendor} · يعمل في هذا المتجر`
+                    : `${desc.vendor} · running on this store`}
                 </p>
               </div>
             </header>
@@ -239,7 +260,7 @@ export default async function AppConfigurePage({
                 lineHeight: 1.6,
               }}
             >
-              {desc.description}
+              {appDescription}
             </p>
           </Surface>
 
@@ -292,7 +313,11 @@ export default async function AppConfigurePage({
             />
           ) : null}
           {aramexSettings ? (
-            <AramexSettingsForm storefrontSlug={slug} initial={aramexSettings} />
+            <AramexSettingsForm
+              storefrontSlug={slug}
+              initial={aramexSettings}
+              hasCredentials={Boolean(installed.oauthAccessTokenCt)}
+            />
           ) : null}
           {mawidSettings && slimProducts ? (
             <MawidSettingsForm
@@ -380,30 +405,34 @@ export default async function AppConfigurePage({
               color: 'var(--ink-strong)',
             }}
           >
-            Status
+            {isArabic ? 'الحالة' : 'Status'}
           </h3>
-          <Row label="On this store">
+          <Row label={isArabic ? 'في هذا المتجر' : 'On this store'}>
             <StatusBadge tone={installed.enabled ? 'success' : 'warning'}>
-              {installed.enabled ? 'on' : 'off'}
+              {installedStatusLabel}
             </StatusBadge>
           </Row>
-          <Row label="Installed">
-            {installed.installedAt.toLocaleDateString('en-GB', {
+          <Row label={isArabic ? 'تاريخ التثبيت' : 'Installed'}>
+            {installed.installedAt.toLocaleDateString(dateLocale, {
               day: 'numeric',
               month: 'short',
               year: 'numeric',
             })}
           </Row>
           {installed.lastSuccessAt ? (
-            <Row label="Last refresh">
-              {installed.lastSuccessAt.toLocaleString('en-GB')}
+            <Row label={isArabic ? 'آخر تحديث' : 'Last refresh'}>
+              {installed.lastSuccessAt.toLocaleString(dateLocale)}
             </Row>
           ) : null}
           {desc.priceQar ? (
             <>
-              <Row label="Plan add-on">+{desc.priceQar} QAR/mo</Row>
+              <Row label={isArabic ? 'إضافة إلى الخطة' : 'Plan add-on'}>
+                {isArabic ? `+${desc.priceQar} ر.ق/شهرياً` : `+${desc.priceQar} QAR/mo`}
+              </Row>
               <p style={{ margin: '6px 0 0', fontSize: 11.5, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
-                Billed on your Souqna subscription while this app is installed.
+                {isArabic
+                  ? 'تُضاف الرسوم إلى اشتراك سوقنا ما دام التطبيق مثبتاً.'
+                  : 'Billed on your Souqna subscription while this app is installed.'}
               </p>
             </>
           ) : null}
@@ -411,7 +440,7 @@ export default async function AppConfigurePage({
             <UninstallButton
               storefrontSlug={slug}
               appId={desc.id}
-              appName={desc.name}
+              appName={appName}
             />
           </div>
         </Surface>

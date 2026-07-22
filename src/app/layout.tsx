@@ -84,17 +84,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     pathname.startsWith('/sign-in/') ||
     pathname === '/sign-up' ||
     pathname.startsWith('/sign-up/');
+  const isIsolatedProPreview = /^\/account\/[^/]+\/pro-live-preview$/.test(pathname);
 
-  if (isAuthRoute) return <>{children}</>;
-
-  const inner = (
+  const inner = isAuthRoute || isIsolatedProPreview ? (
+    children
+  ) : (
     <PostHogProvider>
       {children}
       {process.env.NODE_ENV === 'production' ? <Analytics /> : null}
     </PostHogProvider>
   );
 
-  if (isStorefront || isAuthRoute || !clerkPublishableKey) return inner;
+  if (isStorefront || isIsolatedProPreview || !clerkPublishableKey) return inner;
 
   return (
     <ClerkProvider

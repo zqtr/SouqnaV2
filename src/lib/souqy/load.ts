@@ -81,6 +81,7 @@ const SDK_COMPONENT_EXPORTS = [
   'Grid',
   'Quote',
   'Marquee',
+  'Custom',
 ] as const;
 
 export async function loadSouqyComponent(args: {

@@ -12,25 +12,22 @@ import { assertStorefrontOwner } from '@/lib/products';
 import { blocksSchema } from '@/lib/blocks/schemas';
 import {
   createPage,
-  deletePage,
   getPageById,
   isReservedPageSlug,
   listPages,
   normalizePageSlug,
-  publishPage as publishPageRow,
-  renamePage,
-  reorderPages,
   saveDraftBlocks as saveDraftBlocksRow,
-  setHomePage as setHomePageRow,
-  setPageSeo as setPageSeoRow,
-  togglePageInNav as togglePageInNavRow,
   type StorefrontPage,
 } from '@/lib/storefrontPages';
+import { UPGRADE_GROWTH_TOOLS_COPY, getPlan, planUnlocksSeoSettings } from '@/lib/billing';
 import {
-  UPGRADE_GROWTH_TOOLS_COPY,
-  getPlan,
-  planUnlocksSeoSettings,
-} from '@/lib/billing';
+  ensureEasyDraftManifest,
+  mutateEasyDraftManifest,
+  publishEasyDraftManifest,
+  updateEasyManifestPage,
+  type EasyDraftManifest,
+  type EasyPresentationPage,
+} from '@/lib/easySnapshots';
 
 /**
  * Multi-page builder actions (M4 of the 2026-04 builder rebuild).
@@ -123,10 +120,9 @@ export type PagesActionResult<T = StorefrontPage> =
   | { status: 'success-list'; pages: StorefrontPage[] }
   | { status: 'error'; message: string; field?: string };
 
-async function gate(slug: string): Promise<
-  | { ok: true; userId: string; ownerUserId: string }
-  | { ok: false; message: string }
-> {
+async function gate(
+  slug: string,
+): Promise<{ ok: true; userId: string; ownerUserId: string } | { ok: false; message: string }> {
   if (!hasDb()) return { ok: false, message: 'Database unavailable' };
   const { userId } = await auth();
   if (!userId) return { ok: false, message: 'Forbidden' };
@@ -138,9 +134,7 @@ async function gate(slug: string): Promise<
 async function rateGate(scope: string, limit: number): Promise<boolean> {
   const hdrs = await headers();
   const ip =
-    hdrs.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    hdrs.get('x-real-ip') ??
-    'unknown';
+    hdrs.get('x-forwarded-for')?.split(',')[0]?.trim() ?? hdrs.get('x-real-ip') ?? 'unknown';
   return rateLimit(`${scope}:${ip}`, limit, 60_000).ok;
 }
 
@@ -160,6 +154,34 @@ function firstIssueMessage(err: z.ZodError): { message: string; field?: string }
   };
 }
 
+function manifestPageView(
+  manifest: EasyDraftManifest,
+  page: EasyPresentationPage,
+  legacy?: StorefrontPage | null,
+): StorefrontPage | null {
+  const id = page.id ?? legacy?.id;
+  if (!id) return null;
+  return {
+    id,
+    storefrontSlug: manifest.storefrontSlug,
+    slug: page.slug,
+    title: page.title,
+    draftBlocks: page.blocks,
+    publishedBlocks: legacy?.publishedBlocks ?? null,
+    status: page.status,
+    position: page.position,
+    showInNav: page.showInNav,
+    isHome: page.isHome,
+    seo: {
+      title: page.seo.title ?? null,
+      description: page.seo.description ?? null,
+      image: page.seo.image ?? null,
+    },
+    createdAt: legacy?.createdAt ?? manifest.updatedAt,
+    updatedAt: manifest.updatedAt,
+  };
+}
+
 /**
  * List every page for a storefront, ordered home-first then by
  * `position`. Read-only — no audit, no rate-limit beyond Clerk's own.
@@ -174,7 +196,17 @@ export async function listStorefrontPages(
   }
   const owner = await gate(parsed.data.slug);
   if (!owner.ok) return { status: 'error', message: owner.message };
-  const pages = await listPages(parsed.data.slug);
+  const [manifest, legacyPages] = await Promise.all([
+    ensureEasyDraftManifest(parsed.data.slug, owner.userId),
+    listPages(parsed.data.slug),
+  ]);
+  const pages = manifest.presentation.pages.flatMap((page) => {
+    const legacy = legacyPages.find(
+      (candidate) => candidate.id === page.id || candidate.slug === page.slug,
+    );
+    const view = manifestPageView(manifest, page, legacy);
+    return view ? [view] : [];
+  });
   return { status: 'success-list', pages };
 }
 
@@ -217,6 +249,26 @@ export async function createStorefrontPage(
       title: data.title,
       duplicateFromPageId: data.duplicateFromPageId,
     });
+    await ensureEasyDraftManifest(data.slug, owner.userId);
+    const manifest = await mutateEasyDraftManifest({
+      storefrontSlug: data.slug,
+      clerkUserId: owner.userId,
+      mutate: (presentation) => {
+        presentation.pages.push({
+          id: page.id,
+          slug: page.slug,
+          title: page.title,
+          blocks: page.draftBlocks,
+          status: 'draft',
+          position: page.position,
+          showInNav: page.showInNav,
+          isHome: false,
+          seo: page.seo,
+        });
+        return presentation;
+      },
+    });
+    if (!manifest.ok) throw new Error('Easy manifest conflict');
     await recordAudit({
       storefrontSlug: data.slug,
       clerkUserId: owner.userId,
@@ -286,15 +338,37 @@ export async function renameStorefrontPage(
   }
 
   try {
-    const page = await renamePage(data.pageId, data.title, data.pageSlug);
+    await ensureEasyDraftManifest(data.slug, owner.userId);
+    const manifest = await mutateEasyDraftManifest({
+      storefrontSlug: data.slug,
+      clerkUserId: owner.userId,
+      mutate: (presentation) => {
+        const page = presentation.pages.find((candidate) => candidate.id === data.pageId);
+        if (!page) return null;
+        const nextSlug = data.pageSlug ?? page.slug;
+        if (
+          presentation.pages.some(
+            (candidate) => candidate.id !== data.pageId && candidate.slug === nextSlug,
+          )
+        )
+          return null;
+        page.title = data.title;
+        page.slug = nextSlug;
+        return presentation;
+      },
+    });
+    if (!manifest.ok) return { status: 'error', message: 'Rename failed.' };
+    const manifestPage = manifest.manifest.presentation.pages.find(
+      (candidate) => candidate.id === data.pageId,
+    );
+    const page = manifestPage ? manifestPageView(manifest.manifest, manifestPage, existing) : null;
+    if (!page) return { status: 'error', message: 'Rename failed.' };
     await recordAudit({
       storefrontSlug: data.slug,
       clerkUserId: owner.userId,
       action: 'storefront.page.rename',
       targetId: page.id,
-      summary: `Renamed page to "${page.title}"${
-        data.pageSlug ? ` (/${page.slug})` : ''
-      }`,
+      summary: `Renamed page to "${page.title}"${data.pageSlug ? ` (/${page.slug})` : ''}`,
       meta: { pageId: page.id, pageSlug: page.slug },
     });
     revalidateBuilderAndPublic(data.slug);
@@ -338,7 +412,16 @@ export async function deleteStorefrontPage(
     return { status: 'error', message: 'The home page cannot be deleted.' };
   }
 
-  await deletePage(data.pageId);
+  await ensureEasyDraftManifest(data.slug, owner.userId);
+  const manifest = await mutateEasyDraftManifest({
+    storefrontSlug: data.slug,
+    clerkUserId: owner.userId,
+    mutate: (presentation) => ({
+      ...presentation,
+      pages: presentation.pages.filter((page) => page.id !== data.pageId),
+    }),
+  });
+  if (!manifest.ok) return { status: 'error', message: 'Delete failed.' };
   await recordAudit({
     storefrontSlug: data.slug,
     clerkUserId: owner.userId,
@@ -380,7 +463,24 @@ export async function setStorefrontHomePage(
     return { status: 'success-noop' };
   }
 
-  await setHomePageRow(data.slug, data.pageId);
+  await ensureEasyDraftManifest(data.slug, owner.userId);
+  const manifest = await mutateEasyDraftManifest({
+    storefrontSlug: data.slug,
+    clerkUserId: owner.userId,
+    mutate: (presentation) => {
+      const nextHome = presentation.pages.find((page) => page.id === data.pageId);
+      if (!nextHome) return null;
+      for (const page of presentation.pages) {
+        page.isHome = page.id === data.pageId;
+        if (page.isHome) {
+          page.position = 0;
+          page.showInNav = false;
+        }
+      }
+      return presentation;
+    },
+  });
+  if (!manifest.ok) return { status: 'error', message: 'Could not change the home page.' };
   await recordAudit({
     storefrontSlug: data.slug,
     clerkUserId: owner.userId,
@@ -408,7 +508,23 @@ export async function reorderStorefrontPages(
   const owner = await gate(data.slug);
   if (!owner.ok) return { status: 'error', message: owner.message };
 
-  await reorderPages(data.slug, data.pageIdsInOrder);
+  await ensureEasyDraftManifest(data.slug, owner.userId);
+  const manifest = await mutateEasyDraftManifest({
+    storefrontSlug: data.slug,
+    clerkUserId: owner.userId,
+    mutate: (presentation) => {
+      data.pageIdsInOrder.forEach((id, index) => {
+        const page = presentation.pages.find((candidate) => candidate.id === id);
+        if (page) page.position = index;
+      });
+      presentation.pages.sort((left, right) => {
+        if (left.isHome !== right.isHome) return left.isHome ? -1 : 1;
+        return left.position - right.position;
+      });
+      return presentation;
+    },
+  });
+  if (!manifest.ok) return { status: 'error', message: 'Reorder failed.' };
   await recordAudit({
     storefrontSlug: data.slug,
     clerkUserId: owner.userId,
@@ -447,7 +563,23 @@ export async function toggleStorefrontPageInNav(
     };
   }
 
-  const page = await togglePageInNavRow(data.pageId, data.showInNav);
+  await ensureEasyDraftManifest(data.slug, owner.userId);
+  const manifest = await mutateEasyDraftManifest({
+    storefrontSlug: data.slug,
+    clerkUserId: owner.userId,
+    mutate: (presentation) => {
+      const page = presentation.pages.find((candidate) => candidate.id === data.pageId);
+      if (!page) return null;
+      page.showInNav = data.showInNav;
+      return presentation;
+    },
+  });
+  if (!manifest.ok) return { status: 'error', message: 'Navigation update failed.' };
+  const manifestPage = manifest.manifest.presentation.pages.find(
+    (candidate) => candidate.id === data.pageId,
+  );
+  const page = manifestPage ? manifestPageView(manifest.manifest, manifestPage, existing) : null;
+  if (!page) return { status: 'error', message: 'Navigation update failed.' };
   await recordAudit({
     storefrontSlug: data.slug,
     clerkUserId: owner.userId,
@@ -486,7 +618,20 @@ export async function savePageDraft(
     return { status: 'error', message: 'Page not found.' };
   }
 
-  const page = await saveDraftBlocksRow(data.pageId, data.blocks);
+  await ensureEasyDraftManifest(data.slug, owner.userId);
+  const manifest = await updateEasyManifestPage({
+    storefrontSlug: data.slug,
+    clerkUserId: owner.userId,
+    pageId: data.pageId,
+    blocks: data.blocks,
+  });
+  if (!manifest.ok) return { status: 'error', message: 'Save failed.' };
+  const legacyPage = await saveDraftBlocksRow(data.pageId, data.blocks);
+  const manifestPage = manifest.manifest.presentation.pages.find(
+    (candidate) => candidate.id === data.pageId,
+  );
+  const page = manifestPage ? manifestPageView(manifest.manifest, manifestPage, legacyPage) : null;
+  if (!page) return { status: 'error', message: 'Save failed.' };
   await recordAudit({
     storefrontSlug: data.slug,
     clerkUserId: owner.userId,
@@ -524,7 +669,21 @@ export async function publishStorefrontPage(
     return { status: 'error', message: 'Page not found.' };
   }
 
-  const page = await publishPageRow(data.pageId);
+  await ensureEasyDraftManifest(data.slug, owner.userId);
+  const published = await publishEasyDraftManifest({
+    storefrontSlug: data.slug,
+    clerkUserId: owner.userId,
+  });
+  if (!published.ok) return { status: 'error', message: 'Publish failed.' };
+  const [manifest, legacyPage] = await Promise.all([
+    ensureEasyDraftManifest(data.slug, owner.userId),
+    getPageById(data.pageId),
+  ]);
+  const manifestPage = manifest.presentation.pages.find(
+    (candidate) => candidate.id === data.pageId,
+  );
+  const page = manifestPage ? manifestPageView(manifest, manifestPage, legacyPage) : null;
+  if (!page) return { status: 'error', message: 'Publish failed.' };
   await recordAudit({
     storefrontSlug: data.slug,
     clerkUserId: owner.userId,
@@ -557,11 +716,27 @@ export async function setStorefrontPageSeo(
     return { status: 'error', message: 'Page not found.' };
   }
 
-  const page = await setPageSeoRow(data.pageId, {
-    title: data.seo.title ?? null,
-    description: data.seo.description ?? null,
-    image: data.seo.image ?? null,
+  await ensureEasyDraftManifest(data.slug, owner.userId);
+  const manifest = await mutateEasyDraftManifest({
+    storefrontSlug: data.slug,
+    clerkUserId: owner.userId,
+    mutate: (presentation) => {
+      const page = presentation.pages.find((candidate) => candidate.id === data.pageId);
+      if (!page) return null;
+      page.seo = {
+        title: data.seo.title ?? null,
+        description: data.seo.description ?? null,
+        image: data.seo.image ?? null,
+      };
+      return presentation;
+    },
   });
+  if (!manifest.ok) return { status: 'error', message: 'SEO update failed.' };
+  const manifestPage = manifest.manifest.presentation.pages.find(
+    (candidate) => candidate.id === data.pageId,
+  );
+  const page = manifestPage ? manifestPageView(manifest.manifest, manifestPage, existing) : null;
+  if (!page) return { status: 'error', message: 'SEO update failed.' };
   await recordAudit({
     storefrontSlug: data.slug,
     clerkUserId: owner.userId,

@@ -60,7 +60,6 @@ import {
   writeStorefrontCheckoutSettings,
   writeStorefrontSadadSetup,
   writeStorefrontSkipCashSetup,
-  writeStorefrontPolicies,
   type CheckoutSettings,
   type CheckoutAddressDesign,
   type CheckoutBackgroundPreset,
@@ -79,6 +78,11 @@ import {
 import { encryptToken } from '@/lib/apps/crypto';
 import { verifySadadCredentials } from '@/lib/sadad';
 import { getPlan, planUnlocksOnlinePayments } from '@/lib/billing';
+import {
+  ensureEasyDraftManifest,
+  updateEasyManifestCheckoutPresentation,
+  updateEasyManifestPoliciesAndPalette,
+} from '@/lib/easySnapshots';
 
 /**
  * Settings actions — the dashboard's update-anything write path. The
@@ -224,8 +228,9 @@ export async function saveStorefrontSettings(
     faviconUrl:
       'faviconUrl' in validated ? (validated.faviconUrl as string | null) : current.faviconUrl,
     design: current.design,
-    palette:
-      'palette' in validated ? (validated.palette as typeof current.palette) : current.palette,
+    // Palette is part of the versioned Easy presentation and is materialized
+    // onto briefs only when the founder explicitly publishes Easy.
+    palette: current.palette,
     templateId: current.templateId,
     crNumber: 'crNumber' in validated ? (validated.crNumber as string | null) : current.crNumber,
   };
@@ -263,8 +268,15 @@ export async function saveStorefrontSettings(
 
   try {
     await updateStorefront(parsed.data.slug, next);
-    if (policiesPatch) {
-      await writeStorefrontPolicies(parsed.data.slug, policiesPatch);
+    if (policiesPatch || 'palette' in validated) {
+      await ensureEasyDraftManifest(parsed.data.slug, userId);
+      const manifest = await updateEasyManifestPoliciesAndPalette({
+        storefrontSlug: parsed.data.slug,
+        clerkUserId: userId,
+        ...(policiesPatch ? { policies: policiesPatch } : {}),
+        ...('palette' in validated ? { palette: validated.palette as typeof current.palette } : {}),
+      });
+      if (!manifest.ok) throw new Error('Easy manifest conflict');
     }
     await recordAudit({
       storefrontSlug: parsed.data.slug,
@@ -383,25 +395,30 @@ const nullableHexColor = z
   .max(9)
   .nullable()
   .transform((value) => (value && value.length > 0 ? value : null))
-  .refine((value) => value === null || /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(value), {
-    message: 'Use a hex color like #8B3A3A.',
-  });
+  .refine(
+    (value) => value === null || /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(value),
+    {
+      message: 'Use a hex color like #8B3A3A.',
+    },
+  );
 
-const CustomColorsSchema = z.object({
-  background: nullableHexColor.optional(),
-  surface: nullableHexColor.optional(),
-  accent: nullableHexColor.optional(),
-  text: nullableHexColor.optional(),
-  buttonText: nullableHexColor.optional(),
-}).transform(
-  (colors): CheckoutCustomColors => ({
-    background: colors.background ?? null,
-    surface: colors.surface ?? null,
-    accent: colors.accent ?? null,
-    text: colors.text ?? null,
-    buttonText: colors.buttonText ?? null,
-  }),
-);
+const CustomColorsSchema = z
+  .object({
+    background: nullableHexColor.optional(),
+    surface: nullableHexColor.optional(),
+    accent: nullableHexColor.optional(),
+    text: nullableHexColor.optional(),
+    buttonText: nullableHexColor.optional(),
+  })
+  .transform(
+    (colors): CheckoutCustomColors => ({
+      background: colors.background ?? null,
+      surface: colors.surface ?? null,
+      accent: colors.accent ?? null,
+      text: colors.text ?? null,
+      buttonText: colors.buttonText ?? null,
+    }),
+  );
 
 const CustomTrustBadgeSchema = z.object({
   labelEn: z.string().trim().max(48).optional().default(''),
@@ -457,7 +474,9 @@ const CheckoutExperienceSchema = z.object({
     .enum(CHECKOUT_BUTTON_STYLES as unknown as [CheckoutButtonStyle, ...CheckoutButtonStyle[]])
     .optional(),
   trustBadges: z
-    .array(z.enum(CHECKOUT_TRUST_BADGES as unknown as [CheckoutTrustBadge, ...CheckoutTrustBadge[]]))
+    .array(
+      z.enum(CHECKOUT_TRUST_BADGES as unknown as [CheckoutTrustBadge, ...CheckoutTrustBadge[]]),
+    )
     .optional()
     .transform((arr) => (arr ? Array.from(new Set(arr)) : undefined)),
   customTrustBadges: z
@@ -470,9 +489,7 @@ const CheckoutExperienceSchema = z.object({
           labelEn: (item.labelEn || item.labelAr).trim(),
           labelAr: (item.labelAr || item.labelEn).trim(),
         }))
-        .filter((item): item is CheckoutCustomTrustBadge =>
-          Boolean(item.labelEn || item.labelAr),
-        ),
+        .filter((item): item is CheckoutCustomTrustBadge => Boolean(item.labelEn || item.labelAr)),
     ),
   deliveryNotes: nullableTrimmedText(420).optional(),
   paymentCardStyle: z
@@ -492,7 +509,9 @@ const CheckoutExperienceSchema = z.object({
     )
     .optional(),
   thankYouStyle: z
-    .enum(CHECKOUT_THANK_YOU_STYLES as unknown as [CheckoutThankYouStyle, ...CheckoutThankYouStyle[]])
+    .enum(
+      CHECKOUT_THANK_YOU_STYLES as unknown as [CheckoutThankYouStyle, ...CheckoutThankYouStyle[]],
+    )
     .optional(),
   souqnaCity: SouqnaCitySettingsSchema.optional(),
 });
@@ -521,7 +540,9 @@ const CheckoutInputSchema = z.object({
   minOrderQar: z.number().int().min(0).max(1_000_000).nullable(),
   shippingFlatQar: z.number().int().min(0).max(1_000_000).nullable(),
   addressDesign: z
-    .enum(CHECKOUT_ADDRESS_DESIGNS as unknown as [CheckoutAddressDesign, ...CheckoutAddressDesign[]])
+    .enum(
+      CHECKOUT_ADDRESS_DESIGNS as unknown as [CheckoutAddressDesign, ...CheckoutAddressDesign[]],
+    )
     .default('qatar_plate'),
   experience: CheckoutExperienceSchema.optional(),
   thankYou: ThankYouSchema.optional(),
@@ -777,7 +798,23 @@ export async function updateCheckoutSettings(
   };
 
   try {
-    await writeStorefrontCheckoutSettings(data.slug, settings);
+    // Payment/fulfilment configuration remains operational data. The visual
+    // checkout presentation is staged in the Easy manifest until publish.
+    await writeStorefrontCheckoutSettings(data.slug, {
+      ...settings,
+      addressDesign: owner.checkout.addressDesign,
+      experience: owner.checkout.experience,
+      thankYou: owner.checkout.thankYou,
+    });
+    await ensureEasyDraftManifest(data.slug, userId);
+    const presentation = await updateEasyManifestCheckoutPresentation({
+      storefrontSlug: data.slug,
+      clerkUserId: userId,
+      addressDesign: settings.addressDesign,
+      experience: settings.experience,
+      thankYou: settings.thankYou,
+    });
+    if (!presentation.ok) throw new Error('Easy manifest conflict');
     if (skipCashSelected && (providedSkipCashCredentials || skipCashFields?.confirmCr)) {
       let credentials:
         | {
@@ -875,21 +912,32 @@ export async function updateCheckoutExperienceSettings(
   const owner = await assertStorefrontOwner(parsed.data.slug, userId);
   if (!owner) return { status: 'error', message: 'Forbidden' };
 
+  const manifest = await ensureEasyDraftManifest(parsed.data.slug, userId);
   const settings: CheckoutSettings = {
     ...owner.checkout,
     enabled: true,
     addressDesign: parsed.data.addressDesign,
     experience: {
-      ...owner.checkout.experience,
+      ...manifest.presentation.checkoutPresentation.experience,
       ...parsed.data.experience,
     },
     thankYou: parsed.data.thankYou
-      ? { ...owner.checkout.thankYou, ...parsed.data.thankYou }
-      : owner.checkout.thankYou,
+      ? {
+          ...manifest.presentation.checkoutPresentation.thankYou,
+          ...parsed.data.thankYou,
+        }
+      : manifest.presentation.checkoutPresentation.thankYou,
   };
 
   try {
-    await writeStorefrontCheckoutSettings(parsed.data.slug, settings);
+    const updated = await updateEasyManifestCheckoutPresentation({
+      storefrontSlug: parsed.data.slug,
+      clerkUserId: userId,
+      addressDesign: settings.addressDesign,
+      experience: settings.experience,
+      thankYou: settings.thankYou,
+    });
+    if (!updated.ok) throw new Error('Easy manifest conflict');
     await recordAudit({
       storefrontSlug: parsed.data.slug,
       clerkUserId: userId,

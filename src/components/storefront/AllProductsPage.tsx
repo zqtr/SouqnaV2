@@ -3,7 +3,6 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
 import { Filter, Search, SlidersHorizontal, Store } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,7 +19,7 @@ import type {
 import { UnifiedProductCard } from './blocks/UnifiedProductCard';
 
 type Props = {
-  storefrontSlug: string;
+  storefrontBaseHref: string;
   businessName: string;
   logoUrl: string | null;
   locale: 'en' | 'ar';
@@ -66,7 +65,7 @@ function productPathSegment(product: Pick<ProductIndexListProduct, 'id' | 'handl
 }
 
 export function AllProductsPage({
-  storefrontSlug,
+  storefrontBaseHref,
   businessName,
   logoUrl,
   locale,
@@ -76,7 +75,6 @@ export function AllProductsPage({
   categories,
   showCartButtons = true,
 }: Props) {
-  const pathname = usePathname();
   const isRtl = locale === 'ar';
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
@@ -87,16 +85,10 @@ export function AllProductsPage({
   );
   const [sort, setSort] = useState<ProductIndexSort>(settings.defaultSort);
 
-  const categorySlugSet = useMemo(
-    () => new Set(categories.map((item) => item.slug)),
-    [categories],
-  );
+  const categorySlugSet = useMemo(() => new Set(categories.map((item) => item.slug)), [categories]);
 
   const visibleCategorySet = useMemo(
-    () =>
-      new Set(
-        settings.visibleCategorySlugs.filter((slug) => categorySlugSet.has(slug)),
-      ),
+    () => new Set(settings.visibleCategorySlugs.filter((slug) => categorySlugSet.has(slug))),
     [categorySlugSet, settings.visibleCategorySlugs],
   );
   const categoryRestrictionEnabled = visibleCategorySet.size > 0;
@@ -189,7 +181,7 @@ export function AllProductsPage({
   ]);
 
   const copy = pageCopy(locale, businessName, settings);
-  const baseHref = storefrontBaseHrefFromPath(pathname, storefrontSlug);
+  const baseHref = storefrontBaseHref.replace(/\/+$/u, '');
   const hiddenCount = settings.hiddenProductIds.length;
   const filterCount =
     Number(Boolean(query.trim())) +
@@ -216,7 +208,11 @@ export function AllProductsPage({
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
           <span style={logoShellStyle()}>
             {logoUrl ? (
-              <img src={logoUrl} alt={businessName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img
+                src={logoUrl}
+                alt={businessName}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             ) : (
               <Store size={22} aria-hidden />
             )}
@@ -240,7 +236,14 @@ export function AllProductsPage({
       </header>
 
       <section style={filterBarStyle()} aria-label={copy.filtersLabel}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800 }}>
             <SlidersHorizontal size={17} aria-hidden />
             {copy.filters}
@@ -267,7 +270,11 @@ export function AllProductsPage({
 
         {settings.showSearch ? (
           <label style={searchWrapStyle()}>
-            <Search size={16} aria-hidden style={{ color: 'color-mix(in srgb, var(--sf-ink) 48%, transparent)' }} />
+            <Search
+              size={16}
+              aria-hidden
+              style={{ color: 'color-mix(in srgb, var(--sf-ink) 48%, transparent)' }}
+            />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -326,7 +333,10 @@ export function AllProductsPage({
             label={copy.sort}
             value={sort}
             onChange={(value) => setSort(value as ProductIndexSort)}
-            options={Object.entries(SORT_LABELS[locale]).map(([value, label]) => ({ value, label }))}
+            options={Object.entries(SORT_LABELS[locale]).map(([value, label]) => ({
+              value,
+              label,
+            }))}
           />
         </div>
       </section>
@@ -351,10 +361,18 @@ export function AllProductsPage({
                 href: `${baseHref}/p/${productPathSegment(product)}`,
               }}
               isRtl={isRtl}
-              variant={settings.layout === 'compact' ? 'compact' : settings.layout === 'editorial' && index === 0 ? 'feature' : 'standard'}
+              variant={
+                settings.layout === 'compact'
+                  ? 'compact'
+                  : settings.layout === 'editorial' && index === 0
+                    ? 'feature'
+                    : 'standard'
+              }
               showDescription={settings.layout !== 'compact'}
               showAddToCart={showCartButtons}
-              style={settings.layout === 'editorial' && index === 0 ? featureCardStyle() : undefined}
+              style={
+                settings.layout === 'editorial' && index === 0 ? featureCardStyle() : undefined
+              }
             />
           ))}
         </section>
@@ -368,7 +386,8 @@ function pageCopy(locale: 'en' | 'ar', businessName: string, settings: ProductIn
     return {
       eyebrow: businessName,
       title: settings.title ?? 'كل المنتجات',
-      subtitle: settings.subtitle ?? 'تصفح منتجات المتجر، استخدم الفلاتر، وأضف ما يناسبك إلى السلة.',
+      subtitle:
+        settings.subtitle ?? 'تصفح منتجات المتجر، استخدم الفلاتر، وأضف ما يناسبك إلى السلة.',
       filters: 'الفلاتر',
       filtersLabel: 'فلاتر المنتجات',
       productsLabel: 'قائمة المنتجات',
@@ -388,7 +407,8 @@ function pageCopy(locale: 'en' | 'ar', businessName: string, settings: ProductIn
   return {
     eyebrow: businessName,
     title: settings.title ?? 'All products',
-    subtitle: settings.subtitle ?? 'Browse the full catalogue, filter quickly, and add products to cart.',
+    subtitle:
+      settings.subtitle ?? 'Browse the full catalogue, filter quickly, and add products to cart.',
     filters: 'Filters',
     filtersLabel: 'Product filters',
     productsLabel: 'Product list',
@@ -444,10 +464,6 @@ function sortProducts(
   });
 }
 
-function storefrontBaseHrefFromPath(pathname: string | null, slug: string) {
-  return pathname?.startsWith(`/brief/${slug}`) ? `/brief/${slug}` : '';
-}
-
 function FilterChip({
   active,
   onClick,
@@ -465,7 +481,9 @@ function FilterChip({
       onClick={onClick}
       className="h-9 rounded-full border-[color-mix(in_srgb,var(--sf-ink)_12%,transparent)] px-4 text-xs"
       style={{
-        background: active ? 'var(--sf-ink)' : 'color-mix(in srgb, var(--sf-ground) 88%, transparent)',
+        background: active
+          ? 'var(--sf-ink)'
+          : 'color-mix(in srgb, var(--sf-ground) 88%, transparent)',
         color: active ? 'var(--sf-ground)' : 'var(--sf-ink)',
       }}
     >
@@ -488,7 +506,9 @@ function NumberFilter({
   return (
     <label style={fieldWrapStyle()}>
       <span style={filterLabelStyle()}>{label}</span>
-      <span style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8 }}>
+      <span
+        style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8 }}
+      >
         <Input
           value={value}
           onChange={(event) => onChange(event.target.value.replace(/[^\d.]/g, ''))}

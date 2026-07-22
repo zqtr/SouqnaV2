@@ -6,6 +6,7 @@ type Props = {
   product?: Product;
   variant?: 'primary' | 'ghost';
   fullWidth?: boolean;
+  disabled?: boolean;
 };
 
 /**
@@ -13,7 +14,13 @@ type Props = {
  * mailto. Builds a localized prefilled message that names the product so the
  * founder knows what the visitor was looking at.
  */
-export function InquireButton({ storefront, product, variant = 'ghost', fullWidth }: Props) {
+export function InquireButton({
+  storefront,
+  product,
+  variant = 'ghost',
+  fullWidth,
+  disabled = false,
+}: Props) {
   const isRtl = storefront.locale === 'ar';
   const label = product
     ? isRtl
@@ -41,10 +48,20 @@ export function InquireButton({ storefront, product, variant = 'ghost', fullWidt
     fontSize: 11,
     letterSpacing: '0.12em',
     textTransform: 'uppercase',
-    cursor: 'pointer',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.58 : undefined,
     transition: 'background 180ms, color 180ms',
     width: fullWidth ? '100%' : undefined,
   };
+
+  if (disabled) {
+    return (
+      <span style={baseStyle} aria-disabled="true" aria-label={label}>
+        <span aria-hidden="true">→</span>
+        {isRtl ? 'الاستفسار معطل في المعاينة' : 'Inquiries disabled in preview'}
+      </span>
+    );
+  }
 
   return (
     <a

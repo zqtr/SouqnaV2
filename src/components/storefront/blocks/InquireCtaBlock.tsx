@@ -83,7 +83,7 @@ export function InquireCtaBlock({ block, ctx }: BlockRenderProps<InquireCtaProps
           {props.body}
         </p>
       ) : null}
-      <InquireButton storefront={storefront} variant={variant} />
+      <InquireButton storefront={storefront} variant={variant} disabled={ctx.isPreview} />
     </section>
     </VariantFrame>
   );
